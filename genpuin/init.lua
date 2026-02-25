@@ -10,6 +10,7 @@ local noise = require("genpuin.noise")
 local field = require("genpuin.field")
 local pattern = require("genpuin.pattern")
 local fx = require("genpuin.fx")
+local ppm = require("genpuin.ppm")
 
 local gen = {}
 
@@ -47,6 +48,9 @@ gen.layer = canvas.layer
 
 -- svg
 gen.exportSvg = svg.exportSvg
+
+-- ppm
+gen.exportPpm = ppm.exportPpm
 
 -- pen
 gen.pen = Pen.new
