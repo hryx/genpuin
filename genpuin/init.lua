@@ -6,6 +6,8 @@ local Pen = require("genpuin.pen")
 local rand = require("genpuin.rand")
 local xform = require("genpuin.xform")
 local util = require("genpuin.util")
+local noise = require("genpuin.noise")
+local field = require("genpuin.field")
 
 local gen = {}
 
@@ -68,6 +70,16 @@ gen.scale = xform.scale
 gen.scaleAround = xform.scaleAround
 gen.reflectX = xform.reflectX
 gen.reflectY = xform.reflectY
+
+-- noise
+gen.perlin = noise.perlin
+gen.fbm = noise.fbm
+gen.noiseSeed = noise.seed
+
+-- field
+gen.flowField = field.flowField
+gen.noiseField = field.noiseField
+gen.trace = field.trace
 
 -- util
 gen.lerp = util.lerp
