@@ -8,6 +8,7 @@ local xform = require("genpuin.xform")
 local util = require("genpuin.util")
 local noise = require("genpuin.noise")
 local field = require("genpuin.field")
+local pattern = require("genpuin.pattern")
 
 local gen = {}
 
@@ -61,6 +62,12 @@ gen.weightedPick = rand.weightedPick
 gen.randInCircle = rand.randInCircle
 gen.randOnCircle = rand.randOnCircle
 gen.randInRect = rand.randInRect
+gen.poissonDisk = rand.poissonDisk
+
+-- pattern
+gen.grid = pattern.grid
+gen.radial = pattern.radial
+gen.scatter = pattern.scatter
 
 -- xform
 gen.translate = xform.translate
