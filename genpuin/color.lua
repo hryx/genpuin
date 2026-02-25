@@ -89,6 +89,7 @@ function M.withAlpha(c, a)
 end
 
 function M.toSvg(c)
+    if type(c) == "string" then return c end
     return string.format("rgb(%d,%d,%d)",
         math.floor(c[1] * 255 + 0.5),
         math.floor(c[2] * 255 + 0.5),

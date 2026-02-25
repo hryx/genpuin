@@ -9,6 +9,7 @@ local util = require("genpuin.util")
 local noise = require("genpuin.noise")
 local field = require("genpuin.field")
 local pattern = require("genpuin.pattern")
+local fx = require("genpuin.fx")
 
 local gen = {}
 
@@ -87,6 +88,17 @@ gen.noiseSeed = noise.seed
 gen.flowField = field.flowField
 gen.noiseField = field.noiseField
 gen.trace = field.trace
+
+-- path ops
+gen.sampleAlong = geo.sampleAlong
+gen.subdivide = geo.subdivide
+gen.resample = geo.resample
+
+-- fx
+gen.jitter = fx.jitter
+gen.smooth = fx.smooth
+gen.taper = fx.taper
+gen.stipple = fx.stipple
 
 -- util
 gen.lerp = util.lerp
