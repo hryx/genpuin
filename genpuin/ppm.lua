@@ -11,6 +11,10 @@ local pi = math.pi
 -- Pixel Buffer
 -- ============================================================
 
+local function clamp255(v)
+    if v < 0 then return 0 elseif v > 255 then return 255 else return v end
+end
+
 local function newBuffer(w, h, r, g, b)
     local data = {}
     for i = 1, w * h do
@@ -28,9 +32,9 @@ local function setPixel(buf, x, y, r, g, b, a)
         local dst = buf.data[idx]
         local inv = 1.0 - a
         buf.data[idx] = {
-            floor(r * a + dst[1] * inv + 0.5),
-            floor(g * a + dst[2] * inv + 0.5),
-            floor(b * a + dst[3] * inv + 0.5),
+            clamp255(floor(r * a + dst[1] * inv + 0.5)),
+            clamp255(floor(g * a + dst[2] * inv + 0.5)),
+            clamp255(floor(b * a + dst[3] * inv + 0.5)),
         }
     end
 end
@@ -224,9 +228,9 @@ end
 local function resolveColor(clr, style, isFill)
     if not clr or clr == "none" then return nil end
     if type(clr) == "string" then return nil end
-    local r = floor(clr[1] * 255 + 0.5)
-    local g = floor(clr[2] * 255 + 0.5)
-    local b = floor(clr[3] * 255 + 0.5)
+    local r = clamp255(floor(clr[1] * 255 + 0.5))
+    local g = clamp255(floor(clr[2] * 255 + 0.5))
+    local b = clamp255(floor(clr[3] * 255 + 0.5))
     local a = (clr[4] or 1) * (style.opacity or 1)
     if isFill then
         a = a * (style.fillOpacity or 1)
