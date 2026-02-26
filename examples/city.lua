@@ -237,5 +237,4 @@ for i = 1, 2 do
 end
 
 gen.exportSvg(c, "out/city.svg")
-gen.exportPpm(c, "out/city.ppm")
-print("Wrote out/city.svg and out/city.ppm")
+print("Wrote out/city.svg")

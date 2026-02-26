@@ -1,8 +1,8 @@
 -- alphabet.lua — Poisson Grid Letters
--- Displays the full alphabet using the poisson-text module.
+-- Displays the full alphabet using the text-scratch module.
 
 local gen = require("genpuin")
-local poissonText = require("examples.poisson-text")
+local poissonText = require("examples.text-scratch")
 
 local W, H = 1450, 500
 local c = gen.canvas(W, H)
@@ -29,6 +29,4 @@ poissonText.draw(c, "NOPQRSTUVWXYZ", {
 })
 
 gen.exportSvg(c, "out/alphabet.svg")
-local scale = tonumber(arg and arg[1]) or 1
-gen.exportPpm(c, "out/alphabet.ppm", scale)
-print(string.format("Wrote out/alphabet.svg and out/alphabet.ppm (scale=%g)", scale))
+print("Wrote out/alphabet.svg")

@@ -148,6 +148,4 @@ for i = 1, 3000 do
 end
 
 gen.exportSvg(c, "out/tangle.svg")
-local scale = tonumber(arg and arg[1]) or 1
-gen.exportPpm(c, "out/tangle.ppm", scale)
-print(string.format("Wrote out/tangle.svg and out/tangle.ppm (scale=%g)", scale))
+print("Wrote out/tangle.svg")

@@ -195,5 +195,4 @@ for py = 40, H - 40, 80 do
 end
 
 gen.exportSvg(c, "out/topographic.svg")
-gen.exportPpm(c, "out/topographic.ppm")
-print("Wrote out/topographic.svg and out/topographic.ppm")
+print("Wrote out/topographic.svg")

@@ -38,5 +38,4 @@ for i = 1, 80 do
 end
 
 gen.exportSvg(c, "out/pen-field.svg")
-gen.exportPpm(c, "out/pen-field.ppm")
-print("Wrote out/pen-field.svg and out/pen-field.ppm")
+print("Wrote out/pen-field.svg")

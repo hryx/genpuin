@@ -1,4 +1,4 @@
--- poisson-text.lua — Draw text using Poisson disk grid points
+-- text-scratch.lua — Draw text using Poisson disk grid points
 -- Each letter is defined with minimal control points, snapped to
 -- the nearest Poisson disk sample, then connected with jittery lines.
 

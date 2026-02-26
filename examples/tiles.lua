@@ -63,5 +63,4 @@ gen.grid(cols, rows, tileSize, function(x, y, col, row)
 end)
 
 gen.exportSvg(c, "out/tiles.svg")
-gen.exportPpm(c, "out/tiles.ppm")
-print("Wrote out/tiles.svg and out/tiles.ppm")
+print("Wrote out/tiles.svg")

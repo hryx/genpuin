@@ -1,4 +1,4 @@
--- dotmatrix-text.lua — Draw text as 5x7 dot matrix characters
+-- text-dotmatrix.lua — Draw text as 5x7 dot matrix characters
 -- Each letter is a 5-wide, 7-tall bitmap. Dots are drawn as circles
 -- with optional size variation driven by noise.
 

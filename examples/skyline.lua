@@ -288,5 +288,4 @@ for i = 1, 7 do
 end
 
 gen.exportSvg(c, "out/skyline.svg")
-gen.exportPpm(c, "out/skyline.ppm")
-print("Wrote out/skyline.svg and out/skyline.ppm")
+print("Wrote out/skyline.svg")

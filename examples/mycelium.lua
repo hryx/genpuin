@@ -105,5 +105,4 @@ for _, spore in ipairs(spores) do
 end
 
 gen.exportSvg(c, "out/mycelium.svg")
-gen.exportPpm(c, "out/mycelium.ppm")
-print("Wrote out/mycelium.svg and out/mycelium.ppm")
+print("Wrote out/mycelium.svg")

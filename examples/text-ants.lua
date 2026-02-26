@@ -1,4 +1,4 @@
--- ants-text.lua — Draw text as swarms of tiny dots along curvy letter paths
+-- text-ants.lua — Draw text as swarms of tiny dots along curvy letter paths
 -- Letters are defined with cubic bezier curves for a rounded, organic look.
 -- Hundreds of small circles are scattered along each curve like ants on trails.
 
