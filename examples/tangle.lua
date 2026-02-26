@@ -1,4 +1,4 @@
--- blossom.lua — Blooming Tendrils
+-- tangle.lua — Blooming Tendrils
 -- Recursive random-walk tendrils with rightward wind,
 -- hue drift, vein lines, spore dust, and a center glow.
 
@@ -19,35 +19,30 @@ local allPoints = {}
 local maxDepth = 3
 
 local function drawTendril(ox, oy, startAngle, hue, numSteps, maxWidth, depth)
-    -- Walk the path: random jitter + rightward wind
-    local points = {{ox, oy}}
-    local angle = startAngle
+    -- Walk the path using pen: random jitter + rightward wind
+    local p = gen.pen(c)
+    p:moveTo({ox, oy})
+    p:heading(startAngle)
     for step = 1, numSteps do
-        local px, py = points[#points][1], points[#points][2]
-        -- Rightward wind: pull toward angle=0
-        local wind = -math.sin(angle) * 0.07
-        angle = angle + gen.randRange(-0.4, 0.4) + wind
-        local dist = gen.randRange(2, 5)
-        local nx = px + math.cos(angle) * dist
-        local ny = py + math.sin(angle) * dist
-        points[#points + 1] = {nx, ny}
+        local wind = -math.sin(p:heading()) * 0.07
+        p:turn(gen.randRange(-0.4, 0.4) + wind)
+        p:forward(gen.randRange(2, 5))
     end
 
     -- Record points for spore dust (only root + depth 1 to keep it manageable)
     if depth <= 1 then
-        for _, pt in ipairs(points) do
-            allPoints[#allPoints + 1] = pt
+        local shape = p:toShape()
+        if shape then
+            for _, pt in ipairs(shape.points) do
+                allPoints[#allPoints + 1] = pt
+            end
         end
     end
 
-    -- Hue drift: shift hue along length
+    -- Draw with per-segment fade using segments()
     local hueDrift = gen.randRange(0.06, 0.12)
-
-    -- Draw with per-segment fade: smooth across all generations
-    -- depth 0 covers globalT 0..1/3, depth 1 covers 1/3..2/3, depth 2 covers 2/3..1
-    for i = 2, #points do
-        local t = (i - 1) / (#points - 1)
-        local globalT = (depth + t) / maxDepth
+    for _, seg in ipairs(p:segments()) do
+        local globalT = (depth + seg.t) / maxDepth
 
         local width = gen.lerp(maxWidth, 0.15, globalT)
         local bright = gen.lerp(0.9, 0.3, globalT)
@@ -55,10 +50,10 @@ local function drawTendril(ox, oy, startAngle, hue, numSteps, maxWidth, depth)
         local opacity = gen.lerp(0.8, 0.05, globalT * globalT)
 
         -- Hue drifts along length
-        local segHue = (hue + t * hueDrift + gen.randRange(-0.02, 0.02)) % 1
+        local segHue = (hue + seg.t * hueDrift + gen.randRange(-0.02, 0.02)) % 1
 
         -- Main tendril stroke
-        gen.draw(c, gen.line(points[i - 1], points[i]), {
+        gen.draw(c, seg.shape, {
             stroke = gen.hsv(segHue, sat, bright),
             strokeWidth = width,
             opacity = opacity,
@@ -67,16 +62,15 @@ local function drawTendril(ox, oy, startAngle, hue, numSteps, maxWidth, depth)
 
         -- Vein line: faint thinner parallel line, slightly offset
         if depth <= 1 and width > 0.5 then
-            local dx = points[i][1] - points[i - 1][1]
-            local dy = points[i][2] - points[i - 1][2]
+            local a, b = seg.shape.a, seg.shape.b
+            local dx, dy = b[1] - a[1], b[2] - a[2]
             local len = math.sqrt(dx * dx + dy * dy)
             if len > 0.01 then
-                -- perpendicular offset
                 local nx, ny = -dy / len, dx / len
                 local off = width * 0.6
                 gen.draw(c, gen.line(
-                    {points[i - 1][1] + nx * off, points[i - 1][2] + ny * off},
-                    {points[i][1] + nx * off, points[i][2] + ny * off}
+                    {a[1] + nx * off, a[2] + ny * off},
+                    {b[1] + nx * off, b[2] + ny * off}
                 ), {
                     stroke = gen.hsv(segHue, sat * 0.5, bright * 0.6),
                     strokeWidth = width * 0.2,
@@ -89,9 +83,8 @@ local function drawTendril(ox, oy, startAngle, hue, numSteps, maxWidth, depth)
 
     -- Recurse: branch at the tip
     if depth < maxDepth then
-        local tip = points[#points]
-        local prevPt = points[math.max(1, #points - 3)]
-        local tipAngle = math.atan(tip[2] - prevPt[2], tip[1] - prevPt[1])
+        local tip = p:pos()
+        local tipAngle = p:heading()
 
         local numBranches = gen.randInt(4, 7)
         local childSteps = math.floor(numSteps / 2)
