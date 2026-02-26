@@ -11,10 +11,10 @@
 - [x] Vector math utilities (geo, util)
 
 ## Phase 2: Curves & Paths
-- [ ] Catmull-Rom splines (geo, svg, ppm, xform)
-- [ ] Dashed lines — SVG style attrs
-- [ ] Dashed lines — FX function `dash()`
-- [ ] Dashed lines — pen property
+- [x] Catmull-Rom splines (geo, svg, ppm, xform)
+- [x] Dashed lines — SVG style attrs
+- [x] Dashed lines — FX function `dash()`
+- [x] Dashed lines — pen property
 - [ ] PPM support for dashed lines
 
 ## Phase 3: Compositing & Color

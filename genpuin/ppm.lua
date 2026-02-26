@@ -1,3 +1,5 @@
+local geo = require("genpuin.geo")
+
 local M = {}
 
 local floor = math.floor
@@ -378,6 +380,23 @@ local function rasterizeShape(buf, sh, style, s)
             scanlineFillPolygon(buf, fillPts, fr, fg, fb, fa)
         end
         if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, false, cap) end
+
+    elseif sh.type == "spline" then
+        local segs = geo.splineToBeziers(sh.points)
+        local allPts = {}
+        for _, b in ipairs(segs) do
+            local bpts = flattenBezier(
+                {b[1][1]*s, b[1][2]*s}, {b[2][1]*s, b[2][2]*s},
+                {b[3][1]*s, b[3][2]*s}, {b[4][1]*s, b[4][2]*s})
+            -- skip first point of subsequent segments to avoid duplicates
+            local start = #allPts == 0 and 1 or 2
+            for i = start, #bpts do
+                allPts[#allPts + 1] = bpts[i]
+            end
+        end
+        if sr and #allPts >= 2 then
+            strokePolyline(buf, allPts, sr, sg, sb, sa, sw, false, cap)
+        end
     end
 end
 

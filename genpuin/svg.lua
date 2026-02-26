@@ -1,4 +1,5 @@
 local color = require("genpuin.color")
+local geo = require("genpuin.geo")
 
 local M = {}
 
@@ -30,6 +31,16 @@ local function styleAttrs(s)
     end
     if s.strokeOpacity then
         table.insert(parts, string.format('stroke-opacity="%s"', fmt(s.strokeOpacity)))
+    end
+    if s.strokeDasharray then
+        local dashes = {}
+        for _, v in ipairs(s.strokeDasharray) do
+            dashes[#dashes + 1] = fmt(v)
+        end
+        table.insert(parts, string.format('stroke-dasharray="%s"', table.concat(dashes, " ")))
+    end
+    if s.strokeDashoffset then
+        table.insert(parts, string.format('stroke-dashoffset="%s"', fmt(s.strokeDashoffset)))
     end
     return table.concat(parts, " ")
 end
@@ -91,6 +102,20 @@ local function renderShape(sh, attrs)
             fmt(sh.p2[1]), fmt(sh.p2[2]),
             fmt(sh.p3[1]), fmt(sh.p3[2]))
         return string.format('  <path d="%s" %s/>', d, attrs)
+
+    elseif sh.type == "spline" then
+        local segs = geo.splineToBeziers(sh.points)
+        if #segs == 0 then return nil end
+        local parts = {}
+        local b = segs[1]
+        table.insert(parts, string.format("M %s %s", fmt(b[1][1]), fmt(b[1][2])))
+        for _, b in ipairs(segs) do
+            table.insert(parts, string.format("C %s %s, %s %s, %s %s",
+                fmt(b[2][1]), fmt(b[2][2]),
+                fmt(b[3][1]), fmt(b[3][2]),
+                fmt(b[4][1]), fmt(b[4][2])))
+        end
+        return string.format('  <path d="%s" %s/>', table.concat(parts, " "), attrs)
     end
 end
 

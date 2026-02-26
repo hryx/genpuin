@@ -14,7 +14,7 @@ local function xformShape(shape, fn)
         s.a = fn(shape.a)
         s.b = fn(shape.b)
 
-    elseif shape.type == "polyline" or shape.type == "polygon" then
+    elseif shape.type == "polyline" or shape.type == "polygon" or shape.type == "spline" then
         local pts = {}
         for i, pt in ipairs(shape.points) do
             pts[i] = fn(pt)

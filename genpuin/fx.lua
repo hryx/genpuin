@@ -117,4 +117,58 @@ function M.stipple(shape, density)
     return dots
 end
 
+-- Convert a path into dashed segments.
+-- Returns a list of polylines representing dash-on segments.
+function M.dash(shape, dashLen, gapLen)
+    local pts, _ = getPoints(shape)
+    if not pts or #pts < 2 then return {} end
+
+    -- Build cumulative lengths
+    local lengths = {0}
+    local total = 0
+    for i = 2, #pts do
+        local dx = pts[i][1] - pts[i-1][1]
+        local dy = pts[i][2] - pts[i-1][2]
+        total = total + math.sqrt(dx * dx + dy * dy)
+        lengths[i] = total
+    end
+
+    -- Interpolate a point at distance d along the path
+    local function pointAt(d)
+        for i = 2, #pts do
+            if d <= lengths[i] then
+                local segLen = lengths[i] - lengths[i-1]
+                if segLen == 0 then return {pts[i][1], pts[i][2]} end
+                local t = (d - lengths[i-1]) / segLen
+                return {
+                    pts[i-1][1] + (pts[i][1] - pts[i-1][1]) * t,
+                    pts[i-1][2] + (pts[i][2] - pts[i-1][2]) * t,
+                }
+            end
+        end
+        return {pts[#pts][1], pts[#pts][2]}
+    end
+
+    local cycle = dashLen + gapLen
+    local segments = {}
+    local d = 0
+    while d < total do
+        local dashEnd = math.min(d + dashLen, total)
+        -- Sample points along this dash segment
+        local seg = {pointAt(d)}
+        -- Include any original vertices that fall within the dash
+        for i = 2, #pts do
+            if lengths[i] > d and lengths[i] < dashEnd then
+                seg[#seg + 1] = {pts[i][1], pts[i][2]}
+            end
+        end
+        seg[#seg + 1] = pointAt(dashEnd)
+        if #seg >= 2 then
+            segments[#segments + 1] = geo.polyline(seg)
+        end
+        d = d + cycle
+    end
+    return segments
+end
+
 return M

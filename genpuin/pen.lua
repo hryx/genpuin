@@ -13,6 +13,7 @@ function Pen.new(c)
         _color = {1, 1, 1, 1},
         _width = 1,
         _opacity = nil,
+        _dash = nil,
         _points = {},
         _hasArcs = false,
     }, Pen)
@@ -101,6 +102,7 @@ function Pen:stroke()
         strokeLinecap = "round",
     }
     if self._opacity then style.opacity = self._opacity end
+    if self._dash then style.strokeDasharray = self._dash end
     canvas.draw(self._canvas, shape, style)
     self._points = {{self.x, self.y}}
     self._hasArcs = false
@@ -193,6 +195,9 @@ function Pen:set(key, value)
     elseif key == "opacity" then
         if #self._points > 1 then self:stroke() end
         self._opacity = value
+    elseif key == "dash" then
+        if #self._points > 1 then self:stroke() end
+        self._dash = value
     end
     return self
 end

@@ -34,6 +34,9 @@ gen.rect = geo.rect
 gen.bezier = geo.bezier
 gen.bezierPoint = geo.bezierPoint
 gen.bezierTangent = geo.bezierTangent
+gen.spline = geo.spline
+gen.catmullRomToBezier = geo.catmullRomToBezier
+gen.splineToBeziers = geo.splineToBeziers
 
 -- color
 gen.rgb = color.rgb
@@ -110,6 +113,7 @@ gen.jitter = fx.jitter
 gen.smooth = fx.smooth
 gen.taper = fx.taper
 gen.stipple = fx.stipple
+gen.dash = fx.dash
 
 -- util
 gen.lerp = util.lerp

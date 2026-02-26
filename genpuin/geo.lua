@@ -71,6 +71,39 @@ function M.bezier(p0, p1, p2, p3)
     return {type = "bezier", p0 = p0, p1 = p1, p2 = p2, p3 = p3}
 end
 
+function M.spline(points)
+    return {type = "spline", points = points}
+end
+
+-- Convert Catmull-Rom segment (p0,p1,p2,p3) to cubic bezier control points.
+-- The curve is drawn between p1 and p2; p0 and p3 are context points.
+-- Uses tau=0.5 (standard Catmull-Rom).
+function M.catmullRomToBezier(p0, p1, p2, p3)
+    return {
+        {p1[1], p1[2]},
+        {p1[1] + (p2[1] - p0[1]) / 6, p1[2] + (p2[2] - p0[2]) / 6},
+        {p2[1] - (p3[1] - p1[1]) / 6, p2[2] - (p3[2] - p1[2]) / 6},
+        {p2[1], p2[2]},
+    }
+end
+
+-- Convert a spline's points into a list of cubic bezier segments.
+-- Each segment is {b0, b1, b2, b3}.
+-- First/last points are duplicated as phantom control points.
+function M.splineToBeziers(points)
+    if #points < 2 then return {} end
+    local pts = {}
+    -- Duplicate first and last as phantom control points
+    pts[1] = points[1]
+    for i = 1, #points do pts[i + 1] = points[i] end
+    pts[#pts + 1] = points[#points]
+    local segments = {}
+    for i = 1, #pts - 3 do
+        segments[#segments + 1] = M.catmullRomToBezier(pts[i], pts[i+1], pts[i+2], pts[i+3])
+    end
+    return segments
+end
+
 function M.bezierPoint(p0, p1, p2, p3, t)
     local u = 1 - t
     return {
