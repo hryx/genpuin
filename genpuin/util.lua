@@ -26,4 +26,12 @@ function M.norm(v)
     return {v[1] / len, v[2] / len}
 end
 
+function M.degrees(rad)
+    return rad * 180 / math.pi
+end
+
+function M.radians(deg)
+    return deg * math.pi / 180
+end
+
 return M

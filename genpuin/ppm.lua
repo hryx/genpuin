@@ -60,6 +60,28 @@ local function bresenhamLine(buf, x0, y0, x1, y1, r, g, b, a)
     end
 end
 
+local function fillEllipse(buf, cx, cy, rx, ry, r, g, b, a)
+    cx, cy = floor(cx + 0.5), floor(cy + 0.5)
+    local iry = floor(ry + 0.5)
+    for dy = -iry, iry do
+        local ratio = dy / ry
+        local halfW = floor(rx * sqrt(1 - ratio * ratio) + 0.5)
+        for dx = -halfW, halfW do
+            setPixel(buf, cx + dx, cy + dy, r, g, b, a)
+        end
+    end
+end
+
+local function flattenEllipse(cx, cy, rx, ry, n)
+    n = n or 64
+    local pts = {}
+    for i = 0, n do
+        local angle = (i / n) * 2 * pi
+        pts[i + 1] = {cx + rx * cos(angle), cy + ry * sin(angle)}
+    end
+    return pts
+end
+
 local function fillCircle(buf, cx, cy, radius, r, g, b, a)
     cx, cy = floor(cx + 0.5), floor(cy + 0.5)
     local rad = floor(radius + 0.5)
@@ -245,6 +267,44 @@ local function scalePoints(pts, s)
     return out
 end
 
+local function flattenRoundedRect(x, y, w, h, rx, ry, arcSegs)
+    arcSegs = arcSegs or 8
+    local pts = {}
+    -- top edge (left to right)
+    pts[#pts + 1] = {x + rx, y}
+    pts[#pts + 1] = {x + w - rx, y}
+    -- top-right corner
+    for i = 1, arcSegs do
+        local a = -pi / 2 + (pi / 2) * (i / arcSegs)
+        pts[#pts + 1] = {x + w - rx + rx * cos(a), y + ry + ry * sin(a)}
+    end
+    -- right edge
+    pts[#pts + 1] = {x + w, y + ry}
+    pts[#pts + 1] = {x + w, y + h - ry}
+    -- bottom-right corner
+    for i = 1, arcSegs do
+        local a = 0 + (pi / 2) * (i / arcSegs)
+        pts[#pts + 1] = {x + w - rx + rx * cos(a), y + h - ry + ry * sin(a)}
+    end
+    -- bottom edge (right to left)
+    pts[#pts + 1] = {x + w - rx, y + h}
+    pts[#pts + 1] = {x + rx, y + h}
+    -- bottom-left corner
+    for i = 1, arcSegs do
+        local a = pi / 2 + (pi / 2) * (i / arcSegs)
+        pts[#pts + 1] = {x + rx + rx * cos(a), y + h - ry + ry * sin(a)}
+    end
+    -- left edge
+    pts[#pts + 1] = {x, y + h - ry}
+    pts[#pts + 1] = {x, y + ry}
+    -- top-left corner
+    for i = 1, arcSegs do
+        local a = pi + (pi / 2) * (i / arcSegs)
+        pts[#pts + 1] = {x + rx + rx * cos(a), y + ry + ry * sin(a)}
+    end
+    return pts
+end
+
 -- ============================================================
 -- Shape Dispatch
 -- ============================================================
@@ -255,7 +315,16 @@ local function rasterizeShape(buf, sh, style, s)
     local sw = ((style.strokeWidth or 1) * s)
     local cap = style.strokeLinecap
 
-    if sh.type == "circle" then
+    if sh.type == "ellipse" then
+        local cx, cy = sh.center[1] * s, sh.center[2] * s
+        local rx, ry = sh.rx * s, sh.ry * s
+        if fr then fillEllipse(buf, cx, cy, rx, ry, fr, fg, fb, fa) end
+        if sr then
+            local pts = flattenEllipse(cx, cy, rx, ry, 64)
+            strokePolyline(buf, pts, sr, sg, sb, sa, sw, true, cap)
+        end
+
+    elseif sh.type == "circle" then
         local cx, cy, r = sh.center[1] * s, sh.center[2] * s, sh.r * s
         if fr then fillCircle(buf, cx, cy, r, fr, fg, fb, fa) end
         if sr then
@@ -275,8 +344,15 @@ local function rasterizeShape(buf, sh, style, s)
 
     elseif sh.type == "rect" then
         local x, y, w, h = sh.x*s, sh.y*s, sh.w*s, sh.h*s
-        if fr then fillRect(buf, x, y, w, h, fr, fg, fb, fa) end
-        if sr then strokeRect(buf, x, y, w, h, sr, sg, sb, sa, sw, cap) end
+        if sh.rx then
+            local rx, ry = sh.rx * s, (sh.ry or sh.rx) * s
+            local pts = flattenRoundedRect(x, y, w, h, rx, ry)
+            if fr then scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end
+            if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, true, cap) end
+        else
+            if fr then fillRect(buf, x, y, w, h, fr, fg, fb, fa) end
+            if sr then strokeRect(buf, x, y, w, h, sr, sg, sb, sa, sw, cap) end
+        end
 
     elseif sh.type == "polyline" then
         local pts = scalePoints(sh.points, s)

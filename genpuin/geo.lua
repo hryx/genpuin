@@ -20,6 +20,24 @@ function M.vec2Len(v)
     return math.sqrt(v[1]^2 + v[2]^2)
 end
 
+function M.vec2FromAngle(angle, len)
+    len = len or 1
+    return {math.cos(angle) * len, math.sin(angle) * len}
+end
+
+function M.vec2Dot(a, b)
+    return a[1] * b[1] + a[2] * b[2]
+end
+
+function M.vec2Lerp(a, b, t)
+    return {a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t}
+end
+
+function M.vec2Rotate(v, angle)
+    local c, s = math.cos(angle), math.sin(angle)
+    return {v[1] * c - v[2] * s, v[1] * s + v[2] * c}
+end
+
 function M.line(a, b)
     return {type = "line", a = a, b = b}
 end
@@ -41,12 +59,32 @@ function M.arc(center, r, startAngle, endAngle)
             startAngle = startAngle, endAngle = endAngle}
 end
 
-function M.rect(x, y, w, h)
-    return {type = "rect", x = x, y = y, w = w, h = h}
+function M.rect(x, y, w, h, rx, ry)
+    return {type = "rect", x = x, y = y, w = w, h = h, rx = rx, ry = ry or rx}
+end
+
+function M.ellipse(center, rx, ry)
+    return {type = "ellipse", center = center, rx = rx, ry = ry}
 end
 
 function M.bezier(p0, p1, p2, p3)
     return {type = "bezier", p0 = p0, p1 = p1, p2 = p2, p3 = p3}
+end
+
+function M.bezierPoint(p0, p1, p2, p3, t)
+    local u = 1 - t
+    return {
+        u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1],
+        u*u*u*p0[2] + 3*u*u*t*p1[2] + 3*u*t*t*p2[2] + t*t*t*p3[2],
+    }
+end
+
+function M.bezierTangent(p0, p1, p2, p3, t)
+    local u = 1 - t
+    return {
+        3*u*u*(p1[1]-p0[1]) + 6*u*t*(p2[1]-p1[1]) + 3*t*t*(p3[1]-p2[1]),
+        3*u*u*(p1[2]-p0[2]) + 6*u*t*(p2[2]-p1[2]) + 3*t*t*(p3[2]-p2[2]),
+    }
 end
 
 -- Extract points from any point-based shape, returns nil for circles/arcs

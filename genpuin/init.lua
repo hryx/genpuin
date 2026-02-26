@@ -20,13 +20,20 @@ gen.vec2Add = geo.vec2Add
 gen.vec2Sub = geo.vec2Sub
 gen.vec2Scale = geo.vec2Scale
 gen.vec2Len = geo.vec2Len
+gen.vec2FromAngle = geo.vec2FromAngle
+gen.vec2Dot = geo.vec2Dot
+gen.vec2Lerp = geo.vec2Lerp
+gen.vec2Rotate = geo.vec2Rotate
 gen.line = geo.line
 gen.polyline = geo.polyline
 gen.polygon = geo.polygon
 gen.circle = geo.circle
+gen.ellipse = geo.ellipse
 gen.arc = geo.arc
 gen.rect = geo.rect
 gen.bezier = geo.bezier
+gen.bezierPoint = geo.bezierPoint
+gen.bezierTangent = geo.bezierTangent
 
 -- color
 gen.rgb = color.rgb
@@ -111,5 +118,7 @@ gen.clamp = util.clamp
 gen.dist = util.dist
 gen.angle = util.angle
 gen.norm = util.norm
+gen.degrees = util.degrees
+gen.radians = util.radians
 
 return gen

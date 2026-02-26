@@ -45,7 +45,11 @@ local function pointsToD(points, closed)
 end
 
 local function renderShape(sh, attrs)
-    if sh.type == "circle" then
+    if sh.type == "ellipse" then
+        return string.format('  <ellipse cx="%s" cy="%s" rx="%s" ry="%s" %s/>',
+            fmt(sh.center[1]), fmt(sh.center[2]), fmt(sh.rx), fmt(sh.ry), attrs)
+
+    elseif sh.type == "circle" then
         return string.format('  <circle cx="%s" cy="%s" r="%s" %s/>',
             fmt(sh.center[1]), fmt(sh.center[2]), fmt(sh.r), attrs)
 
@@ -54,8 +58,11 @@ local function renderShape(sh, attrs)
             fmt(sh.a[1]), fmt(sh.a[2]), fmt(sh.b[1]), fmt(sh.b[2]), attrs)
 
     elseif sh.type == "rect" then
-        return string.format('  <rect x="%s" y="%s" width="%s" height="%s" %s/>',
-            fmt(sh.x), fmt(sh.y), fmt(sh.w), fmt(sh.h), attrs)
+        local rAttrs = ""
+        if sh.rx then rAttrs = rAttrs .. string.format(' rx="%s"', fmt(sh.rx)) end
+        if sh.ry then rAttrs = rAttrs .. string.format(' ry="%s"', fmt(sh.ry)) end
+        return string.format('  <rect x="%s" y="%s" width="%s" height="%s"%s %s/>',
+            fmt(sh.x), fmt(sh.y), fmt(sh.w), fmt(sh.h), rAttrs, attrs)
 
     elseif sh.type == "polyline" then
         return string.format('  <path d="%s" %s/>', pointsToD(sh.points, false), attrs)

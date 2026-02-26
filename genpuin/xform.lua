@@ -4,7 +4,10 @@ local function xformShape(shape, fn)
     local s = {}
     for k, v in pairs(shape) do s[k] = v end
 
-    if shape.type == "circle" then
+    if shape.type == "ellipse" then
+        s.center = fn(shape.center)
+
+    elseif shape.type == "circle" then
         s.center = fn(shape.center)
 
     elseif shape.type == "line" then
