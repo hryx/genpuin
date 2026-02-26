@@ -213,14 +213,6 @@ local function flattenArc(cx, cy, r, startAngle, endAngle, n)
     return pts
 end
 
-local function parseMoveLinePath(d)
-    local pts = {}
-    for cmd, x, y in d:gmatch("([ML])%s+(%-?[%d%.]+)%s+(%-?[%d%.]+)") do
-        pts[#pts + 1] = {tonumber(x), tonumber(y)}
-    end
-    return pts
-end
-
 -- ============================================================
 -- Color Resolution
 -- ============================================================
@@ -310,17 +302,6 @@ local function rasterizeShape(buf, sh, style, s)
             scanlineFillPolygon(buf, fillPts, fr, fg, fb, fa)
         end
         if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, false, cap) end
-
-    elseif sh.type == "path" then
-        local pts = parseMoveLinePath(sh.d)
-        if #pts > 1 then
-            local closed = sh.d:match("Z%s*$") ~= nil
-            pts = scalePoints(pts, s)
-            if fr and closed then
-                scanlineFillPolygon(buf, pts, fr, fg, fb, fa)
-            end
-            if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, closed, cap) end
-        end
     end
 end
 

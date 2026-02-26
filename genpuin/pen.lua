@@ -1,4 +1,6 @@
 local canvas = require("genpuin.canvas")
+local geo = require("genpuin.geo")
+local xform = require("genpuin.xform")
 
 local Pen = {}
 Pen.__index = Pen
@@ -12,12 +14,14 @@ function Pen.new(c)
         _width = 1,
         _opacity = nil,
         _points = {},
+        _hasArcs = false,
     }, Pen)
 end
 
 function Pen:moveTo(pos)
     self.x, self.y = pos[1], pos[2]
     self._points = {pos}
+    self._hasArcs = false
     return self
 end
 
@@ -47,31 +51,135 @@ function Pen:heading(angle)
     return self._heading
 end
 
-function Pen:stroke()
-    if #self._points > 1 then
-        local segs = {}
-        table.insert(segs, string.format("M %.2f %.2f",
-            self._points[1][1], self._points[1][2]))
-        for i = 2, #self._points do
-            table.insert(segs, string.format("L %.2f %.2f",
-                self._points[i][1], self._points[i][2]))
+-- Copy points into a plain {x,y} array (strips arc metadata)
+local function copyPoints(points)
+    local pts = {}
+    for i, pt in ipairs(points) do
+        pts[i] = {pt[1], pt[2]}
+    end
+    return pts
+end
+
+-- Flatten points (including arcs) into a plain polyline
+local function flattenPoints(points, arcResolution)
+    arcResolution = arcResolution or 16
+    local pts = {{points[1][1], points[1][2]}}
+    for i = 2, #points do
+        local pt = points[i]
+        if pt.arc then
+            local a = pt.arc
+            for s = 1, arcResolution do
+                local t = s / arcResolution
+                local ang = a.startAngle + (a.endAngle - a.startAngle) * t
+                pts[#pts + 1] = {
+                    a.cx + a.radius * math.cos(ang),
+                    a.cy + a.radius * math.sin(ang),
+                }
+            end
+        else
+            pts[#pts + 1] = {pt[1], pt[2]}
         end
-        local style = {
+    end
+    return pts
+end
+
+function Pen:stroke()
+    if #self._points < 2 then
+        self._points = {{self.x, self.y}}
+        self._hasArcs = false
+        return nil
+    end
+    local shape
+    if self._hasArcs then
+        shape = geo.polyline(flattenPoints(self._points))
+    else
+        shape = geo.polyline(copyPoints(self._points))
+    end
+    local style = {
+        stroke = self._color,
+        strokeWidth = self._width,
+        strokeLinecap = "round",
+    }
+    if self._opacity then style.opacity = self._opacity end
+    canvas.draw(self._canvas, shape, style)
+    self._points = {{self.x, self.y}}
+    self._hasArcs = false
+    return shape
+end
+
+function Pen:lift()
+    self._points = {{self.x, self.y}}
+    self._hasArcs = false
+    return self
+end
+
+function Pen:toShape()
+    if #self._points < 2 then return nil end
+    return geo.polyline(copyPoints(self._points))
+end
+
+function Pen:toPolyline(arcResolution)
+    if #self._points < 2 then return nil end
+    if not self._hasArcs then
+        return geo.polyline(copyPoints(self._points))
+    end
+    return geo.polyline(flattenPoints(self._points, arcResolution))
+end
+
+function Pen:stamp(shape, style)
+    local placed = xform.translate(shape, self.x, self.y)
+    if not style then
+        style = {
             stroke = self._color,
             strokeWidth = self._width,
             strokeLinecap = "round",
         }
         if self._opacity then style.opacity = self._opacity end
-        canvas.draw(self._canvas,
-            {type = "path", d = table.concat(segs, " ")},
-            style)
     end
-    self._points = {{self.x, self.y}}
+    canvas.draw(self._canvas, placed, style)
     return self
 end
 
-function Pen:lift()
-    self._points = {{self.x, self.y}}
+function Pen:segments()
+    local segs = {}
+    local n = #self._points
+    if n < 2 then return segs end
+    local denom = math.max(n - 2, 1)
+    for i = 2, n do
+        local a, b = self._points[i-1], self._points[i]
+        segs[#segs + 1] = {
+            shape = geo.line({a[1], a[2]}, {b[1], b[2]}),
+            index = i - 1,
+            t = (i - 2) / denom,
+        }
+    end
+    return segs
+end
+
+function Pen:arcTo(angle, radius)
+    local sign = angle >= 0 and 1 or -1
+    local perpAngle = self._heading + sign * math.pi / 2
+    local cx = self.x + radius * math.cos(perpAngle)
+    local cy = self.y + radius * math.sin(perpAngle)
+    local dx, dy = self.x - cx, self.y - cy
+    local startAngle = math.atan2(dy, dx)
+    local cosA, sinA = math.cos(angle), math.sin(angle)
+    self.x = cx + dx * cosA - dy * sinA
+    self.y = cy + dx * sinA + dy * cosA
+    self._heading = self._heading + angle
+    self._hasArcs = true
+    table.insert(self._points, {
+        self.x, self.y,
+        arc = {
+            rx = radius, ry = radius,
+            large = math.abs(angle) > math.pi and 1 or 0,
+            sweep = angle > 0 and 0 or 1,
+            cx = cx, cy = cy,
+            startAngle = startAngle,
+            endAngle = math.atan2(self.y - cy, self.x - cx),
+            radius = radius,
+        }
+    })
     return self
 end
 

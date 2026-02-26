@@ -63,9 +63,6 @@ local function renderShape(sh, attrs)
     elseif sh.type == "polygon" then
         return string.format('  <path d="%s" %s/>', pointsToD(sh.points, true), attrs)
 
-    elseif sh.type == "path" then
-        return string.format('  <path d="%s" %s/>', sh.d, attrs)
-
     elseif sh.type == "arc" then
         local sa, ea = sh.startAngle, sh.endAngle
         local cx, cy, r = sh.center[1], sh.center[2], sh.r
