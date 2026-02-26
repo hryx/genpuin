@@ -62,5 +62,4 @@ gen.grid(cols, rows, tileSize, function(x, y, col, row)
     end
 end)
 
-gen.exportSvg(c, "out/tiles.svg")
-print("Wrote out/tiles.svg")
+return c

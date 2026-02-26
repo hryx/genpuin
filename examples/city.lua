@@ -236,5 +236,4 @@ for i = 1, 2 do
     p:stroke()
 end
 
-gen.exportSvg(c, "out/city.svg")
-print("Wrote out/city.svg")
+return c

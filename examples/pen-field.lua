@@ -37,5 +37,4 @@ for i = 1, 80 do
     p:stroke()
 end
 
-gen.exportSvg(c, "out/pen-field.svg")
-print("Wrote out/pen-field.svg")
+return c

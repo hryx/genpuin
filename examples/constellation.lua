@@ -36,5 +36,4 @@ for step = 0, 199 do
 end
 p:stroke()
 
-gen.exportSvg(c, "out/constellation.svg")
-print("Wrote out/constellation.svg")
+return c

@@ -194,5 +194,4 @@ for py = 40, H - 40, 80 do
     end
 end
 
-gen.exportSvg(c, "out/topographic.svg")
-print("Wrote out/topographic.svg")
+return c

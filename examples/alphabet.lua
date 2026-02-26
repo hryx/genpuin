@@ -28,5 +28,4 @@ poissonText.draw(c, "NOPQRSTUVWXYZ", {
     points = pts,
 })
 
-gen.exportSvg(c, "out/alphabet.svg")
-print("Wrote out/alphabet.svg")
+return c

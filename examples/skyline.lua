@@ -287,5 +287,4 @@ for i = 1, 7 do
     drawBird(birdX, birdY, gen.randRange(4, 10))
 end
 
-gen.exportSvg(c, "out/skyline.svg")
-print("Wrote out/skyline.svg")
+return c

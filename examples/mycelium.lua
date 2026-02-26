@@ -104,5 +104,4 @@ for _, spore in ipairs(spores) do
     })
 end
 
-gen.exportSvg(c, "out/mycelium.svg")
-print("Wrote out/mycelium.svg")
+return c

@@ -25,5 +25,4 @@ for ring = 1, 8 do
     end
 end
 
-gen.exportSvg(c, "out/circles.svg")
-print("Wrote out/circles.svg")
+return c

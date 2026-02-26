@@ -67,5 +67,4 @@ gen.draw(c, blob, {
     fill = gen.rgba(74/255, 111/255, 165/255, 0.15),
 })
 
-gen.exportSvg(c, "out/organic.svg")
-print("Wrote out/organic.svg")
+return c

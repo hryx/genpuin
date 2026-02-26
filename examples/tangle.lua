@@ -147,5 +147,4 @@ for i = 1, 3000 do
     end
 end
 
-gen.exportSvg(c, "out/tangle.svg")
-print("Wrote out/tangle.svg")
+return c

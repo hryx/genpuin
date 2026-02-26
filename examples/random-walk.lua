@@ -20,5 +20,4 @@ for trail = 1, 12 do
     p:stroke()
 end
 
-gen.exportSvg(c, "out/random-walk.svg")
-print("Wrote out/random-walk.svg")
+return c

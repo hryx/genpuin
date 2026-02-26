@@ -33,5 +33,4 @@ for i, pt in ipairs(points) do
     end)
 end
 
-gen.exportSvg(c, "out/poisson.svg")
-print(string.format("Wrote out/poisson.svg (%d points)", #points))
+return c

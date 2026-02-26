@@ -48,5 +48,4 @@ antsText.draw(c, pangram, {
     spread = lineHeight * 0.025,
 })
 
-gen.exportSvg(c, "out/fonts.svg")
-print("Wrote out/fonts.svg")
+return c

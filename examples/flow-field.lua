@@ -25,5 +25,4 @@ for i = 1, 200 do
     })
 end
 
-gen.exportSvg(c, "out/flow-field.svg")
-print("Wrote out/flow-field.svg")
+return c
