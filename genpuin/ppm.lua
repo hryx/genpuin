@@ -30,6 +30,8 @@ local function setPixel(buf, x, y, r, g, b, a)
     if x < 0 or x >= buf.w or y < 0 or y >= buf.h then return end
     local idx = y * buf.w + x + 1
     if buf.colorMatrix then
+        if buf.cmVisited[idx] then return end
+        buf.cmVisited[idx] = true
         local dst = buf.data[idx]
         local dr, dg, db = dst[1]/255, dst[2]/255, dst[3]/255
         local m = buf.colorMatrix
@@ -171,6 +173,48 @@ local function scanlineFillPolygon(buf, pts, r, g, b, a)
             local x1 = floor(xs[i + 1] + 0.5)
             for px = x0, x1 do
                 setPixel(buf, px, y, r, g, b, a)
+            end
+        end
+    end
+end
+
+local function scanlineFillCompound(buf, contours, r, g, b, a)
+    local minY, maxY = math.huge, -math.huge
+    for _, pts in ipairs(contours) do
+        for _, p in ipairs(pts) do
+            if p[2] < minY then minY = p[2] end
+            if p[2] > maxY then maxY = p[2] end
+        end
+    end
+    minY = floor(minY + 0.5)
+    maxY = floor(maxY + 0.5)
+    for y = minY, maxY do
+        local edges = {}
+        for _, pts in ipairs(contours) do
+            local n = #pts
+            local j = n
+            for i = 1, n do
+                local yi, yj = pts[i][2], pts[j][2]
+                if (yi <= y and yj > y) or (yj <= y and yi > y) then
+                    local xi, xj = pts[i][1], pts[j][1]
+                    local xInt = xi + (y - yi) / (yj - yi) * (xj - xi)
+                    local dir = yi < yj and 1 or -1  -- upward = +1, downward = -1
+                    edges[#edges + 1] = {xInt, dir}
+                end
+                j = i
+            end
+        end
+        table.sort(edges, function(ea, eb) return ea[1] < eb[1] end)
+        local winding = 0
+        for i = 1, #edges do
+            local x0 = edges[i][1]
+            winding = winding + edges[i][2]
+            if winding ~= 0 and i < #edges then
+                local px0 = floor(x0 + 0.5)
+                local px1 = floor(edges[i + 1][1] + 0.5)
+                for px = px0, px1 do
+                    setPixel(buf, px, y, r, g, b, a)
+                end
             end
         end
     end
@@ -409,6 +453,18 @@ local function rasterizeShape(buf, sh, style, s)
         if sr and #allPts >= 2 then
             strokePolyline(buf, allPts, sr, sg, sb, sa, sw, false, cap)
         end
+
+    elseif sh.type == "compound" then
+        local scaled = {}
+        for ci, contour in ipairs(sh.contours) do
+            scaled[ci] = scalePoints(contour, s)
+        end
+        if fr then scanlineFillCompound(buf, scaled, fr, fg, fb, fa) end
+        if sr then
+            for _, contour in ipairs(scaled) do
+                strokePolyline(buf, contour, sr, sg, sb, sa, sw, true, cap)
+            end
+        end
     end
 end
 
@@ -429,12 +485,20 @@ function M.exportPpm(c, filename, scale)
     end
     local buf = newBuffer(w, h, bgR, bgG, bgB)
 
+    local cmVisitedSets = {}
     local function rasterizeElement(elem)
         if elem.style.colorMap then
-            buf.colorMatrix = colormap.solve(elem.style.colorMap)
+            local matrix = colormap.solve(elem.style.colorMap)
+            local key = colormap.toSvgValues(matrix)
+            if not cmVisitedSets[key] then
+                cmVisitedSets[key] = {}
+            end
+            buf.colorMatrix = matrix
+            buf.cmVisited = cmVisitedSets[key]
         end
         rasterizeShape(buf, elem.shape, elem.style, scale)
         buf.colorMatrix = nil
+        buf.cmVisited = nil
     end
 
     for _, layer in ipairs(c.layers) do

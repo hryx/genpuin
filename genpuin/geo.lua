@@ -75,6 +75,10 @@ function M.spline(points)
     return {type = "spline", points = points}
 end
 
+function M.compound(contours)
+    return {type = "compound", contours = contours}
+end
+
 -- Convert Catmull-Rom segment (p0,p1,p2,p3) to cubic bezier control points.
 -- The curve is drawn between p1 and p2; p0 and p3 are context points.
 -- Uses tau=0.5 (standard Catmull-Rom).

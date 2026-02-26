@@ -117,7 +117,37 @@ local function renderShape(sh, attrs)
                 fmt(b[4][1]), fmt(b[4][2])))
         end
         return string.format('  <path d="%s" %s/>', table.concat(parts, " "), attrs)
+
+    elseif sh.type == "compound" then
+        local dParts = {}
+        for _, contour in ipairs(sh.contours) do
+            table.insert(dParts, pointsToD(contour, true))
+        end
+        return string.format('  <path d="%s" fill-rule="nonzero" %s/>',
+            table.concat(dParts, " "), attrs)
     end
+end
+
+local function maskStyleAttrs(s)
+    local parts = {}
+    if s.fill and s.fill ~= "none" then
+        table.insert(parts, 'fill="white"')
+    else
+        table.insert(parts, 'fill="none"')
+    end
+    if s.stroke and s.stroke ~= "none" then
+        table.insert(parts, 'stroke="white"')
+    end
+    if s.strokeWidth then
+        table.insert(parts, string.format('stroke-width="%s"', fmt(s.strokeWidth)))
+    end
+    if s.strokeLinecap then
+        table.insert(parts, string.format('stroke-linecap="%s"', s.strokeLinecap))
+    end
+    if s.strokeLinejoin then
+        table.insert(parts, string.format('stroke-linejoin="%s"', s.strokeLinejoin))
+    end
+    return table.concat(parts, " ")
 end
 
 local function renderElements(elements, parts, skipColorMap)
@@ -197,19 +227,21 @@ function M.exportSvg(c, filename)
         for gi, key in ipairs(groupOrder) do
             local grp = groups[key]
             table.insert(parts, '  <defs>')
-            table.insert(parts, string.format('    <clipPath id="cm-clip-%d">', gi))
+            table.insert(parts, string.format('    <mask id="cm-mask-%d">', gi))
+            table.insert(parts, string.format(
+                '      <rect width="%d" height="%d" fill="black"/>', c.width, c.height))
             for _, elem in ipairs(grp.elems) do
-                local line = renderShape(elem.shape, 'fill="white"')
+                local line = renderShape(elem.shape, maskStyleAttrs(elem.style))
                 if line then table.insert(parts, '  ' .. line) end
             end
-            table.insert(parts, '    </clipPath>')
+            table.insert(parts, '    </mask>')
             table.insert(parts, string.format(
                 '    <filter id="cm-filter-%d" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="%s"/></filter>',
                 gi, key))
             table.insert(parts, '  </defs>')
 
             table.insert(parts, string.format(
-                '  <g clip-path="url(#cm-clip-%d)" filter="url(#cm-filter-%d)">',
+                '  <g mask="url(#cm-mask-%d)" filter="url(#cm-filter-%d)">',
                 gi, gi))
             if c.bg then
                 table.insert(parts, string.format(

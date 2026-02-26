@@ -35,6 +35,7 @@ gen.bezier = geo.bezier
 gen.bezierPoint = geo.bezierPoint
 gen.bezierTangent = geo.bezierTangent
 gen.spline = geo.spline
+gen.compound = geo.compound
 gen.catmullRomToBezier = geo.catmullRomToBezier
 gen.splineToBeziers = geo.splineToBeziers
 
