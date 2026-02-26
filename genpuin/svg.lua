@@ -1,5 +1,6 @@
 local color = require("genpuin.color")
 local geo = require("genpuin.geo")
+local colormap = require("genpuin.colormap")
 
 local M = {}
 
@@ -119,11 +120,13 @@ local function renderShape(sh, attrs)
     end
 end
 
-local function renderElements(elements, parts)
+local function renderElements(elements, parts, skipColorMap)
     for _, elem in ipairs(elements) do
-        local attrs = styleAttrs(elem.style)
-        local line = renderShape(elem.shape, attrs)
-        if line then table.insert(parts, line) end
+        if not (skipColorMap and elem.style.colorMap) then
+            local attrs = styleAttrs(elem.style)
+            local line = renderShape(elem.shape, attrs)
+            if line then table.insert(parts, line) end
+        end
     end
 end
 
@@ -141,11 +144,82 @@ function M.exportSvg(c, filename)
 
     for _, layer in ipairs(c.layers) do
         table.insert(parts, string.format('  <g id="%s">', layer.name))
-        renderElements(layer.elements, parts)
+        renderElements(layer.elements, parts, true)
         table.insert(parts, '  </g>')
     end
 
-    renderElements(c.elements, parts)
+    renderElements(c.elements, parts, true)
+
+    -- Collect colorMap elements from layers and main elements
+    local cmElems = {}
+    for _, layer in ipairs(c.layers) do
+        for _, elem in ipairs(layer.elements) do
+            if elem.style.colorMap then
+                cmElems[#cmElems + 1] = elem
+            end
+        end
+    end
+    for _, elem in ipairs(c.elements) do
+        if elem.style.colorMap then
+            cmElems[#cmElems + 1] = elem
+        end
+    end
+
+    if #cmElems > 0 then
+        -- Group colorMap elements by their derived matrix
+        local groups = {}
+        local groupOrder = {}
+        for _, elem in ipairs(cmElems) do
+            local matrix = colormap.solve(elem.style.colorMap)
+            local key = colormap.toSvgValues(matrix)
+            if not groups[key] then
+                groups[key] = {matrix = matrix, elems = {}}
+                groupOrder[#groupOrder + 1] = key
+            end
+            groups[key].elems[#groups[key].elems + 1] = elem
+        end
+
+        -- Collect all non-colorMap elements (flat) for re-rendering
+        local sceneElems = {}
+        for _, layer in ipairs(c.layers) do
+            for _, elem in ipairs(layer.elements) do
+                if not elem.style.colorMap then
+                    sceneElems[#sceneElems + 1] = elem
+                end
+            end
+        end
+        for _, elem in ipairs(c.elements) do
+            if not elem.style.colorMap then
+                sceneElems[#sceneElems + 1] = elem
+            end
+        end
+
+        for gi, key in ipairs(groupOrder) do
+            local grp = groups[key]
+            table.insert(parts, '  <defs>')
+            table.insert(parts, string.format('    <clipPath id="cm-clip-%d">', gi))
+            for _, elem in ipairs(grp.elems) do
+                local line = renderShape(elem.shape, 'fill="white"')
+                if line then table.insert(parts, '  ' .. line) end
+            end
+            table.insert(parts, '    </clipPath>')
+            table.insert(parts, string.format(
+                '    <filter id="cm-filter-%d" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="%s"/></filter>',
+                gi, key))
+            table.insert(parts, '  </defs>')
+
+            table.insert(parts, string.format(
+                '  <g clip-path="url(#cm-clip-%d)" filter="url(#cm-filter-%d)">',
+                gi, gi))
+            if c.bg then
+                table.insert(parts, string.format(
+                    '    <rect width="%d" height="%d" fill="%s"/>',
+                    c.width, c.height, color.toSvg(c.bg)))
+            end
+            renderElements(sceneElems, parts)
+            table.insert(parts, '  </g>')
+        end
+    end
 
     table.insert(parts, '</svg>')
 

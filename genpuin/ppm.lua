@@ -1,4 +1,5 @@
 local geo = require("genpuin.geo")
+local colormap = require("genpuin.colormap")
 
 local M = {}
 
@@ -28,6 +29,17 @@ end
 local function setPixel(buf, x, y, r, g, b, a)
     if x < 0 or x >= buf.w or y < 0 or y >= buf.h then return end
     local idx = y * buf.w + x + 1
+    if buf.colorMatrix then
+        local dst = buf.data[idx]
+        local dr, dg, db = dst[1]/255, dst[2]/255, dst[3]/255
+        local m = buf.colorMatrix
+        buf.data[idx] = {
+            clamp255(floor((m[1][1]*dr + m[1][2]*dg + m[1][3]*db + m[1][4]) * 255 + 0.5)),
+            clamp255(floor((m[2][1]*dr + m[2][2]*dg + m[2][3]*db + m[2][4]) * 255 + 0.5)),
+            clamp255(floor((m[3][1]*dr + m[3][2]*dg + m[3][3]*db + m[3][4]) * 255 + 0.5)),
+        }
+        return
+    end
     if a >= 1.0 then
         buf.data[idx] = {r, g, b}
     else
@@ -417,13 +429,21 @@ function M.exportPpm(c, filename, scale)
     end
     local buf = newBuffer(w, h, bgR, bgG, bgB)
 
+    local function rasterizeElement(elem)
+        if elem.style.colorMap then
+            buf.colorMatrix = colormap.solve(elem.style.colorMap)
+        end
+        rasterizeShape(buf, elem.shape, elem.style, scale)
+        buf.colorMatrix = nil
+    end
+
     for _, layer in ipairs(c.layers) do
         for _, elem in ipairs(layer.elements) do
-            rasterizeShape(buf, elem.shape, elem.style, scale)
+            rasterizeElement(elem)
         end
     end
     for _, elem in ipairs(c.elements) do
-        rasterizeShape(buf, elem.shape, elem.style, scale)
+        rasterizeElement(elem)
     end
 
     local dir = filename:match("(.+)/[^/]+$")
