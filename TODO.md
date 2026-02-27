@@ -18,12 +18,11 @@
 - [x] PPM support for dashed lines
 
 ## Phase 3: Compositing & Color
-- [ ] Gradients — linear and radial (gradient, svg, color)
-- [ ] Gradients — pen integration
-- [ ] Blend modes — SVG
-- [ ] Blend modes — PPM
-- [ ] Blend modes — pen property
-- [ ] PPM support for gradients
+- [x] Gradients — linear and radial (gradient, svg, ppm, color)
+- [x] Gradients — pen integration
+- [x] Blend modes — SVG
+- [x] Blend modes — PPM
+- [x] Blend modes — pen property
 
 ## Phase 4: Spatial & Layout
 - [ ] Voronoi diagram (`voronoi`)

@@ -11,6 +11,7 @@ local field = require("genpuin.field")
 local pattern = require("genpuin.pattern")
 local fx = require("genpuin.fx")
 local ppm = require("genpuin.ppm")
+local gradient = require("genpuin.gradient")
 
 local gen = {}
 
@@ -62,6 +63,10 @@ gen.exportSvg = svg.exportSvg
 
 -- ppm
 gen.exportPpm = ppm.exportPpm
+
+-- gradient
+gen.linearGradient = gradient.linearGradient
+gen.radialGradient = gradient.radialGradient
 
 -- pen
 gen.pen = Pen.new

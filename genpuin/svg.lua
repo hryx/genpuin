@@ -46,6 +46,9 @@ local function styleAttrs(s)
     if s.strokeDashoffset then
         table.insert(parts, string.format('stroke-dashoffset="%s"', fmt(s.strokeDashoffset)))
     end
+    if s.blendMode then
+        table.insert(parts, string.format('style="mix-blend-mode: %s"', s.blendMode))
+    end
     return table.concat(parts, " ")
 end
 
@@ -163,6 +166,28 @@ local function renderElements(elements, parts, skipColorMap)
     end
 end
 
+local function collectGradients(c)
+    local seen = {}
+    local grads = {}
+    local function check(val)
+        if type(val) == "table" and val.id and not seen[val.id] then
+            seen[val.id] = true
+            grads[#grads + 1] = val
+        end
+    end
+    for _, layer in ipairs(c.layers) do
+        for _, elem in ipairs(layer.elements) do
+            check(elem.style.fill)
+            check(elem.style.stroke)
+        end
+    end
+    for _, elem in ipairs(c.elements) do
+        check(elem.style.fill)
+        check(elem.style.stroke)
+    end
+    return grads
+end
+
 function M.exportSvg(c, filename)
     local parts = {}
     table.insert(parts, string.format(
@@ -173,6 +198,30 @@ function M.exportSvg(c, filename)
         table.insert(parts, string.format(
             '  <rect width="%d" height="%d" fill="%s"/>',
             c.width, c.height, color.toSvg(c.bg)))
+    end
+
+    local grads = collectGradients(c)
+    if #grads > 0 then
+        table.insert(parts, '  <defs>')
+        for _, g in ipairs(grads) do
+            if g.type == "linearGradient" then
+                table.insert(parts, string.format(
+                    '    <linearGradient id="%s" gradientUnits="userSpaceOnUse" x1="%s" y1="%s" x2="%s" y2="%s">',
+                    g.id, fmt(g.x1), fmt(g.y1), fmt(g.x2), fmt(g.y2)))
+            elseif g.type == "radialGradient" then
+                table.insert(parts, string.format(
+                    '    <radialGradient id="%s" gradientUnits="userSpaceOnUse" cx="%s" cy="%s" r="%s">',
+                    g.id, fmt(g.cx), fmt(g.cy), fmt(g.r)))
+            end
+            for _, stop in ipairs(g.stops) do
+                table.insert(parts, string.format(
+                    '      <stop offset="%s" stop-color="%s"/>',
+                    fmt(stop[1]), color.toSvg(stop[2])))
+            end
+            local tag = g.type == "linearGradient" and "linearGradient" or "radialGradient"
+            table.insert(parts, string.format('    </%s>', tag))
+        end
+        table.insert(parts, '  </defs>')
     end
 
     for _, layer in ipairs(c.layers) do

@@ -26,6 +26,62 @@ local function newBuffer(w, h, r, g, b)
     return {data = data, w = w, h = h}
 end
 
+local function gradientColorAt(grad, x, y)
+    local t
+    if grad.type == "linearGradient" then
+        local dx, dy = grad.x2 - grad.x1, grad.y2 - grad.y1
+        local len2 = dx * dx + dy * dy
+        if len2 == 0 then t = 0
+        else t = ((x - grad.x1) * dx + (y - grad.y1) * dy) / len2 end
+    elseif grad.type == "radialGradient" then
+        local dx, dy = x - grad.cx, y - grad.cy
+        t = sqrt(dx * dx + dy * dy) / grad.r
+    else
+        t = 0
+    end
+    if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    local stops = grad.stops
+    if t <= stops[1][1] then
+        local c = stops[1][2]
+        return clamp255(floor(c[1]*255+0.5)), clamp255(floor(c[2]*255+0.5)),
+               clamp255(floor(c[3]*255+0.5)), c[4] or 1
+    end
+    if t >= stops[#stops][1] then
+        local c = stops[#stops][2]
+        return clamp255(floor(c[1]*255+0.5)), clamp255(floor(c[2]*255+0.5)),
+               clamp255(floor(c[3]*255+0.5)), c[4] or 1
+    end
+    for i = 2, #stops do
+        if t <= stops[i][1] then
+            local st = (t - stops[i-1][1]) / (stops[i][1] - stops[i-1][1])
+            local c1, c2 = stops[i-1][2], stops[i][2]
+            local cr = c1[1] + (c2[1] - c1[1]) * st
+            local cg = c1[2] + (c2[2] - c1[2]) * st
+            local cb = c1[3] + (c2[3] - c1[3]) * st
+            local ca = (c1[4] or 1) + ((c2[4] or 1) - (c1[4] or 1)) * st
+            return clamp255(floor(cr*255+0.5)), clamp255(floor(cg*255+0.5)),
+                   clamp255(floor(cb*255+0.5)), ca
+        end
+    end
+    local c = stops[#stops][2]
+    return clamp255(floor(c[1]*255+0.5)), clamp255(floor(c[2]*255+0.5)),
+           clamp255(floor(c[3]*255+0.5)), c[4] or 1
+end
+
+local function blendChannel(s, d, mode)
+    if mode == "multiply" then return floor(s * d / 255)
+    elseif mode == "screen" then return floor(s + d - s * d / 255)
+    elseif mode == "overlay" then
+        if d < 128 then return floor(2 * s * d / 255)
+        else return floor(255 - 2 * (255 - s) * (255 - d) / 255) end
+    elseif mode == "darken" then return s < d and s or d
+    elseif mode == "lighten" then return s > d and s or d
+    elseif mode == "difference" then return abs(s - d)
+    elseif mode == "exclusion" then return floor(s + d - 2 * s * d / 255)
+    end
+    return s
+end
+
 local function setPixel(buf, x, y, r, g, b, a)
     if x < 0 or x >= buf.w or y < 0 or y >= buf.h then return end
     local idx = y * buf.w + x + 1
@@ -41,6 +97,19 @@ local function setPixel(buf, x, y, r, g, b, a)
             clamp255(floor((m[3][1]*dr + m[3][2]*dg + m[3][3]*db + m[3][4]) * 255 + 0.5)),
         }
         return
+    end
+    -- Gradient: evaluate per-pixel color
+    if buf.gradient then
+        local gr, gg, gb, ga = gradientColorAt(buf.gradient, x, y)
+        r, g, b = gr, gg, gb
+        a = a * ga
+    end
+    -- Blend mode: blend source with destination before compositing
+    if buf.blendMode then
+        local dst = buf.data[idx]
+        r = blendChannel(r, dst[1], buf.blendMode)
+        g = blendChannel(g, dst[2], buf.blendMode)
+        b = blendChannel(b, dst[3], buf.blendMode)
     end
     if a >= 1.0 then
         buf.data[idx] = {r, g, b}
@@ -342,18 +411,27 @@ end
 -- Color Resolution
 -- ============================================================
 
+local function isGradient(clr)
+    return type(clr) == "table" and clr.stops ~= nil
+end
+
 local function resolveColor(clr, style, isFill)
     if not clr or clr == "none" then return nil end
     if type(clr) == "string" then return nil end
-    local r = clamp255(floor(clr[1] * 255 + 0.5))
-    local g = clamp255(floor(clr[2] * 255 + 0.5))
-    local b = clamp255(floor(clr[3] * 255 + 0.5))
-    local a = (clr[4] or 1) * (style.opacity or 1)
+    local a = (style.opacity or 1)
     if isFill then
         a = a * (style.fillOpacity or 1)
     else
         a = a * (style.strokeOpacity or 1)
     end
+    -- Gradient: return placeholder RGB, actual color computed per-pixel in setPixel
+    if isGradient(clr) then
+        return 0, 0, 0, a
+    end
+    local r = clamp255(floor(clr[1] * 255 + 0.5))
+    local g = clamp255(floor(clr[2] * 255 + 0.5))
+    local b = clamp255(floor(clr[3] * 255 + 0.5))
+    a = a * (clr[4] or 1)
     return r, g, b, a
 end
 
@@ -412,6 +490,19 @@ end
 -- Shape Dispatch
 -- ============================================================
 
+local function scaleGradient(grad, s)
+    if not grad or s == 1 then return grad end
+    if grad.type == "linearGradient" then
+        return {type = grad.type, id = grad.id, stops = grad.stops,
+                x1 = grad.x1 * s, y1 = grad.y1 * s,
+                x2 = grad.x2 * s, y2 = grad.y2 * s}
+    elseif grad.type == "radialGradient" then
+        return {type = grad.type, id = grad.id, stops = grad.stops,
+                cx = grad.cx * s, cy = grad.cy * s, r = grad.r * s}
+    end
+    return grad
+end
+
 local function rasterizeShape(buf, sh, style, s)
     local fr, fg, fb, fa = resolveColor(style.fill, style, true)
     local sr, sg, sb, sa = resolveColor(style.stroke, style, false)
@@ -422,6 +513,9 @@ local function rasterizeShape(buf, sh, style, s)
     if da then
         dashArray = {da[1] * s, (da[2] or da[1]) * s}
     end
+
+    -- Set up blend mode on buffer
+    if style.blendMode then buf.blendMode = style.blendMode end
 
     -- Helper: stroke with dash support. For closed shapes, appends first
     -- point to close the loop before dashing.
@@ -440,33 +534,53 @@ local function rasterizeShape(buf, sh, style, s)
         end
     end
 
+    -- Scaled gradients for fill and stroke
+    local fillGrad = isGradient(style.fill) and scaleGradient(style.fill, s) or nil
+    local strokeGrad = isGradient(style.stroke) and scaleGradient(style.stroke, s) or nil
+
+    -- Helper: set/clear fill gradient around fill operations
+    local function withFillGrad(fn)
+        if fillGrad then buf.gradient = fillGrad end
+        fn()
+        buf.gradient = nil
+    end
+    local function withStrokeGrad(fn)
+        if strokeGrad then buf.gradient = strokeGrad end
+        fn()
+        buf.gradient = nil
+    end
+
     if sh.type == "ellipse" then
         local cx, cy = sh.center[1] * s, sh.center[2] * s
         local rx, ry = sh.rx * s, sh.ry * s
-        if fr then fillEllipse(buf, cx, cy, rx, ry, fr, fg, fb, fa) end
+        if fr then withFillGrad(function() fillEllipse(buf, cx, cy, rx, ry, fr, fg, fb, fa) end) end
         if sr then
-            doStroke(flattenEllipse(cx, cy, rx, ry, 64), true)
+            withStrokeGrad(function() doStroke(flattenEllipse(cx, cy, rx, ry, 64), true) end)
         end
 
     elseif sh.type == "circle" then
         local cx, cy, r = sh.center[1] * s, sh.center[2] * s, sh.r * s
-        if fr then fillCircle(buf, cx, cy, r, fr, fg, fb, fa) end
+        if fr then withFillGrad(function() fillCircle(buf, cx, cy, r, fr, fg, fb, fa) end) end
         if sr then
-            if not dashArray and sw <= 1 then
-                midpointCircle(buf, cx, cy, r, sr, sg, sb, sa)
-            else
-                doStroke(flattenArc(cx, cy, r, 0, 2 * pi, 64), true)
-            end
+            withStrokeGrad(function()
+                if not dashArray and sw <= 1 and not strokeGrad then
+                    midpointCircle(buf, cx, cy, r, sr, sg, sb, sa)
+                else
+                    doStroke(flattenArc(cx, cy, r, 0, 2 * pi, 64), true)
+                end
+            end)
         end
 
     elseif sh.type == "line" then
         if sr then
-            if dashArray then
-                doStroke({{sh.a[1]*s, sh.a[2]*s}, {sh.b[1]*s, sh.b[2]*s}}, false)
-            else
-                thickLine(buf, sh.a[1]*s, sh.a[2]*s, sh.b[1]*s, sh.b[2]*s,
-                          sr, sg, sb, sa, sw, cap)
-            end
+            withStrokeGrad(function()
+                if dashArray then
+                    doStroke({{sh.a[1]*s, sh.a[2]*s}, {sh.b[1]*s, sh.b[2]*s}}, false)
+                else
+                    thickLine(buf, sh.a[1]*s, sh.a[2]*s, sh.b[1]*s, sh.b[2]*s,
+                              sr, sg, sb, sa, sw, cap)
+                end
+            end)
         end
 
     elseif sh.type == "rect" then
@@ -474,43 +588,47 @@ local function rasterizeShape(buf, sh, style, s)
         if sh.rx then
             local rx, ry = sh.rx * s, (sh.ry or sh.rx) * s
             local pts = flattenRoundedRect(x, y, w, h, rx, ry)
-            if fr then scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end
-            if sr then doStroke(pts, true) end
+            if fr then withFillGrad(function() scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end) end
+            if sr then withStrokeGrad(function() doStroke(pts, true) end) end
         else
-            if fr then fillRect(buf, x, y, w, h, fr, fg, fb, fa) end
+            if fr then withFillGrad(function() fillRect(buf, x, y, w, h, fr, fg, fb, fa) end) end
             if sr then
-                if dashArray then
-                    doStroke({{x,y}, {x+w,y}, {x+w,y+h}, {x,y+h}}, true)
-                else
-                    strokeRect(buf, x, y, w, h, sr, sg, sb, sa, sw, cap)
-                end
+                withStrokeGrad(function()
+                    if dashArray then
+                        doStroke({{x,y}, {x+w,y}, {x+w,y+h}, {x,y+h}}, true)
+                    else
+                        strokeRect(buf, x, y, w, h, sr, sg, sb, sa, sw, cap)
+                    end
+                end)
             end
         end
 
     elseif sh.type == "polyline" then
         local pts = scalePoints(sh.points, s)
-        if sr then doStroke(pts, false) end
+        if sr then withStrokeGrad(function() doStroke(pts, false) end) end
 
     elseif sh.type == "polygon" then
         local pts = scalePoints(sh.points, s)
-        if fr then scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end
-        if sr then doStroke(pts, true) end
+        if fr then withFillGrad(function() scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end) end
+        if sr then withStrokeGrad(function() doStroke(pts, true) end) end
 
     elseif sh.type == "bezier" then
         local pts = flattenBezier(
             {sh.p0[1]*s, sh.p0[2]*s}, {sh.p1[1]*s, sh.p1[2]*s},
             {sh.p2[1]*s, sh.p2[2]*s}, {sh.p3[1]*s, sh.p3[2]*s})
-        if sr then doStroke(pts, false) end
+        if sr then withStrokeGrad(function() doStroke(pts, false) end) end
 
     elseif sh.type == "arc" then
         local cx, cy, r = sh.center[1]*s, sh.center[2]*s, sh.r*s
         local pts = flattenArc(cx, cy, r, sh.startAngle, sh.endAngle)
         if fr then
-            local fillPts = {{cx, cy}}
-            for _, p in ipairs(pts) do fillPts[#fillPts + 1] = p end
-            scanlineFillPolygon(buf, fillPts, fr, fg, fb, fa)
+            withFillGrad(function()
+                local fillPts = {{cx, cy}}
+                for _, p in ipairs(pts) do fillPts[#fillPts + 1] = p end
+                scanlineFillPolygon(buf, fillPts, fr, fg, fb, fa)
+            end)
         end
-        if sr then doStroke(pts, false) end
+        if sr then withStrokeGrad(function() doStroke(pts, false) end) end
 
     elseif sh.type == "spline" then
         local segs = geo.splineToBeziers(sh.points)
@@ -526,7 +644,7 @@ local function rasterizeShape(buf, sh, style, s)
             end
         end
         if sr and #allPts >= 2 then
-            doStroke(allPts, false)
+            withStrokeGrad(function() doStroke(allPts, false) end)
         end
 
     elseif sh.type == "compound" then
@@ -534,13 +652,19 @@ local function rasterizeShape(buf, sh, style, s)
         for ci, contour in ipairs(sh.contours) do
             scaled[ci] = scalePoints(contour, s)
         end
-        if fr then scanlineFillCompound(buf, scaled, fr, fg, fb, fa) end
+        if fr then withFillGrad(function() scanlineFillCompound(buf, scaled, fr, fg, fb, fa) end) end
         if sr then
-            for _, contour in ipairs(scaled) do
-                doStroke(contour, true)
-            end
+            withStrokeGrad(function()
+                for _, contour in ipairs(scaled) do
+                    doStroke(contour, true)
+                end
+            end)
         end
     end
+
+    -- Clean up buffer state
+    buf.blendMode = nil
+    buf.gradient = nil
 end
 
 -- ============================================================

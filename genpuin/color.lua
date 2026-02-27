@@ -90,6 +90,9 @@ end
 
 function M.toSvg(c)
     if type(c) == "string" then return c end
+    if type(c) == "table" and c.type and c.id then
+        return string.format("url(#%s)", c.id)
+    end
     return string.format("rgb(%d,%d,%d)",
         math.floor(c[1] * 255 + 0.5),
         math.floor(c[2] * 255 + 0.5),

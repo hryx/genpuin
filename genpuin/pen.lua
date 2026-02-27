@@ -14,6 +14,7 @@ function Pen.new(c)
         _width = 1,
         _opacity = nil,
         _dash = nil,
+        _blendMode = nil,
         _points = {},
         _hasArcs = false,
     }, Pen)
@@ -103,6 +104,7 @@ function Pen:stroke()
     }
     if self._opacity then style.opacity = self._opacity end
     if self._dash then style.strokeDasharray = self._dash end
+    if self._blendMode then style.blendMode = self._blendMode end
     canvas.draw(self._canvas, shape, style)
     self._points = {{self.x, self.y}}
     self._hasArcs = false
@@ -198,6 +200,9 @@ function Pen:set(key, value)
     elseif key == "dash" then
         if #self._points > 1 then self:stroke() end
         self._dash = value
+    elseif key == "blendMode" then
+        if #self._points > 1 then self:stroke() end
+        self._blendMode = value
     end
     return self
 end
