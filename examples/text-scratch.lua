@@ -126,8 +126,8 @@ local function nearest(pts, tx, ty)
 end
 
 -- Draw a jittery line between two points
-local function jitterLine(canvas, a, b, jitterAmt, color, strokeWidth)
-    local n = 10
+local function jitterLine(canvas, a, b, jitterAmt, jitterSegs, color, strokeWidth, colorMap)
+    local n = jitterSegs
     local pts = {}
     for i = 0, n do
         local t = i / n
@@ -145,6 +145,7 @@ local function jitterLine(canvas, a, b, jitterAmt, color, strokeWidth)
         fill = "none",
         strokeLinecap = "round",
         strokeLinejoin = "round",
+        colorMap = colorMap,
     })
 end
 
@@ -153,33 +154,49 @@ end
 --- @param text    String to render (uppercase A-Z and spaces)
 --- @param opts    Table with fields:
 ---   x, y         — top-left of the text area (required)
----   lineHeight   — height of each character cell (required)
+---   lineHeight   — height of each character cell (required, or use width)
+---   width        — total text width; derives lineHeight (alternative)
 ---   spacing      — Poisson disk minDist (default: lineHeight / 20)
 ---   points       — pre-generated Poisson disk points (optional)
 ---   color        — stroke color (default: white)
 ---   strokeWidth  — line width (default: 1.2)
 ---   jitter       — jitter displacement (default: 2.5)
+---   jitterSegs   — subdivisions per stroke segment (default: 10, lower = smoother)
 ---   dotSize      — vertex dot radius (default: 1.5, 0 to disable)
+---   colorMap     — color map table (optional, passed to gen.draw)
 function M.draw(canvas, text, opts)
     local ox = opts.x
     local oy = opts.y
-    local lh = opts.lineHeight
-    local cellW = lh * 0.55
+
+    -- Collapse all whitespace to single spaces, uppercase
+    text = text:upper():gsub("%s+", " ")
+
+    local lh, cellW
+    if opts.width and opts.lineHeight then
+        cellW = opts.width / #text
+        lh = opts.lineHeight
+    elseif opts.width then
+        cellW = opts.width / #text
+        lh = cellW / 0.55
+    else
+        lh = opts.lineHeight
+        cellW = lh * 0.55
+    end
+
     local spacing = opts.spacing or (lh / 20)
     local color = opts.color or gen.rgb(1, 1, 1)
     local sw = opts.strokeWidth or 1.2
     local jitterAmt = opts.jitter or 2.5
+    local jitterSegs = opts.jitterSegs or 10
     local dotSize = opts.dotSize
     if dotSize == nil then dotSize = 1.5 end
+    local cmap = opts.colorMap
 
     -- Generate or reuse Poisson disk points
     local pts = opts.points
     if not pts then
         pts = gen.poissonDisk({0, 0, canvas.width, canvas.height}, spacing)
     end
-
-    -- Collapse all whitespace to single spaces, uppercase
-    text = text:upper():gsub("%s+", " ")
 
     local padX = cellW * 0.08
     local padY = lh * 0.05
@@ -202,7 +219,7 @@ function M.draw(canvas, text, opts)
 
             -- Draw strokes
             for _, s in ipairs(letter.strokes) do
-                jitterLine(canvas, mapped[s[1]], mapped[s[2]], jitterAmt, color, sw)
+                jitterLine(canvas, mapped[s[1]], mapped[s[2]], jitterAmt, jitterSegs, color, sw, cmap)
             end
 
             -- Vertex dots
@@ -211,6 +228,7 @@ function M.draw(canvas, text, opts)
                     gen.draw(canvas, gen.circle(mp, dotSize), {
                         fill = color,
                         opacity = 0.5,
+                        colorMap = cmap,
                     })
                 end
             end
