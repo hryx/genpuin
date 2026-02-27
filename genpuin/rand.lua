@@ -1,20 +1,27 @@
+local compat = require("genpuin.compat")
+local bxor   = compat.bxor
+local lshift  = compat.lshift
+local rshift  = compat.rshift
+
 local M = {}
 
--- SplitMix64: fast, statistically excellent single-state PRNG
-local state = 0
+-- xorshift32: fast, portable PRNG with 2^32-1 period.
+-- All state values fit in doubles, works on every Lua version.
+local state = 1
 
 function M.seed(n)
-    state = n
+    -- Mix the seed a bit and ensure non-zero state
+    state = bxor(math.floor(math.abs(n)) % 0x100000000, 0x12345678)
+    if state == 0 then state = 1 end
+    -- Warm up: discard first few values to diffuse the seed
+    for _ = 1, 8 do M.rand() end
 end
 
 function M.rand()
-    state = state + 0x9e3779b97f4a7c15
-    local z = state
-    z = (z ~ (z >> 30)) * 0xbf58476d1ce4e5b9
-    z = (z ~ (z >> 27)) * 0x94d049bb133111eb
-    z = z ~ (z >> 31)
-    -- map to [0, 1) using upper bits
-    return (z >> 11) * (1.0 / (1 << 53))
+    state = bxor(state, lshift(state, 13))
+    state = bxor(state, rshift(state, 17))
+    state = bxor(state, lshift(state, 5))
+    return state / 0x100000000  -- normalize to [0, 1)
 end
 
 function M.randRange(lo, hi)

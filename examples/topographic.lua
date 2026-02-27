@@ -115,49 +115,47 @@ for _, level in ipairs(levels) do
             if bl >= level then config = config + 1 end
 
             -- skip full/empty cells
-            if config == 0 or config == 15 then goto continue end
+            if config ~= 0 and config ~= 15 then
+                -- interpolation helpers
+                local function lerpEdge(v0, v1)
+                    if math.abs(v1 - v0) < 1e-10 then return 0.5 end
+                    return (level - v0) / (v1 - v0)
+                end
 
-            -- interpolation helpers
-            local function lerpEdge(v0, v1)
-                if math.abs(v1 - v0) < 1e-10 then return 0.5 end
-                return (level - v0) / (v1 - v0)
+                -- edge midpoints (interpolated)
+                local top = {x0 + lerpEdge(tl, tr) * step, y0}
+                local bottom = {x0 + lerpEdge(bl, br) * step, y0 + step}
+                local left = {x0, y0 + lerpEdge(tl, bl) * step}
+                local right = {x0 + step, y0 + lerpEdge(tr, br) * step}
+
+                -- draw segments based on marching squares config
+                local segs = {}
+                if config == 1 or config == 14 then
+                    segs = {{left, bottom}}
+                elseif config == 2 or config == 13 then
+                    segs = {{bottom, right}}
+                elseif config == 3 or config == 12 then
+                    segs = {{left, right}}
+                elseif config == 4 or config == 11 then
+                    segs = {{top, right}}
+                elseif config == 5 then
+                    segs = {{left, top}, {bottom, right}}
+                elseif config == 6 or config == 9 then
+                    segs = {{top, bottom}}
+                elseif config == 7 or config == 8 then
+                    segs = {{left, top}}
+                elseif config == 10 then
+                    segs = {{top, right}, {left, bottom}}
+                end
+
+                for _, seg in ipairs(segs) do
+                    gen.draw(c, gen.line(seg[1], seg[2]), {
+                        stroke = col,
+                        strokeWidth = lineWidth,
+                        opacity = opacity,
+                    })
+                end
             end
-
-            -- edge midpoints (interpolated)
-            local top = {x0 + lerpEdge(tl, tr) * step, y0}
-            local bottom = {x0 + lerpEdge(bl, br) * step, y0 + step}
-            local left = {x0, y0 + lerpEdge(tl, bl) * step}
-            local right = {x0 + step, y0 + lerpEdge(tr, br) * step}
-
-            -- draw segments based on marching squares config
-            local segs = {}
-            if config == 1 or config == 14 then
-                segs = {{left, bottom}}
-            elseif config == 2 or config == 13 then
-                segs = {{bottom, right}}
-            elseif config == 3 or config == 12 then
-                segs = {{left, right}}
-            elseif config == 4 or config == 11 then
-                segs = {{top, right}}
-            elseif config == 5 then
-                segs = {{left, top}, {bottom, right}}
-            elseif config == 6 or config == 9 then
-                segs = {{top, bottom}}
-            elseif config == 7 or config == 8 then
-                segs = {{left, top}}
-            elseif config == 10 then
-                segs = {{top, right}, {left, bottom}}
-            end
-
-            for _, seg in ipairs(segs) do
-                gen.draw(c, gen.line(seg[1], seg[2]), {
-                    stroke = col,
-                    strokeWidth = lineWidth,
-                    opacity = opacity,
-                })
-            end
-
-            ::continue::
         end
     end
 end

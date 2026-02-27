@@ -8,16 +8,17 @@
 --   genpuin script.lua -o out.ppm     PPM output (inferred from extension)
 --   genpuin script.lua -o x.ppm -s 2  PPM with 2x scale
 
--- Check Lua version
+-- Check Lua version (5.1+ required; LuaJIT is fine)
 local major, minor = _VERSION:match("Lua (%d+)%.(%d+)")
-if not major or tonumber(major) < 5 or (tonumber(major) == 5 and tonumber(minor) < 4) then
-    io.stderr:write("genpuin requires Lua 5.4 or later (found " .. _VERSION .. ")\n")
+if not major or tonumber(major) < 5 or (tonumber(major) == 5 and tonumber(minor) < 1) then
+    io.stderr:write("genpuin requires Lua 5.1 or later (found " .. (_VERSION or "unknown") .. ")\n")
     os.exit(1)
 end
 
 -- Resolve library path
 local scriptDir = arg[0]:match("(.+)/[^/]+$") or "."
-local libDir = scriptDir .. "/../share/lua/5.4"
+local luaVer = major .. "." .. minor
+local libDir = scriptDir .. "/../share/lua/" .. luaVer
 local devDir = scriptDir .. "/.."
 
 package.path = libDir .. "/?.lua;" .. libDir .. "/?/init.lua;"

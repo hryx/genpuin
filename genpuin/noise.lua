@@ -41,8 +41,8 @@ function M.seed(n)
 end
 
 function M.perlin(x, y)
-    local xi = math.floor(x) & 255
-    local yi = math.floor(y) & 255
+    local xi = math.floor(x) % 256
+    local yi = math.floor(y) % 256
     local xf = x - math.floor(x)
     local yf = y - math.floor(y)
 
