@@ -255,6 +255,51 @@ local function strokePolyline(buf, pts, r, g, b, a, width, closed, cap)
     end
 end
 
+local function strokeDashed(buf, pts, dashArray, r, g, b, a, width, cap)
+    if #pts < 2 then return end
+    local dashLen, gapLen = dashArray[1], dashArray[2] or dashArray[1]
+    local cycle = dashLen + gapLen
+    -- Build cumulative lengths
+    local lengths = {0}
+    local total = 0
+    for i = 2, #pts do
+        local dx = pts[i][1] - pts[i-1][1]
+        local dy = pts[i][2] - pts[i-1][2]
+        total = total + sqrt(dx * dx + dy * dy)
+        lengths[i] = total
+    end
+    -- Interpolate a point at distance d along the path
+    local function pointAt(d)
+        for i = 2, #pts do
+            if d <= lengths[i] then
+                local segLen = lengths[i] - lengths[i-1]
+                if segLen == 0 then return {pts[i][1], pts[i][2]} end
+                local t = (d - lengths[i-1]) / segLen
+                return {
+                    pts[i-1][1] + (pts[i][1] - pts[i-1][1]) * t,
+                    pts[i-1][2] + (pts[i][2] - pts[i-1][2]) * t,
+                }
+            end
+        end
+        return {pts[#pts][1], pts[#pts][2]}
+    end
+    local d = 0
+    while d < total do
+        local dashEnd = math.min(d + dashLen, total)
+        local seg = {pointAt(d)}
+        for i = 2, #pts do
+            if lengths[i] > d and lengths[i] < dashEnd then
+                seg[#seg + 1] = {pts[i][1], pts[i][2]}
+            end
+        end
+        seg[#seg + 1] = pointAt(dashEnd)
+        if #seg >= 2 then
+            strokePolyline(buf, seg, r, g, b, a, width, false, cap)
+        end
+        d = d + cycle
+    end
+end
+
 local function strokeRect(buf, x, y, w, h, r, g, b, a, width, cap)
     local x0, y0 = x, y
     local x1, y1 = x + w, y + h
@@ -372,32 +417,56 @@ local function rasterizeShape(buf, sh, style, s)
     local sr, sg, sb, sa = resolveColor(style.stroke, style, false)
     local sw = ((style.strokeWidth or 1) * s)
     local cap = style.strokeLinecap
+    local da = style.strokeDasharray
+    local dashArray
+    if da then
+        dashArray = {da[1] * s, (da[2] or da[1]) * s}
+    end
+
+    -- Helper: stroke with dash support. For closed shapes, appends first
+    -- point to close the loop before dashing.
+    local function doStroke(pts, closed)
+        if dashArray then
+            if closed then
+                local cp = {}
+                for i, p in ipairs(pts) do cp[i] = p end
+                cp[#cp + 1] = pts[1]
+                strokeDashed(buf, cp, dashArray, sr, sg, sb, sa, sw, cap)
+            else
+                strokeDashed(buf, pts, dashArray, sr, sg, sb, sa, sw, cap)
+            end
+        else
+            strokePolyline(buf, pts, sr, sg, sb, sa, sw, closed, cap)
+        end
+    end
 
     if sh.type == "ellipse" then
         local cx, cy = sh.center[1] * s, sh.center[2] * s
         local rx, ry = sh.rx * s, sh.ry * s
         if fr then fillEllipse(buf, cx, cy, rx, ry, fr, fg, fb, fa) end
         if sr then
-            local pts = flattenEllipse(cx, cy, rx, ry, 64)
-            strokePolyline(buf, pts, sr, sg, sb, sa, sw, true, cap)
+            doStroke(flattenEllipse(cx, cy, rx, ry, 64), true)
         end
 
     elseif sh.type == "circle" then
         local cx, cy, r = sh.center[1] * s, sh.center[2] * s, sh.r * s
         if fr then fillCircle(buf, cx, cy, r, fr, fg, fb, fa) end
         if sr then
-            if sw <= 1 then
+            if not dashArray and sw <= 1 then
                 midpointCircle(buf, cx, cy, r, sr, sg, sb, sa)
             else
-                local pts = flattenArc(cx, cy, r, 0, 2 * pi, 64)
-                strokePolyline(buf, pts, sr, sg, sb, sa, sw, true, cap)
+                doStroke(flattenArc(cx, cy, r, 0, 2 * pi, 64), true)
             end
         end
 
     elseif sh.type == "line" then
         if sr then
-            thickLine(buf, sh.a[1]*s, sh.a[2]*s, sh.b[1]*s, sh.b[2]*s,
-                      sr, sg, sb, sa, sw, cap)
+            if dashArray then
+                doStroke({{sh.a[1]*s, sh.a[2]*s}, {sh.b[1]*s, sh.b[2]*s}}, false)
+            else
+                thickLine(buf, sh.a[1]*s, sh.a[2]*s, sh.b[1]*s, sh.b[2]*s,
+                          sr, sg, sb, sa, sw, cap)
+            end
         end
 
     elseif sh.type == "rect" then
@@ -406,26 +475,32 @@ local function rasterizeShape(buf, sh, style, s)
             local rx, ry = sh.rx * s, (sh.ry or sh.rx) * s
             local pts = flattenRoundedRect(x, y, w, h, rx, ry)
             if fr then scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end
-            if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, true, cap) end
+            if sr then doStroke(pts, true) end
         else
             if fr then fillRect(buf, x, y, w, h, fr, fg, fb, fa) end
-            if sr then strokeRect(buf, x, y, w, h, sr, sg, sb, sa, sw, cap) end
+            if sr then
+                if dashArray then
+                    doStroke({{x,y}, {x+w,y}, {x+w,y+h}, {x,y+h}}, true)
+                else
+                    strokeRect(buf, x, y, w, h, sr, sg, sb, sa, sw, cap)
+                end
+            end
         end
 
     elseif sh.type == "polyline" then
         local pts = scalePoints(sh.points, s)
-        if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, false, cap) end
+        if sr then doStroke(pts, false) end
 
     elseif sh.type == "polygon" then
         local pts = scalePoints(sh.points, s)
         if fr then scanlineFillPolygon(buf, pts, fr, fg, fb, fa) end
-        if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, true, cap) end
+        if sr then doStroke(pts, true) end
 
     elseif sh.type == "bezier" then
         local pts = flattenBezier(
             {sh.p0[1]*s, sh.p0[2]*s}, {sh.p1[1]*s, sh.p1[2]*s},
             {sh.p2[1]*s, sh.p2[2]*s}, {sh.p3[1]*s, sh.p3[2]*s})
-        if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, false, cap) end
+        if sr then doStroke(pts, false) end
 
     elseif sh.type == "arc" then
         local cx, cy, r = sh.center[1]*s, sh.center[2]*s, sh.r*s
@@ -435,7 +510,7 @@ local function rasterizeShape(buf, sh, style, s)
             for _, p in ipairs(pts) do fillPts[#fillPts + 1] = p end
             scanlineFillPolygon(buf, fillPts, fr, fg, fb, fa)
         end
-        if sr then strokePolyline(buf, pts, sr, sg, sb, sa, sw, false, cap) end
+        if sr then doStroke(pts, false) end
 
     elseif sh.type == "spline" then
         local segs = geo.splineToBeziers(sh.points)
@@ -451,7 +526,7 @@ local function rasterizeShape(buf, sh, style, s)
             end
         end
         if sr and #allPts >= 2 then
-            strokePolyline(buf, allPts, sr, sg, sb, sa, sw, false, cap)
+            doStroke(allPts, false)
         end
 
     elseif sh.type == "compound" then
@@ -462,7 +537,7 @@ local function rasterizeShape(buf, sh, style, s)
         if fr then scanlineFillCompound(buf, scaled, fr, fg, fb, fa) end
         if sr then
             for _, contour in ipairs(scaled) do
-                strokePolyline(buf, contour, sr, sg, sb, sa, sw, true, cap)
+                doStroke(contour, true)
             end
         end
     end

@@ -15,7 +15,7 @@
 - [x] Dashed lines — SVG style attrs
 - [x] Dashed lines — FX function `dash()`
 - [x] Dashed lines — pen property
-- [ ] PPM support for dashed lines
+- [x] PPM support for dashed lines
 
 ## Phase 3: Compositing & Color
 - [ ] Gradients — linear and radial (gradient, svg, color)
@@ -24,3 +24,11 @@
 - [ ] Blend modes — PPM
 - [ ] Blend modes — pen property
 - [ ] PPM support for gradients
+
+## Phase 4: Spatial & Layout
+- [ ] Voronoi diagram (`voronoi`)
+- [ ] Lloyd's relaxation (`relax`) — uses Voronoi internally
+- [ ] Circle packing (`packCircles`)
+- [ ] Point-in-shape tests (`pointInRect`, `pointInCircle`, `pointInPolygon`)
+- [ ] Nearest neighbor / spatial queries
+- [ ] Simple separation (push overlapping shapes apart)
