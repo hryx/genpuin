@@ -4,7 +4,9 @@ LUA_VER := $(shell $(LUA) -e "print((_VERSION or ''):match('%d+%.%d+') or '5.4')
 LUA_DIR  = $(PREFIX)/share/lua/$(LUA_VER)
 BIN_DIR  = $(PREFIX)/bin
 
-.PHONY: install uninstall
+EXAMPLES = $(wildcard examples/*.lua)
+
+.PHONY: install uninstall examples
 
 install:
 	mkdir -p $(BIN_DIR)
@@ -16,3 +18,12 @@ install:
 uninstall:
 	rm -f $(BIN_DIR)/genpuin
 	rm -rf $(LUA_DIR)/genpuin
+
+examples:
+	@mkdir -p out/svg out/ppm
+	@for f in $(EXAMPLES); do \
+		name=$$(basename $$f .lua); \
+		echo "$$name"; \
+		$(LUA) bin/genpuin $$f -o out/svg/$$name.svg; \
+		$(LUA) bin/genpuin $$f -o out/ppm/$$name.ppm; \
+	done
