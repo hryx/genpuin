@@ -27,6 +27,9 @@ local function styleAttrs(s)
     if s.strokeLinecap then
         table.insert(parts, string.format('stroke-linecap="%s"', s.strokeLinecap))
     end
+    if s.strokeLinejoin then
+        table.insert(parts, string.format('stroke-linejoin="%s"', s.strokeLinejoin))
+    end
     if s.fillOpacity then
         table.insert(parts, string.format('fill-opacity="%s"', fmt(s.fillOpacity)))
     end
