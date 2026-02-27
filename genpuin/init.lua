@@ -12,6 +12,8 @@ local pattern = require("genpuin.pattern")
 local fx = require("genpuin.fx")
 local ppm = require("genpuin.ppm")
 local gradient = require("genpuin.gradient")
+local voronoi = require("genpuin.voronoi")
+local spatial = require("genpuin.spatial")
 
 local gen = {}
 
@@ -120,6 +122,19 @@ gen.smooth = fx.smooth
 gen.taper = fx.taper
 gen.stipple = fx.stipple
 gen.dash = fx.dash
+
+-- voronoi
+gen.voronoi = voronoi.voronoi
+gen.relax = voronoi.relax
+
+-- spatial
+gen.pointInRect = spatial.pointInRect
+gen.pointInCircle = spatial.pointInCircle
+gen.pointInPolygon = spatial.pointInPolygon
+gen.nearest = spatial.nearest
+gen.withinRadius = spatial.withinRadius
+gen.packCircles = spatial.packCircles
+gen.separate = spatial.separate
 
 -- util
 gen.lerp = util.lerp

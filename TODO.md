@@ -1,5 +1,6 @@
 # TODO
 
+## Platform support
 - [ ] Support Lua 5.1+ and LuaJIT (currently requires Lua 5.4)
 - [ ] Add LuaRocks rockspec for package distribution
 - [ ] Windows support (PowerShell install script or LuaRocks-only)
@@ -25,9 +26,9 @@
 - [x] Blend modes — pen property
 
 ## Phase 4: Spatial & Layout
-- [ ] Voronoi diagram (`voronoi`)
-- [ ] Lloyd's relaxation (`relax`) — uses Voronoi internally
-- [ ] Circle packing (`packCircles`)
-- [ ] Point-in-shape tests (`pointInRect`, `pointInCircle`, `pointInPolygon`)
-- [ ] Nearest neighbor / spatial queries
-- [ ] Simple separation (push overlapping shapes apart)
+- [x] Voronoi diagram (`voronoi`)
+- [x] Lloyd's relaxation (`relax`) — uses Voronoi internally
+- [x] Circle packing (`packCircles`)
+- [x] Point-in-shape tests (`pointInRect`, `pointInCircle`, `pointInPolygon`)
+- [x] Nearest neighbor / spatial queries
+- [x] Simple separation (push overlapping shapes apart)
