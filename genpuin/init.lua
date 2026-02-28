@@ -91,6 +91,11 @@ gen.poissonDisk = rand.poissonDisk
 gen.grid = pattern.grid
 gen.radial = pattern.radial
 gen.scatter = pattern.scatter
+gen.spiral = pattern.spiral
+gen.alongPath = pattern.alongPath
+gen.subdivideRect = pattern.subdivideRect
+gen.kaleidoscope = pattern.kaleidoscope
+gen.GOLDEN_ANGLE = pattern.GOLDEN_ANGLE
 
 -- xform
 gen.translate = xform.translate
@@ -100,6 +105,7 @@ gen.scale = xform.scale
 gen.scaleAround = xform.scaleAround
 gen.reflectX = xform.reflectX
 gen.reflectY = xform.reflectY
+gen.reflect = xform.reflect
 
 -- noise
 gen.perlin = noise.perlin

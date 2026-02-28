@@ -86,4 +86,14 @@ function M.reflectY(shape)
     end)
 end
 
+function M.reflect(shape, center, angle)
+    local px, py = center[1], center[2]
+    local c2 = math.cos(2 * angle)
+    local s2 = math.sin(2 * angle)
+    return xformShape(shape, function(pt)
+        local dx, dy = pt[1] - px, pt[2] - py
+        return {px + dx * c2 + dy * s2, py + dx * s2 - dy * c2}
+    end)
+end
+
 return M
