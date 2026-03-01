@@ -45,10 +45,13 @@ All functions are accessed through `require("genpuin")`.
 - **Gradients:** `linearGradient` `radialGradient`
 - **Pen:** `pen`
 - **Randomness:** `seed` `rand` `randRange` `randInt` `gaussian` `pick` `shuffle` `weightedPick` `randInCircle` `randOnCircle` `randInRect` `poissonDisk`
-- **Patterns:** `grid` `radial` `scatter`
+- **Patterns:** `grid` `radial` `scatter` `spiral` `alongPath` `subdivideRect` `kaleidoscope`
+- **L-systems:** `rewrite`
+- **Cellular automata:** `elementary` `evolve` `life`
+- **Markov chains:** `markov` `markovFrom` `markovStep` `markovGenerate`
 - **Noise & fields:** `perlin` `fbm` `noiseSeed` `flowField` `noiseField` `trace`
 - **FX:** `jitter` `smooth` `taper` `stipple` `dash`
-- **Transforms:** `translate` `rotate` `rotateAround` `scale` `scaleAround` `reflectX` `reflectY`
+- **Transforms:** `translate` `rotate` `rotateAround` `scale` `scaleAround` `reflectX` `reflectY` `reflect`
 - **Voronoi:** `voronoi` `relax`
 - **Spatial:** `pointInPolygon` `nearest` `withinRadius` `packCircles` `separate`
 - **Vec2:** `vec2` `vec2Add` `vec2Sub` `vec2Scale` `vec2Len` `vec2FromAngle` `vec2Dot` `vec2Lerp` `vec2Rotate`

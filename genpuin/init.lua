@@ -14,6 +14,9 @@ local ppm = require("genpuin.ppm")
 local gradient = require("genpuin.gradient")
 local voronoi = require("genpuin.voronoi")
 local spatial = require("genpuin.spatial")
+local lsystem = require("genpuin.lsystem")
+local automata = require("genpuin.automata")
+local markov = require("genpuin.markov")
 
 local gen = {}
 
@@ -141,6 +144,20 @@ gen.nearest = spatial.nearest
 gen.withinRadius = spatial.withinRadius
 gen.packCircles = spatial.packCircles
 gen.separate = spatial.separate
+
+-- lsystem
+gen.rewrite = lsystem.rewrite
+
+-- automata
+gen.elementary = automata.elementary
+gen.evolve = automata.step
+gen.life = automata.life
+
+-- markov
+gen.markov = markov.chain
+gen.markovFrom = markov.fromSequence
+gen.markovStep = markov.step
+gen.markovGenerate = markov.generate
 
 -- util
 gen.lerp = util.lerp
