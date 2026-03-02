@@ -91,11 +91,9 @@ local function setPixel(buf, x, y, r, g, b, a)
         local dst = buf.data[idx]
         local dr, dg, db = dst[1]/255, dst[2]/255, dst[3]/255
         local m = buf.colorMatrix
-        buf.data[idx] = {
-            clamp255(floor((m[1][1]*dr + m[1][2]*dg + m[1][3]*db + m[1][4]) * 255 + 0.5)),
-            clamp255(floor((m[2][1]*dr + m[2][2]*dg + m[2][3]*db + m[2][4]) * 255 + 0.5)),
-            clamp255(floor((m[3][1]*dr + m[3][2]*dg + m[3][3]*db + m[3][4]) * 255 + 0.5)),
-        }
+        dst[1] = clamp255(floor((m[1][1]*dr + m[1][2]*dg + m[1][3]*db + m[1][4]) * 255 + 0.5))
+        dst[2] = clamp255(floor((m[2][1]*dr + m[2][2]*dg + m[2][3]*db + m[2][4]) * 255 + 0.5))
+        dst[3] = clamp255(floor((m[3][1]*dr + m[3][2]*dg + m[3][3]*db + m[3][4]) * 255 + 0.5))
         return
     end
     -- Gradient: evaluate per-pixel color
@@ -111,16 +109,14 @@ local function setPixel(buf, x, y, r, g, b, a)
         g = blendChannel(g, dst[2], buf.blendMode)
         b = blendChannel(b, dst[3], buf.blendMode)
     end
+    local dst = buf.data[idx]
     if a >= 1.0 then
-        buf.data[idx] = {r, g, b}
+        dst[1], dst[2], dst[3] = r, g, b
     else
-        local dst = buf.data[idx]
         local inv = 1.0 - a
-        buf.data[idx] = {
-            clamp255(floor(r * a + dst[1] * inv + 0.5)),
-            clamp255(floor(g * a + dst[2] * inv + 0.5)),
-            clamp255(floor(b * a + dst[3] * inv + 0.5)),
-        }
+        dst[1] = clamp255(floor(r * a + dst[1] * inv + 0.5))
+        dst[2] = clamp255(floor(g * a + dst[2] * inv + 0.5))
+        dst[3] = clamp255(floor(b * a + dst[3] * inv + 0.5))
     end
 end
 
