@@ -36,10 +36,12 @@ local function dot2(g, x, y)
     return g[1] * x + g[2] * y
 end
 
+-- Seed the noise permutation table.
 function M.seed(n)
     initPerm(n)
 end
 
+-- 2D Perlin noise, returns a value in approximately [-1, 1].
 function M.perlin(x, y)
     local xi = math.floor(x) % 256
     local yi = math.floor(y) % 256
@@ -60,6 +62,7 @@ function M.perlin(x, y)
     return x1 * (1 - v) + x2 * v
 end
 
+-- Fractal Brownian motion (layered Perlin noise).
 function M.fbm(x, y, octaves, lacunarity, gain)
     octaves = octaves or 6
     lacunarity = lacunarity or 2.0

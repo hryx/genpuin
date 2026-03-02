@@ -38,12 +38,14 @@ local function xformShape(shape, fn)
     return s
 end
 
+-- Translate a shape by (dx, dy).
 function M.translate(shape, dx, dy)
     return xformShape(shape, function(pt)
         return {pt[1] + dx, pt[2] + dy}
     end)
 end
 
+-- Rotate a shape around the origin by the given angle in radians.
 function M.rotate(shape, angle)
     local c, s = math.cos(angle), math.sin(angle)
     return xformShape(shape, function(pt)
@@ -51,6 +53,7 @@ function M.rotate(shape, angle)
     end)
 end
 
+-- Rotate a shape around a pivot point by the given angle in radians.
 function M.rotateAround(shape, angle, pivot)
     local c, s = math.cos(angle), math.sin(angle)
     local px, py = pivot[1], pivot[2]
@@ -60,6 +63,7 @@ function M.rotateAround(shape, angle, pivot)
     end)
 end
 
+-- Scale a shape from the origin. If sy is omitted, scales uniformly.
 function M.scale(shape, sx, sy)
     sy = sy or sx
     return xformShape(shape, function(pt)
@@ -67,6 +71,7 @@ function M.scale(shape, sx, sy)
     end)
 end
 
+-- Scale a shape around a pivot point.
 function M.scaleAround(shape, sx, sy, pivot)
     local px, py = pivot[1], pivot[2]
     return xformShape(shape, function(pt)
@@ -74,18 +79,21 @@ function M.scaleAround(shape, sx, sy, pivot)
     end)
 end
 
+-- Reflect a shape across the Y axis (negate x).
 function M.reflectX(shape)
     return xformShape(shape, function(pt)
         return {-pt[1], pt[2]}
     end)
 end
 
+-- Reflect a shape across the X axis (negate y).
 function M.reflectY(shape)
     return xformShape(shape, function(pt)
         return {pt[1], -pt[2]}
     end)
 end
 
+-- Reflect a shape across an arbitrary axis through center at the given angle.
 function M.reflect(shape, center, angle)
     local px, py = center[1], center[2]
     local c2 = math.cos(2 * angle)

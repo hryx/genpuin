@@ -667,6 +667,7 @@ end
 -- Export
 -- ============================================================
 
+-- Export the canvas to a PPM (P6 binary) image file.
 function M.exportPpm(c, filename, scale)
     scale = scale or 1
     local w = c.width * scale

@@ -9,6 +9,7 @@ local M = {}
 -- All state values fit in doubles, works on every Lua version.
 local state = 1
 
+-- Seed the random number generator.
 function M.seed(n)
     -- Mix the seed a bit and ensure non-zero state
     state = bxor(math.floor(math.abs(n)) % 0x100000000, 0x12345678)
@@ -17,6 +18,7 @@ function M.seed(n)
     for _ = 1, 8 do M.rand() end
 end
 
+-- Return a random number in [0, 1).
 function M.rand()
     state = bxor(state, lshift(state, 13))
     state = bxor(state, rshift(state, 17))
@@ -24,14 +26,17 @@ function M.rand()
     return state / 0x100000000  -- normalize to [0, 1)
 end
 
+-- Return a random number in [lo, hi).
 function M.randRange(lo, hi)
     return lo + M.rand() * (hi - lo)
 end
 
+-- Return a random integer in [lo, hi] (inclusive).
 function M.randInt(lo, hi)
     return lo + math.floor(M.rand() * (1 + hi - lo))
 end
 
+-- Sample from a normal distribution with the given mean and stddev.
 function M.gaussian(mean, stddev)
     local u1 = M.rand()
     local u2 = M.rand()
@@ -39,10 +44,12 @@ function M.gaussian(mean, stddev)
     return mean + z * stddev
 end
 
+-- Pick a random element from a list.
 function M.pick(list)
     return list[M.randInt(1, #list)]
 end
 
+-- Return a shuffled copy of a list.
 function M.shuffle(list)
     local out = {}
     for i = 1, #list do out[i] = list[i] end
@@ -53,6 +60,7 @@ function M.shuffle(list)
     return out
 end
 
+-- Pick from a list with weighted probabilities.
 function M.weightedPick(list, weights)
     local total = 0
     for i = 1, #weights do total = total + weights[i] end
@@ -65,6 +73,7 @@ function M.weightedPick(list, weights)
     return list[#list]
 end
 
+-- Return a random point uniformly distributed inside a circle.
 function M.randInCircle(center, r)
     local angle = M.rand() * 2 * math.pi
     local dist = r * math.sqrt(M.rand())
@@ -72,18 +81,20 @@ function M.randInCircle(center, r)
             center[2] + dist * math.sin(angle)}
 end
 
+-- Return a random point on the circumference of a circle.
 function M.randOnCircle(center, r)
     local angle = M.rand() * 2 * math.pi
     return {center[1] + r * math.cos(angle),
             center[2] + r * math.sin(angle)}
 end
 
+-- Return a random point inside a rectangle.
 function M.randInRect(x, y, w, h)
     return {x + M.rand() * w, y + M.rand() * h}
 end
 
--- Bridson's algorithm for Poisson disk sampling
--- bounds = {x, y, w, h}, minDist = minimum distance between points
+-- Poisson disk sampling using Bridson's algorithm.
+-- bounds = {x, y, w, h}, minDist = minimum distance between points.
 function M.poissonDisk(bounds, minDist, maxAttempts)
     maxAttempts = maxAttempts or 30
     local bx, by, bw, bh = bounds[1], bounds[2], bounds[3], bounds[4]

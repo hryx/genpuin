@@ -96,6 +96,8 @@ local function polygonCentroid(points)
     return {cx * factor, cy * factor}
 end
 
+-- Compute Voronoi cells for a set of sites within bounds {x, y, w, h}.
+-- Returns a list of {site, cell} where cell is a polygon shape.
 function M.voronoi(sites, bounds)
     local bx, by, bw, bh = bounds[1], bounds[2], bounds[3], bounds[4]
     local cells = {}
@@ -113,6 +115,7 @@ function M.voronoi(sites, bounds)
     return cells
 end
 
+-- Lloyd relaxation: move each site to its cell centroid, repeated.
 function M.relax(sites, bounds, iterations)
     iterations = iterations or 5
     local bx, by, bw, bh = bounds[1], bounds[2], bounds[3], bounds[4]

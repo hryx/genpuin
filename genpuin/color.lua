@@ -2,14 +2,17 @@ local util = require("genpuin.util")
 
 local M = {}
 
+-- Create a color from RGB values (0-1 each). Alpha defaults to 1.
 function M.rgb(r, g, b)
     return {r, g, b, 1}
 end
 
+-- Create a color from RGBA values (0-1 each).
 function M.rgba(r, g, b, a)
     return {r, g, b, a}
 end
 
+-- Create a color from HSV. h, s, v are all in 0-1.
 function M.hsv(h, s, v)
     h = (h % 1) * 6
     local i = math.floor(h)
@@ -27,6 +30,7 @@ function M.hsv(h, s, v)
     end
 end
 
+-- Create a color from HSL. h, s, l are all in 0-1.
 function M.hsl(h, s, l)
     h = h % 1
     local function hue2rgb(p, q, t)
@@ -50,6 +54,7 @@ function M.hsl(h, s, l)
     }
 end
 
+-- Create a color from a hex string ("#RRGGBB" or "#RRGGBBAA").
 function M.hex(str)
     if str:sub(1, 1) == "#" then str = str:sub(2) end
     local r = tonumber(str:sub(1, 2), 16) / 255
@@ -62,6 +67,7 @@ function M.hex(str)
     return {r, g, b, a}
 end
 
+-- Linearly interpolate between two colors by t.
 function M.lerpColor(c1, c2, t)
     return {
         util.lerp(c1[1], c2[1], t),
@@ -71,10 +77,12 @@ function M.lerpColor(c1, c2, t)
     }
 end
 
+-- Darken a color by the given amount (0-1).
 function M.darken(c, amount)
     return {c[1] * (1 - amount), c[2] * (1 - amount), c[3] * (1 - amount), c[4]}
 end
 
+-- Lighten a color by the given amount (0-1).
 function M.lighten(c, amount)
     return {
         c[1] + (1 - c[1]) * amount,
@@ -84,10 +92,12 @@ function M.lighten(c, amount)
     }
 end
 
+-- Return a copy of the color with a new alpha value.
 function M.withAlpha(c, a)
     return {c[1], c[2], c[3], a}
 end
 
+-- Convert a color to SVG format (rgb string or url reference for gradients).
 function M.toSvg(c)
     if type(c) == "string" then return c end
     if type(c) == "table" and c.type and c.id then

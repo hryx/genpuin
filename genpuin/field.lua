@@ -3,10 +3,14 @@ local geo = require("genpuin.geo")
 
 local M = {}
 
+-- Create a flow field from a sampling function.
+-- fn(x, y) should return an angle in radians.
 function M.flowField(fn)
     return { type = "flow", sample = fn }
 end
 
+-- Create a Perlin noise-based flow field.
+-- scale controls the noise frequency (default 0.01).
 function M.noiseField(scale)
     scale = scale or 0.01
     return M.flowField(function(x, y)
@@ -14,6 +18,8 @@ function M.noiseField(scale)
     end)
 end
 
+-- Trace a path through a flow field starting at a point.
+-- Returns a polyline shape with the given number of steps.
 function M.trace(field, start, steps, stepSize)
     steps = steps or 100
     stepSize = stepSize or 1.0

@@ -4,8 +4,13 @@ local xform = require("genpuin.xform")
 
 local M = {}
 
+-- Golden angle in radians (~2.3998).
 M.GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))
 
+-- Call fn(x, y, col, row) at each cell of a grid layout.
+-- opts can be a tiling string ("rect", "hex", "tri") or a table:
+--   tiling: "rect" (default), "hex", or "tri"
+--   offset: number (shift applied to odd rows) or function(row) -> dx
 function M.grid(cols, rows, size, fn, opts)
     -- Parse opts: string shorthand or table
     local tiling = "rect"
@@ -60,6 +65,7 @@ function M.grid(cols, rows, size, fn, opts)
     end
 end
 
+-- Call fn(pos, angle, i) at n points evenly spaced around a circle.
 function M.radial(n, center, radius, fn)
     for i = 0, n - 1 do
         local angle = (i / n) * 2 * math.pi
@@ -69,6 +75,7 @@ function M.radial(n, center, radius, fn)
     end
 end
 
+-- Call fn(pos, i) at n random points within bounds {x, y, w, h}.
 function M.scatter(n, bounds, fn)
     local bx, by, bw, bh = bounds[1], bounds[2], bounds[3], bounds[4]
     for i = 0, n - 1 do
@@ -77,6 +84,8 @@ function M.scatter(n, bounds, fn)
     end
 end
 
+-- Call fn(pos, angle, i) at n points along a spiral.
+-- opts: angle (increment, default GOLDEN_ANGLE), spacing, growth ("sqrt" or "linear").
 function M.spiral(n, center, opts, fn)
     opts = opts or {}
     local angleInc = opts.angle or M.GOLDEN_ANGLE
@@ -97,6 +106,7 @@ function M.spiral(n, center, opts, fn)
     end
 end
 
+-- Call fn(pos, tangentAngle, t) at n evenly-spaced points along a path.
 function M.alongPath(path, n, fn)
     -- Sample n+2 points so we can compute tangents at endpoints
     local sampled = geo.sampleAlong(path, n + 2)
@@ -115,6 +125,8 @@ function M.alongPath(path, n, fn)
     end
 end
 
+-- Recursively subdivide a rectangle. fn(x, y, w, h, depth) should return
+-- "h" to split horizontally, "v" to split vertically, or nil to stop.
 function M.subdivideRect(x, y, w, h, fn)
     local function recurse(rx, ry, rw, rh, depth)
         local result = fn(rx, ry, rw, rh, depth)
@@ -136,6 +148,8 @@ function M.subdivideRect(x, y, w, h, fn)
     recurse(x, y, w, h, 0)
 end
 
+-- Replicate shapes with n-fold rotational symmetry around a center.
+-- Returns a list of transformed shapes (rotated + reflected copies).
 function M.kaleidoscope(n, center, shapes)
     local result = {}
     local sliceAngle = (2 * math.pi) / n

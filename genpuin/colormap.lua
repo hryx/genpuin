@@ -49,9 +49,9 @@ local function solveLinear(A, b, n)
     return x
 end
 
---- Derive the affine color matrix from color pairs.
---- Each pair is {from = {r,g,b,...}, to = {r,g,b,...}}.
---- Returns a 3×4 matrix (three rows of {a,b,c,d}).
+-- Derive the affine color matrix from color pairs.
+-- Each pair is {from = {r,g,b,...}, to = {r,g,b,...}}.
+-- Returns a 3x4 matrix (three rows of {a,b,c,d}).
 function M.solve(pairs)
     local n = #pairs
 
@@ -129,7 +129,7 @@ function M.solve(pairs)
     return matrix
 end
 
---- Apply the matrix to a color in [0,1] space.
+-- Apply the matrix to a color in [0,1] space.
 function M.apply(matrix, r, g, b)
     return
         matrix[1][1]*r + matrix[1][2]*g + matrix[1][3]*b + matrix[1][4],
@@ -137,8 +137,8 @@ function M.apply(matrix, r, g, b)
         matrix[3][1]*r + matrix[3][2]*g + matrix[3][3]*b + matrix[3][4]
 end
 
---- Convert the matrix to the SVG feColorMatrix "values" attribute string.
---- SVG uses a 4×5 row-major matrix (RGBA output × RGBA+offset input).
+-- Convert the matrix to the SVG feColorMatrix "values" attribute string.
+-- SVG uses a 4x5 row-major matrix (RGBA output x RGBA+offset input).
 function M.toSvgValues(matrix)
     local m = matrix
     return string.format(

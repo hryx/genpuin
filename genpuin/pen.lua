@@ -5,6 +5,7 @@ local xform = require("genpuin.xform")
 local Pen = {}
 Pen.__index = Pen
 
+-- Create a new pen bound to a canvas.
 function Pen.new(c)
     return setmetatable({
         _canvas = c,
@@ -20,6 +21,7 @@ function Pen.new(c)
     }, Pen)
 end
 
+-- Move the pen to a position without drawing.
 function Pen:moveTo(pos)
     self.x, self.y = pos[1], pos[2]
     self._points = {pos}
@@ -27,6 +29,7 @@ function Pen:moveTo(pos)
     return self
 end
 
+-- Move forward by dist in the current heading direction.
 function Pen:forward(dist)
     self.x = self.x + dist * math.cos(self._heading)
     self.y = self.y + dist * math.sin(self._heading)
@@ -34,17 +37,20 @@ function Pen:forward(dist)
     return self
 end
 
+-- Move to a position, extending the current path.
 function Pen:forwardTo(pos)
     self.x, self.y = pos[1], pos[2]
     table.insert(self._points, {self.x, self.y})
     return self
 end
 
+-- Turn the heading by angle radians.
 function Pen:turn(angle)
     self._heading = self._heading + angle
     return self
 end
 
+-- Get or set the heading angle. With no argument, returns the current heading.
 function Pen:heading(angle)
     if angle then
         self._heading = angle
@@ -85,6 +91,7 @@ local function flattenPoints(points, arcResolution)
     return pts
 end
 
+-- Draw the accumulated path and reset. Returns the polyline shape.
 function Pen:stroke()
     if #self._points < 2 then
         self._points = {{self.x, self.y}}
@@ -111,17 +118,20 @@ function Pen:stroke()
     return shape
 end
 
+-- Discard the current path without drawing.
 function Pen:lift()
     self._points = {{self.x, self.y}}
     self._hasArcs = false
     return self
 end
 
+-- Return the current path as a polyline shape without drawing.
 function Pen:toShape()
     if #self._points < 2 then return nil end
     return geo.polyline(copyPoints(self._points))
 end
 
+-- Return the path as a polyline, flattening any arcs.
 function Pen:toPolyline(arcResolution)
     if #self._points < 2 then return nil end
     if not self._hasArcs then
@@ -130,6 +140,7 @@ function Pen:toPolyline(arcResolution)
     return geo.polyline(flattenPoints(self._points, arcResolution))
 end
 
+-- Draw a shape at the pen's current position.
 function Pen:stamp(shape, style)
     local placed = xform.translate(shape, self.x, self.y)
     if not style then
@@ -144,6 +155,8 @@ function Pen:stamp(shape, style)
     return self
 end
 
+-- Return individual line segments of the current path.
+-- Each segment has shape, index, and t (normalized position).
 function Pen:segments()
     local segs = {}
     local n = #self._points
@@ -160,6 +173,7 @@ function Pen:segments()
     return segs
 end
 
+-- Extend the path with a circular arc of the given angle and radius.
 function Pen:arcTo(angle, radius)
     local sign = angle >= 0 and 1 or -1
     local perpAngle = self._heading + sign * math.pi / 2
@@ -187,6 +201,8 @@ function Pen:arcTo(angle, radius)
     return self
 end
 
+-- Set a pen property. Flushes the current path if it has points.
+-- Keys: "color", "width", "opacity", "dash", "blendMode".
 function Pen:set(key, value)
     if key == "color" then
         if #self._points > 1 then self:stroke() end
@@ -207,6 +223,7 @@ function Pen:set(key, value)
     return self
 end
 
+-- Return the pen's current position as {x, y}.
 function Pen:pos()
     return {self.x, self.y}
 end

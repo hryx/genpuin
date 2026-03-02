@@ -188,6 +188,7 @@ local function collectGradients(c)
     return grads
 end
 
+-- Export the canvas to an SVG file.
 function M.exportSvg(c, filename)
     local parts = {}
     table.insert(parts, string.format(

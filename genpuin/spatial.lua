@@ -4,16 +4,19 @@ local rand = require("genpuin.rand")
 
 local M = {}
 
+-- Test if a point is inside a rectangle.
 function M.pointInRect(point, x, y, w, h)
     local px, py = point[1], point[2]
     return px >= x and px <= x + w and py >= y and py <= y + h
 end
 
+-- Test if a point is inside a circle.
 function M.pointInCircle(point, center, r)
     local dx, dy = point[1] - center[1], point[2] - center[2]
     return dx * dx + dy * dy <= r * r
 end
 
+-- Test if a point is inside a polygon (ray casting).
 function M.pointInPolygon(point, polygon)
     local pts = polygon
     if polygon.type == "polygon" then pts = polygon.points end
@@ -33,6 +36,7 @@ function M.pointInPolygon(point, polygon)
     return hit
 end
 
+-- Find the nearest point to a query point. Returns {point, index, dist}.
 function M.nearest(query, points)
     if #points == 0 then return nil end
     local bestDist = math.huge
@@ -47,6 +51,7 @@ function M.nearest(query, points)
     return {point = points[bestIdx], index = bestIdx, dist = bestDist}
 end
 
+-- Find all points within a radius of the query, sorted by distance.
 function M.withinRadius(query, points, radius)
     local results = {}
     local r2 = radius * radius
@@ -62,6 +67,12 @@ function M.withinRadius(query, points, radius)
     return results
 end
 
+-- Push overlapping circles apart iteratively.
+-- opts:
+--   iterations: max steps (default 50)
+--   padding: extra space between circles (default 0)
+--   strength: push force multiplier (default 0.5)
+--   bounds: {x, y, w, h} to constrain circles within
 function M.separate(circles, opts)
     opts = opts or {}
     local iterations = opts.iterations or 50
@@ -115,6 +126,14 @@ function M.separate(circles, opts)
     return circles
 end
 
+-- Place non-overlapping circles inside bounds.
+-- opts:
+--   bounds: {x, y, w, h} (required)
+--   count: number of circles to place (required)
+--   radius: fixed radius, or use minRadius/maxRadius for random sizes
+--   padding: extra space between circles (default 0)
+--   maxAttempts: placement tries per circle (default 500)
+--   separation: post-placement separation iterations (default 50)
 function M.packCircles(opts)
     local bounds = opts.bounds
     local count = opts.count
