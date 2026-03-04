@@ -16,9 +16,9 @@ local fmtSlice = T.fmtSlice
 -- Render
 ------------------------------------------------------------
 print("Rendering test-aa.ppm...")
-T.render("examples/test-aa.lua", "out/ppm/test-aa.ppm")
+T.render("examples/test-aa.lua", "out/test/test-aa.ppm")
 
-local pixels, W, H = T.readPpm("out/ppm/test-aa.ppm")
+local pixels, W, H = T.readPpm("out/test/test-aa.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))
 
 ------------------------------------------------------------

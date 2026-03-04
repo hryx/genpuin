@@ -6,7 +6,7 @@ BIN_DIR  = $(PREFIX)/bin
 
 EXAMPLES = $(wildcard examples/*.lua)
 
-.PHONY: install uninstall examples
+.PHONY: install uninstall examples test
 
 install:
 	mkdir -p $(BIN_DIR)
@@ -27,3 +27,7 @@ examples:
 		$(LUA) bin/genpuin $$f -o out/svg/$$name.svg; \
 		$(LUA) bin/genpuin $$f -o out/ppm/$$name.ppm; \
 	done
+
+test:
+	@mkdir -p out/test
+	@$(LUA) test/run.lua
