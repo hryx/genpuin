@@ -86,10 +86,20 @@ end
 local function setPixel(buf, x, y, r, g, b, a)
     if x < 0 or x >= buf.w or y < 0 or y >= buf.h then return end
     local idx = y * buf.w + x + 1
-    -- Per-shape dedup: skip pixels already composited by this shape
+    -- Per-shape dedup: allow overwrite only when new alpha is higher
     if buf.shapeVisited then
-        if buf.shapeVisited[idx] then return end
-        buf.shapeVisited[idx] = true
+        local prev = buf.shapeVisited[idx]
+        if prev then
+            if a <= prev[1] then return end
+            -- Higher alpha: restore original background before re-compositing
+            local dst = buf.data[idx]
+            dst[1], dst[2], dst[3] = prev[2], prev[3], prev[4]
+            prev[1] = a
+        else
+            -- First write: store original background and alpha
+            local dst = buf.data[idx]
+            buf.shapeVisited[idx] = {a, dst[1], dst[2], dst[3]}
+        end
     end
     if buf.colorMatrix then
         if buf.cmVisited[idx] then return end
@@ -295,21 +305,58 @@ end
 
 local function thickLine(buf, x0, y0, x1, y1, r, g, b, a, width, cap)
     local dx, dy = x1 - x0, y1 - y0
-    local len = sqrt(dx * dx + dy * dy)
+    local len2 = dx * dx + dy * dy
+    local len = sqrt(len2)
+    local halfW = width / 2
+
     if len == 0 then
-        fillCircle(buf, x0, y0, width / 2, r, g, b, a)
+        fillCircle(buf, x0, y0, halfW, r, g, b, a)
         return
     end
-    local nx, ny = -dy / len * width / 2, dx / len * width / 2
-    scanlineFillPolygon(buf, {
-        {x0 + nx, y0 + ny},
-        {x1 + nx, y1 + ny},
-        {x1 - nx, y1 - ny},
-        {x0 - nx, y0 - ny},
-    }, r, g, b, a)
-    if cap == "round" then
-        -- Only draw cap at the end point to avoid double-drawing at shared vertices
-        fillCircle(buf, x1, y1, width / 2, r, g, b, a)
+
+    local ux, uy = dx / len, dy / len
+    local margin = halfW + 1
+    local minX = floor(math.min(x0, x1) - margin)
+    local maxX = floor(math.max(x0, x1) + margin)
+    local minY = floor(math.min(y0, y1) - margin)
+    local maxY = floor(math.max(y0, y1) + margin)
+
+    local innerR2 = halfW > 0.5 and (halfW - 0.5) * (halfW - 0.5) or -1
+    local outerR2 = (halfW + 0.5) * (halfW + 0.5)
+    local outer = halfW + 0.5
+    local roundCap = (cap == "round")
+
+    for py = minY, maxY do
+        for px = minX, maxX do
+            local vx, vy = px - x0, py - y0
+            local along = vx * ux + vy * uy
+
+            local distSq
+            if along <= 0 then
+                if not roundCap then goto skip end
+                distSq = vx * vx + vy * vy
+            elseif along >= len then
+                if not roundCap then goto skip end
+                local ex, ey = px - x1, py - y1
+                distSq = ex * ex + ey * ey
+            else
+                local perp = vx * (-uy) + vy * ux
+                distSq = perp * perp
+            end
+
+            if distSq > outerR2 then goto skip end
+
+            if distSq <= innerR2 then
+                setPixel(buf, px, py, r, g, b, a)
+            else
+                local dist = sqrt(distSq)
+                local coverage = outer - dist
+                if coverage > 0 then
+                    setPixel(buf, px, py, r, g, b, a * coverage)
+                end
+            end
+            ::skip::
+        end
     end
 end
 
