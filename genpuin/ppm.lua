@@ -86,6 +86,11 @@ end
 local function setPixel(buf, x, y, r, g, b, a)
     if x < 0 or x >= buf.w or y < 0 or y >= buf.h then return end
     local idx = y * buf.w + x + 1
+    -- Per-shape dedup: skip pixels already composited by this shape
+    if buf.shapeVisited then
+        if buf.shapeVisited[idx] then return end
+        buf.shapeVisited[idx] = true
+    end
     if buf.colorMatrix then
         if buf.cmVisited[idx] then return end
         buf.cmVisited[idx] = true
@@ -513,6 +518,9 @@ local function rasterizeShape(buf, sh, style, s)
     -- Set up blend mode on buffer
     if style.blendMode then buf.blendMode = style.blendMode end
 
+    -- Prevent double-compositing within a single shape
+    buf.shapeVisited = {}
+
     -- Helper: stroke with dash support. For closed shapes, appends first
     -- point to close the loop before dashing.
     local function doStroke(pts, closed)
@@ -659,6 +667,7 @@ local function rasterizeShape(buf, sh, style, s)
     end
 
     -- Clean up buffer state
+    buf.shapeVisited = nil
     buf.blendMode = nil
     buf.gradient = nil
 end
