@@ -181,37 +181,60 @@ end
 
 local function fillCircle(buf, cx, cy, radius, r, g, b, a)
     cx, cy = floor(cx + 0.5), floor(cy + 0.5)
-    local rad = floor(radius)
-    local r2 = radius * radius
-    for dy = -rad - 1, rad + 1 do
-        for dx = -rad - 1, rad + 1 do
-            if dx * dx + dy * dy < r2 then
+    local rad = floor(radius) + 1
+    local inner = radius - 0.5
+    local outer = radius + 0.5
+    local innerR2 = inner > 0 and inner * inner or -1
+    local outerR2 = outer * outer
+    for dy = -rad, rad do
+        for dx = -rad, rad do
+            local distSq = dx * dx + dy * dy
+            if distSq <= innerR2 then
                 setPixel(buf, cx + dx, cy + dy, r, g, b, a)
+            elseif distSq < outerR2 then
+                local dist = sqrt(distSq)
+                local coverage = outer - dist
+                if coverage > 0 then
+                    if coverage > 1 then coverage = 1 end
+                    setPixel(buf, cx + dx, cy + dy, r, g, b, a * coverage)
+                end
             end
         end
     end
 end
 
-local function midpointCircle(buf, cx, cy, radius, r, g, b, a)
+-- Distance-based AA stroked circle. For each pixel in the bounding box,
+-- compute distance from center, then coverage based on the annulus defined
+-- by (radius - halfW) to (radius + halfW) with 0.5px AA fringe on each side.
+local function strokeCircle(buf, cx, cy, radius, r, g, b, a, width)
     cx, cy = floor(cx + 0.5), floor(cy + 0.5)
-    local rad = floor(radius + 0.5)
-    local x, y = rad, 0
-    local d = 1 - rad
-    while x >= y do
-        setPixel(buf, cx + x, cy + y, r, g, b, a)
-        setPixel(buf, cx - x, cy + y, r, g, b, a)
-        setPixel(buf, cx + x, cy - y, r, g, b, a)
-        setPixel(buf, cx - x, cy - y, r, g, b, a)
-        setPixel(buf, cx + y, cy + x, r, g, b, a)
-        setPixel(buf, cx - y, cy + x, r, g, b, a)
-        setPixel(buf, cx + y, cy - x, r, g, b, a)
-        setPixel(buf, cx - y, cy - x, r, g, b, a)
-        y = y + 1
-        if d <= 0 then
-            d = d + 2 * y + 1
-        else
-            x = x - 1
-            d = d + 2 * (y - x) + 1
+    local halfW = width / 2
+    local innerEdge = radius - halfW
+    local outerEdge = radius + halfW
+    local scanMin = innerEdge - 0.5
+    local scanMax = outerEdge + 0.5
+    local irad = floor(scanMax) + 1
+    local scanMinSq = scanMin > 0 and scanMin * scanMin or 0
+    local scanMaxSq = scanMax * scanMax
+    for dy = -irad, irad do
+        for dx = -irad, irad do
+            local distSq = dx * dx + dy * dy
+            if distSq < scanMinSq or distSq > scanMaxSq then goto skip end
+            local dist = sqrt(distSq)
+            -- coverage: distance from the annulus band, with 0.5px falloff
+            local coverage
+            if dist >= innerEdge and dist <= outerEdge then
+                coverage = 1
+            elseif dist < innerEdge then
+                coverage = dist - (innerEdge - 0.5)
+            else
+                coverage = (outerEdge + 0.5) - dist
+            end
+            if coverage > 0 then
+                if coverage > 1 then coverage = 1 end
+                setPixel(buf, cx + dx, cy + dy, r, g, b, a * coverage)
+            end
+            ::skip::
         end
     end
 end
@@ -614,10 +637,10 @@ local function rasterizeShape(buf, sh, style, s)
         if fr then withFillGrad(function() fillCircle(buf, cx, cy, r, fr, fg, fb, fa) end) end
         if sr then
             withStrokeGrad(function()
-                if not dashArray and sw <= 1 and not strokeGrad then
-                    midpointCircle(buf, cx, cy, r, sr, sg, sb, sa)
-                else
+                if dashArray then
                     doStroke(flattenArc(cx, cy, r, 0, 2 * pi, 64), true)
+                else
+                    strokeCircle(buf, cx, cy, r, sr, sg, sb, sa, sw)
                 end
             end)
         end
