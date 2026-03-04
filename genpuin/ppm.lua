@@ -4,6 +4,7 @@ local colormap = require("genpuin.colormap")
 local M = {}
 
 local floor = math.floor
+local ceil = math.ceil
 local sqrt = math.sqrt
 local abs = math.abs
 local cos = math.cos
@@ -165,11 +166,13 @@ end
 
 local function fillCircle(buf, cx, cy, radius, r, g, b, a)
     cx, cy = floor(cx + 0.5), floor(cy + 0.5)
-    local rad = floor(radius + 0.5)
-    for dy = -rad, rad do
-        local halfW = floor(sqrt(rad * rad - dy * dy) + 0.5)
-        for dx = -halfW, halfW do
-            setPixel(buf, cx + dx, cy + dy, r, g, b, a)
+    local rad = floor(radius)
+    local r2 = radius * radius
+    for dy = -rad - 1, rad + 1 do
+        for dx = -rad - 1, rad + 1 do
+            if dx * dx + dy * dy < r2 then
+                setPixel(buf, cx + dx, cy + dy, r, g, b, a)
+            end
         end
     end
 end
@@ -234,8 +237,8 @@ local function scanlineFillPolygon(buf, pts, r, g, b, a)
         end
         table.sort(xs)
         for i = 1, #xs - 1, 2 do
-            local x0 = floor(xs[i] + 0.5)
-            local x1 = floor(xs[i + 1] + 0.5)
+            local x0 = ceil(xs[i])
+            local x1 = ceil(xs[i + 1]) - 1
             for px = x0, x1 do
                 setPixel(buf, px, y, r, g, b, a)
             end
@@ -286,9 +289,6 @@ local function scanlineFillCompound(buf, contours, r, g, b, a)
 end
 
 local function thickLine(buf, x0, y0, x1, y1, r, g, b, a, width, cap)
-    if width <= 1 then
-        return bresenhamLine(buf, x0, y0, x1, y1, r, g, b, a)
-    end
     local dx, dy = x1 - x0, y1 - y0
     local len = sqrt(dx * dx + dy * dy)
     if len == 0 then
@@ -303,7 +303,7 @@ local function thickLine(buf, x0, y0, x1, y1, r, g, b, a, width, cap)
         {x0 - nx, y0 - ny},
     }, r, g, b, a)
     if cap == "round" then
-        fillCircle(buf, x0, y0, width / 2, r, g, b, a)
+        -- Only draw cap at the end point to avoid double-drawing at shared vertices
         fillCircle(buf, x1, y1, width / 2, r, g, b, a)
     end
 end
