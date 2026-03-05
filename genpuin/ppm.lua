@@ -157,17 +157,6 @@ local function bresenhamLine(buf, x0, y0, x1, y1, r, g, b, a)
     end
 end
 
-local function fillEllipse(buf, cx, cy, rx, ry, r, g, b, a)
-    cx, cy = floor(cx + 0.5), floor(cy + 0.5)
-    local iry = floor(ry + 0.5)
-    for dy = -iry, iry do
-        local ratio = dy / ry
-        local halfW = floor(rx * sqrt(1 - ratio * ratio) + 0.5)
-        for dx = -halfW, halfW do
-            setPixel(buf, cx + dx, cy + dy, r, g, b, a)
-        end
-    end
-end
 
 local function flattenEllipse(cx, cy, rx, ry, n)
     n = n or 64
@@ -240,14 +229,30 @@ local function strokeCircle(buf, cx, cy, radius, r, g, b, a, width)
 end
 
 local function fillRect(buf, x, y, w, h, r, g, b, a)
-    local x0 = floor(x + 0.5)
-    local y0 = floor(y + 0.5)
-    local x1 = floor(x + w + 0.5) - 1
-    local y1 = floor(y + h + 0.5) - 1
-    for py = y0, y1 do
-        for px = x0, x1 do
-            setPixel(buf, px, py, r, g, b, a)
+    local left, top = x, y
+    local right, bottom = x + w, y + h
+    local px0 = floor(left)
+    local py0 = floor(top)
+    local px1 = floor(right)
+    local py1 = floor(bottom)
+    for py = py0, py1 do
+        local yCov = 1
+        local tc = py + 0.5 - top
+        if tc < yCov then yCov = tc end
+        local bc = bottom - py + 0.5
+        if bc < yCov then yCov = bc end
+        if yCov <= 0 then goto nextRow end
+        for px = px0, px1 do
+            local xCov = 1
+            local lc = px + 0.5 - left
+            if lc < xCov then xCov = lc end
+            local rc = right - px + 0.5
+            if rc < xCov then xCov = rc end
+            if xCov <= 0 then goto nextPx end
+            setPixel(buf, px, py, r, g, b, a * xCov * yCov)
+            ::nextPx::
         end
+        ::nextRow::
     end
 end
 
@@ -275,13 +280,24 @@ local function scanlineFillPolygon(buf, pts, r, g, b, a)
         end
         table.sort(xs)
         for i = 1, #xs - 1, 2 do
-            local x0 = ceil(xs[i])
-            local x1 = ceil(xs[i + 1]) - 1
+            local leftEdge = xs[i]
+            local rightEdge = xs[i + 1]
+            local x0 = floor(leftEdge)
+            local x1 = ceil(rightEdge)
             for px = x0, x1 do
-                setPixel(buf, px, y, r, g, b, a)
+                local cl = leftEdge > px - 0.5 and leftEdge or px - 0.5
+                local cr = rightEdge < px + 0.5 and rightEdge or px + 0.5
+                local cov = cr - cl
+                if cov > 0 then
+                    setPixel(buf, px, y, r, g, b, a * cov)
+                end
             end
         end
     end
+end
+
+local function fillEllipse(buf, cx, cy, rx, ry, r, g, b, a)
+    scanlineFillPolygon(buf, flattenEllipse(cx, cy, rx, ry, 64), r, g, b, a)
 end
 
 local function scanlineFillCompound(buf, contours, r, g, b, a)
@@ -316,10 +332,17 @@ local function scanlineFillCompound(buf, contours, r, g, b, a)
             local x0 = edges[i][1]
             winding = winding + edges[i][2]
             if winding ~= 0 and i < #edges then
-                local px0 = floor(x0 + 0.5)
-                local px1 = floor(edges[i + 1][1] + 0.5)
+                local leftEdge = x0
+                local rightEdge = edges[i + 1][1]
+                local px0 = floor(leftEdge)
+                local px1 = ceil(rightEdge)
                 for px = px0, px1 do
-                    setPixel(buf, px, y, r, g, b, a)
+                    local cl = leftEdge > px - 0.5 and leftEdge or px - 0.5
+                    local cr = rightEdge < px + 0.5 and rightEdge or px + 0.5
+                    local cov = cr - cl
+                    if cov > 0 then
+                        setPixel(buf, px, y, r, g, b, a * cov)
+                    end
                 end
             end
         end
