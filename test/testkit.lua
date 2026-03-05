@@ -69,6 +69,13 @@ function M.gray(pixels, x, y)
     return p[1]
 end
 
+-- RGB values at (x, y). Returns r, g, b or -1,-1,-1 if out of bounds.
+function M.rgb(pixels, x, y)
+    local p = pixels[y] and pixels[y][x]
+    if not p then return -1, -1, -1 end
+    return p[1], p[2], p[3]
+end
+
 -- Vertical cross-section: list of {y=, v=} from y0 to y1 at column x.
 function M.vSlice(pixels, x, y0, y1)
     local vals = {}
