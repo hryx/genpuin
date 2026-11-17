@@ -1,5 +1,5 @@
 -- test-circles.lua — Circle anti-aliasing verification
--- Renders examples/test-circles.lua to PPM and checks cross-sections at
+-- Renders test/scenes/circles.lua to PPM and checks cross-sections at
 -- circle edges for AA fringe pixels. The scene centers circles on pixel
 -- centers (half units), so a cardinal edge cuts a pixel in half.
 
@@ -17,7 +17,7 @@ local fmtSlice = T.fmtSlice
 -- Render
 ------------------------------------------------------------
 print("Rendering test-circles.ppm...")
-T.render("examples/test-circles.lua", "out/test/test-circles.ppm")
+T.render("test/scenes/circles.lua", "out/test/test-circles.ppm")
 
 local pixels, W, H = T.readPpm("out/test/test-circles.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))

@@ -1,4 +1,4 @@
--- test-blend.lua — Minimal test scene for overlapping transparent shapes
+-- Minimal test scene for overlapping transparent shapes
 -- Tests alpha compositing between shapes (Venn diagram style).
 -- Used by test/test-blend.lua to verify color buildup in overlap regions.
 

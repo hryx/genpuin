@@ -1,5 +1,5 @@
 -- test-aa.lua — Anti-aliasing verification
--- Renders examples/test-aa.lua to PPM and checks cross-sections for correct
+-- Renders test/scenes/aa.lua to PPM and checks cross-sections for correct
 -- AA fringe pixels, line widths, and gap-free continuity. The scene puts
 -- lines on pixel centers (half units), so pixel row 50 holds the line at
 -- y=50.5.
@@ -18,7 +18,7 @@ local fmtSlice = T.fmtSlice
 -- Render
 ------------------------------------------------------------
 print("Rendering test-aa.ppm...")
-T.render("examples/test-aa.lua", "out/test/test-aa.ppm")
+T.render("test/scenes/aa.lua", "out/test/test-aa.ppm")
 
 local pixels, W, H = T.readPpm("out/test/test-aa.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))

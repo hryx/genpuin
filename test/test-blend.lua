@@ -1,5 +1,5 @@
 -- test-blend.lua — Overlapping transparent shape verification
--- Renders examples/test-blend.lua to PPM and checks that alpha compositing
+-- Renders test/scenes/blend.lua to PPM and checks that alpha compositing
 -- produces correct color buildup in overlap regions (Venn diagram style).
 
 local T = require("test.testkit")
@@ -12,7 +12,7 @@ local rgb = T.rgb
 -- Render
 ------------------------------------------------------------
 print("Rendering test-blend.ppm...")
-T.render("examples/test-blend.lua", "out/test/test-blend.ppm")
+T.render("test/scenes/blend.lua", "out/test/test-blend.ppm")
 
 local pixels, W, H = T.readPpm("out/test/test-blend.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))

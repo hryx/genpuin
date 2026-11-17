@@ -1,4 +1,4 @@
--- test-circles.lua — Minimal test scene for circle anti-aliasing
+-- Minimal test scene for circle anti-aliasing
 -- Black circles on white background at known positions/radii.
 -- Used by test/test-circles.lua to verify AA pixel values.
 -- Centers sit on half units, the centers of pixels, so the circle at

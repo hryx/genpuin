@@ -1,6 +1,6 @@
--- test-aa.lua — Minimal test scene for anti-aliasing verification
+-- Minimal test scene for anti-aliasing verification
 -- Black lines on white background at known positions/widths/angles.
--- Used by tests/test-aa.lua to programmatically verify AA pixel values.
+-- Used by test/test-aa.lua to programmatically verify AA pixel values.
 -- Coordinates sit on half units, the centers of pixels, so a horizontal
 -- line at y=50.5 is centered on pixel row 50.
 

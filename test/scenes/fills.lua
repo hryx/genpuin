@@ -1,4 +1,4 @@
--- test-fills.lua — Minimal test scene for filled shape anti-aliasing
+-- Minimal test scene for filled shape anti-aliasing
 -- Black filled shapes on white background at known positions.
 -- Used by test/test-fills.lua to verify AA on polygon/ellipse/rect edges.
 

@@ -1,5 +1,5 @@
 -- test-fills.lua — Filled shape anti-aliasing verification
--- Renders examples/test-fills.lua to PPM and checks edge cross-sections
+-- Renders test/scenes/fills.lua to PPM and checks edge cross-sections
 -- for AA fringe pixels on polygon and ellipse edges.
 
 local T = require("test.testkit")
@@ -15,7 +15,7 @@ local fmtSlice = T.fmtSlice
 -- Render
 ------------------------------------------------------------
 print("Rendering test-fills.ppm...")
-T.render("examples/test-fills.lua", "out/test/test-fills.ppm")
+T.render("test/scenes/fills.lua", "out/test/test-fills.ppm")
 
 local pixels, W, H = T.readPpm("out/test/test-fills.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))
