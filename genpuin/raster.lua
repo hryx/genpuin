@@ -1,4 +1,5 @@
 local core = require("genpuin.core")
+local rand = require("genpuin.rand")
 
 local M = {}
 
@@ -29,8 +30,12 @@ end
 
 -- Add a raster pass at this point in the draw order. It rewrites the pixels
 -- drawn so far, and later draws land on top. Raster output only, SVG skips it.
+-- Passes that use randomness take opts.seed, filled from gen.rand when absent.
 function M.post(c, name, opts)
-    table.insert(c.elements, {pass = name, opts = opts or {}, shape = {type = "pass"}, style = {}})
+    local o = {}
+    for k, v in pairs(opts or {}) do o[k] = v end
+    if o.seed == nil then o.seed = rand.randInt(1, 2147483646) end
+    table.insert(c.elements, {pass = name, opts = o, shape = {type = "pass"}, style = {}})
     return c
 end
 

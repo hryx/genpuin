@@ -1,4 +1,6 @@
-//! core.post: raster pass parsing. Stub until the passes extension lands.
+//! core.post: read gen.post(c, name, opts) options into a Pass. Option
+//! docs live on the parse functions below. Distances are scene units, so
+//! a script looks the same at any -s. Random passes read opts.seed.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -8,17 +10,359 @@ const genpuin = @import("genpuin");
 
 const util = @import("util.zig");
 const Lua = util.Lua;
-const Pass = genpuin.passes.Pass;
+const Field = util.Field;
+const passes = genpuin.passes;
+const Pass = passes.Pass;
+const Rgb = genpuin.Raster.Rgb;
 
 pub const functions = [_]zlua.FnReg{};
 
+const Name = enum {
+    invert,
+    pixel_sort,
+    channel_shift,
+    displace,
+    tear,
+    block_repeat,
+    dither,
+    posterize,
+    blur,
+    bloom,
+    grain,
+    levels,
+    scanlines,
+};
+
+const names: std.StaticStringMap(Name) = .initComptime(.{
+    .{ "invert", .invert },
+    .{ "pixelSort", .pixel_sort },
+    .{ "channelShift", .channel_shift },
+    .{ "displace", .displace },
+    .{ "tear", .tear },
+    .{ "blockRepeat", .block_repeat },
+    .{ "dither", .dither },
+    .{ "posterize", .posterize },
+    .{ "blur", .blur },
+    .{ "bloom", .bloom },
+    .{ "grain", .grain },
+    .{ "levels", .levels },
+    .{ "scanlines", .scanlines },
+});
+
 /// Build a Pass from its name and the options table at `opts`.
+///
+/// Passes: invert, pixelSort, channelShift, displace, tear, blockRepeat,
+/// dither, posterize, blur, bloom, grain, levels, scanlines.
+///
+/// Every pass takes region = {x, y, w, h} in scene units to run on that
+/// rectangle only. Fields given as options are stretched over the whole
+/// image, regions or not.
 pub fn parse(lua: *Lua, arena: Allocator, name: []const u8, opts: i32) !Pass {
-    _ = arena;
-    _ = opts;
-    const tag = std.meta.stringToEnum(std.meta.Tag(Pass), name) orelse
-        lua.raiseErrorStr("unknown post pass '%s'", .{(try lua.allocator().dupeSentinel(u8, name, 0)).ptr});
-    return switch (tag) {
+    const tag = names.get(name) orelse
+        lua.raiseErrorStr("unknown post pass '%s'", .{(try arena.dupeSentinel(u8, name, 0)).ptr});
+    const pass: Pass = switch (tag) {
         .invert => .invert,
+        .pixel_sort => .{ .pixel_sort = try pixelSort(lua, arena, opts) },
+        .channel_shift => .{ .channel_shift = channelShift(lua, opts) },
+        .displace => .{ .displace = displace(lua, opts) },
+        .tear => .{ .tear = tear(lua, opts) },
+        .block_repeat => .{ .block_repeat = try blockRepeat(lua, arena, opts) },
+        .dither => .{ .dither = try dither(lua, arena, opts, .bayer) },
+        .posterize => .{ .posterize = try dither(lua, arena, opts, .none) },
+        .blur => .{ .blur = blur(lua, opts) },
+        .bloom => .{ .bloom = bloom(lua, opts) },
+        .grain => .{ .grain = grain(lua, opts) },
+        .levels => .{ .levels = levels(lua, opts) },
+        .scanlines => .{ .scanlines = try scanlines(lua, arena, opts) },
     };
+    const rect = readRegion(lua, opts) orelse return pass;
+    const inner = try arena.create(Pass);
+    inner.* = pass;
+    return .{ .region = .{ .rect = rect, .inner = inner } };
+}
+
+fn readRegion(lua: *Lua, opts: i32) ?[4]f64 {
+    if (!lua.isTable(opts)) return null;
+    defer lua.pop(1);
+    switch (lua.getField(opts, "region")) {
+        .nil, .none => return null,
+        .table => {},
+        else => lua.raiseErrorStr("option 'region' must be {x, y, w, h}", .{}),
+    }
+    var rect: [4]f64 = undefined;
+    for (&rect, 1..) |*v, i| {
+        v.* = util.numberAt(lua, -1, i) orelse lua.raiseErrorStr("option 'region' must be {x, y, w, h}", .{});
+    }
+    return rect;
+}
+
+/// pixelSort: sort runs of pixels along lines.
+///   direction = "x" (rows, default) or "y" (columns), or angle in degrees
+///     (0 runs left to right, 90 top to bottom, 180 right to left).
+///   key = "luma" | "hue" | "sat" | "r" | "g" | "b" picks pixels into runs
+///     where lo <= key <= hi (defaults 0.25, 0.8). With lo > hi it picks
+///     values outside the window instead.
+///   sortBy = key to order runs by (default: same as key).
+///   mask = Field, replaces the key window: pixels where the mask is at
+///     least maskThreshold (default 0.5) join runs.
+///   reverse = true sorts high to low.
+///   minLength, maxLength in scene units (maxLength 0 means no limit).
+///   jitter = 0..1 shortens each run's maxLength by a random fraction.
+///   chance = probability a run is sorted (default 1). seed.
+fn pixelSort(lua: *Lua, arena: Allocator, opts: i32) !passes.PixelSort {
+    const direction = try util.optString(lua, arena, opts, "direction", "x");
+    const angle: f64 = if (std.mem.eql(u8, direction.?, "x"))
+        0
+    else if (std.mem.eql(u8, direction.?, "y"))
+        90
+    else
+        lua.raiseErrorStr("option 'direction' must be \"x\" or \"y\"", .{});
+    const key = util.optEnum(lua, passes.SortKey, opts, "key", .luma);
+    return .{
+        .angle = util.optNumber(lua, opts, "angle", angle),
+        .key = key,
+        .sort_by = util.optEnum(lua, passes.SortKey, opts, "sortBy", key),
+        .lo = optF32(lua, opts, "lo", 0.25),
+        .hi = optF32(lua, opts, "hi", 0.8),
+        .mask = optField(lua, opts, "mask"),
+        .mask_threshold = optF32(lua, opts, "maskThreshold", 0.5),
+        .reverse = util.optBool(lua, opts, "reverse", false),
+        .length_min = nonNegative(lua, opts, "minLength", 0),
+        .length_max = nonNegative(lua, opts, "maxLength", 0),
+        .jitter = std.math.clamp(optF32(lua, opts, "jitter", 0), 0, 1),
+        .chance = optF32(lua, opts, "chance", 1),
+        .seed = util.optSeed(lua, opts),
+    };
+}
+
+/// channelShift: offset each channel.
+///   r, g, b = {dx, dy} in scene units (default {0, 0}).
+///   wrap = true wraps round the edges instead of clamping.
+fn channelShift(lua: *Lua, opts: i32) passes.ChannelShift {
+    return .{
+        .offsets = .{ optVec2(lua, opts, "r"), optVec2(lua, opts, "g"), optVec2(lua, opts, "b") },
+        .wrap = util.optBool(lua, opts, "wrap", false),
+    };
+}
+
+/// displace: move pixels, sampling bilinearly.
+///   fieldX, fieldY = Fields. A value v moves by (v - 0.5) * 2 * amount,
+///     so a 0..1 field moves by up to amount either way.
+///   amount in scene units (default 10).
+///   ampX, periodX: rows slide along x by ampX * sin(2 pi y / periodX + phase).
+///   ampY, periodY: columns slide along y the same way. Scene units,
+///     periods default 100. phase in radians.
+fn displace(lua: *Lua, opts: i32) passes.Displace {
+    return .{
+        .field_x = optField(lua, opts, "fieldX"),
+        .field_y = optField(lua, opts, "fieldY"),
+        .amount = util.optNumber(lua, opts, "amount", 10),
+        .amp_x = util.optNumber(lua, opts, "ampX", 0),
+        .period_x = positive(lua, opts, "periodX", 100),
+        .amp_y = util.optNumber(lua, opts, "ampY", 0),
+        .period_y = positive(lua, opts, "periodY", 100),
+        .phase = util.optNumber(lua, opts, "phase", 0),
+    };
+}
+
+/// tear: cut the image into bands and slide some of them sideways.
+///   axis = "x" (bands of rows move along x, default) or "y".
+///   minHeight, maxHeight = band thickness in scene units (2, 30).
+///   minShift, maxShift = shift size in scene units (5, 80), random sign.
+///   chance = probability a band moves (0.3).
+///   wrap = false clamps to the edge instead of wrapping. seed.
+fn tear(lua: *Lua, opts: i32) passes.Tear {
+    return .{
+        .axis = util.optEnum(lua, passes.Axis, opts, "axis", .x),
+        .height_min = positive(lua, opts, "minHeight", 2),
+        .height_max = positive(lua, opts, "maxHeight", 30),
+        .shift_min = nonNegative(lua, opts, "minShift", 5),
+        .shift_max = nonNegative(lua, opts, "maxShift", 80),
+        .chance = optF32(lua, opts, "chance", 0.3),
+        .wrap = util.optBool(lua, opts, "wrap", true),
+        .seed = util.optSeed(lua, opts),
+    };
+}
+
+const block_modes: std.StaticStringMap(passes.BlockMode) = .initComptime(.{
+    .{ "copy", .copy },
+    .{ "smearX", .smear_x },
+    .{ "smearY", .smear_y },
+    .{ "mixed", .mixed },
+});
+
+/// blockRepeat: datamosh blocks.
+///   count = number of blocks (40).
+///   minSize, maxSize = block sides in scene units (10, 80).
+///   grid = snap blocks to this grid in scene units, like codec
+///     macroblocks (0 is off).
+///   mode = "copy" (from a random place), "smearX" (left column streaked
+///     across), "smearY" (top row streaked down) or "mixed" (default). seed.
+fn blockRepeat(lua: *Lua, arena: Allocator, opts: i32) !passes.BlockRepeat {
+    const mode_name = (try util.optString(lua, arena, opts, "mode", "mixed")).?;
+    const mode = block_modes.get(mode_name) orelse
+        lua.raiseErrorStr("option 'mode' must be \"copy\", \"smearX\", \"smearY\" or \"mixed\"", .{});
+    const count = util.optInt(lua, opts, "count", 40);
+    if (count < 0 or count > 1 << 20) lua.raiseErrorStr("option 'count' out of range", .{});
+    return .{
+        .count = @intCast(count),
+        .size_min = positive(lua, opts, "minSize", 10),
+        .size_max = positive(lua, opts, "maxSize", 80),
+        .grid = nonNegative(lua, opts, "grid", 0),
+        .mode = mode,
+        .seed = util.optSeed(lua, opts),
+    };
+}
+
+/// dither: quantize with a dither pattern.
+///   levels = steps per channel (2), or palette = list of colors to snap
+///     to (nearest in RGB).
+///   method = "bayer" (ordered, default), "floyd" (Floyd-Steinberg error
+///     diffusion), "blue" (tiled 64x64 void-and-cluster blue noise) or "none".
+///   matrix = Bayer size 2, 4, 8 or 16 (4).
+///   cell = dot size in scene units (0 is one pixel).
+///   spread = threshold strength (default one quantization step).
+///
+/// posterize: the same options with method "none".
+fn dither(lua: *Lua, arena: Allocator, opts: i32, method: passes.DitherMethod) !passes.Dither {
+    const levels_count = util.optInt(lua, opts, "levels", 2);
+    if (levels_count < 2 or levels_count > 65536) lua.raiseErrorStr("option 'levels' must be 2 or more", .{});
+    const matrix = util.optInt(lua, opts, "matrix", 4);
+    switch (matrix) {
+        2, 4, 8, 16 => {},
+        else => lua.raiseErrorStr("option 'matrix' must be 2, 4, 8 or 16", .{}),
+    }
+    const spread: ?f32 = if (lua.isTable(opts)) blk: {
+        defer lua.pop(1);
+        break :blk switch (lua.getField(opts, "spread")) {
+            .number => @floatCast(lua.toNumber(-1) catch unreachable), // type checked by the switch
+            .nil, .none => null,
+            else => lua.raiseErrorStr("option 'spread' must be a number", .{}),
+        };
+    } else null;
+    return .{
+        .method = util.optEnum(lua, passes.DitherMethod, opts, "method", method),
+        .levels = @intCast(levels_count),
+        .palette = try optPalette(lua, arena, opts),
+        .matrix = @intCast(matrix),
+        .cell = nonNegative(lua, opts, "cell", 0),
+        .spread = spread,
+    };
+}
+
+/// bloom: glow around bright pixels.
+///   threshold = luma where glow starts (0.7). radius in scene units (20).
+///   strength = how much glow is added back (1).
+fn bloom(lua: *Lua, opts: i32) passes.Bloom {
+    return .{
+        .threshold = optF32(lua, opts, "threshold", 0.7),
+        .radius = nonNegative(lua, opts, "radius", 20),
+        .strength = optF32(lua, opts, "strength", 1),
+    };
+}
+
+/// blur: gaussian blur. radius = standard deviation in scene units (4).
+fn blur(lua: *Lua, opts: i32) passes.Blur {
+    return .{ .radius = nonNegative(lua, opts, "radius", 4) };
+}
+
+/// grain: film grain.
+///   amount = peak noise per channel (0.1).
+///   mono = false gives each channel its own noise.
+///   size = grain size in scene units (1). seed.
+fn grain(lua: *Lua, opts: i32) passes.Grain {
+    return .{
+        .amount = optF32(lua, opts, "amount", 0.1),
+        .mono = util.optBool(lua, opts, "mono", true),
+        .size = positive(lua, opts, "size", 1),
+        .seed = util.optSeed(lua, opts),
+    };
+}
+
+/// levels: remap black and white points, then gamma.
+///   black (0), white (1), gamma (1, above 1 brightens midtones),
+///   outBlack (0), outWhite (1).
+fn levels(lua: *Lua, opts: i32) passes.Levels {
+    return .{
+        .black = optF32(lua, opts, "black", 0),
+        .white = optF32(lua, opts, "white", 1),
+        .gamma = optF32(lua, opts, "gamma", 1),
+        .out_black = optF32(lua, opts, "outBlack", 0),
+        .out_white = optF32(lua, opts, "outWhite", 1),
+    };
+}
+
+/// scanlines: darken bands.
+///   period = line spacing in scene units (4). width = dark band width in
+///   scene units (2). strength = 0..1 darkening (0.5).
+///   axis = "x" (horizontal lines, default) or "y" (vertical).
+fn scanlines(lua: *Lua, arena: Allocator, opts: i32) !passes.Scanlines {
+    const axis = (try util.optString(lua, arena, opts, "axis", "x")).?;
+    return .{
+        .period = positive(lua, opts, "period", 4),
+        .width = nonNegative(lua, opts, "width", 2),
+        .strength = optF32(lua, opts, "strength", 0.5),
+        .axis = if (std.mem.eql(u8, axis, "x"))
+            .x
+        else if (std.mem.eql(u8, axis, "y"))
+            .y
+        else
+            lua.raiseErrorStr("option 'axis' must be \"x\" or \"y\"", .{}),
+    };
+}
+
+fn optF32(lua: *Lua, opts: i32, key: [:0]const u8, default: f32) f32 {
+    return @floatCast(util.optNumber(lua, opts, key, default));
+}
+
+fn positive(lua: *Lua, opts: i32, key: [:0]const u8, default: f64) f64 {
+    const v = util.optNumber(lua, opts, key, default);
+    if (!(v > 0)) lua.raiseErrorStr("option '%s' must be positive", .{key.ptr});
+    return v;
+}
+
+fn nonNegative(lua: *Lua, opts: i32, key: [:0]const u8, default: f64) f64 {
+    const v = util.optNumber(lua, opts, key, default);
+    if (!(v >= 0)) lua.raiseErrorStr("option '%s' must not be negative", .{key.ptr});
+    return v;
+}
+
+fn optVec2(lua: *Lua, opts: i32, key: [:0]const u8) [2]f64 {
+    if (!lua.isTable(opts)) return .{ 0, 0 };
+    defer lua.pop(1);
+    return switch (lua.getField(opts, key)) {
+        .nil, .none => .{ 0, 0 },
+        else => util.readVec2(lua, -1) orelse lua.raiseErrorStr("option '%s' must be {dx, dy}", .{key.ptr}),
+    };
+}
+
+/// The Field stays owned by Lua. The options table keeps it alive for as
+/// long as the canvas holding the pass.
+fn optField(lua: *Lua, opts: i32, key: [:0]const u8) ?*const Field {
+    if (!lua.isTable(opts)) return null;
+    defer lua.pop(1);
+    return switch (lua.getField(opts, key)) {
+        .nil, .none => null,
+        else => util.toField(lua, -1) orelse lua.raiseErrorStr("option '%s' must be a Field", .{key.ptr}),
+    };
+}
+
+fn optPalette(lua: *Lua, arena: Allocator, opts: i32) ![]const Rgb {
+    if (!lua.isTable(opts)) return &.{};
+    defer lua.pop(1);
+    switch (lua.getField(opts, "palette")) {
+        .nil, .none => return &.{},
+        .table => {},
+        else => lua.raiseErrorStr("option 'palette' must be a list of colors", .{}),
+    }
+    const n = util.len(lua, -1);
+    if (n == 0) lua.raiseErrorStr("option 'palette' is empty", .{});
+    const out = try arena.alloc(Rgb, n);
+    for (out, 1..) |*c, i| {
+        _ = util.rawGet(lua, -1, i);
+        defer lua.pop(1);
+        const rgba = util.readColor(lua, -1) orelse lua.raiseErrorStr("palette entry %d is not a color", .{@as(c_int, @intCast(i))});
+        c.* = .{ rgba[0], rgba[1], rgba[2] };
+    }
+    return out;
 }
