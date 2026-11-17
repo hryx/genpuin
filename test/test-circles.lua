@@ -1,6 +1,7 @@
 -- test-circles.lua — Circle anti-aliasing verification
 -- Renders examples/test-circles.lua to PPM and checks cross-sections at
--- circle edges for AA fringe pixels.
+-- circle edges for AA fringe pixels. The scene centers circles on pixel
+-- centers (half units), so a cardinal edge cuts a pixel in half.
 
 local T = require("test.testkit")
 
@@ -22,8 +23,8 @@ local pixels, W, H = T.readPpm("out/test/test-circles.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))
 
 ------------------------------------------------------------
--- Test 1: Filled circle, r=30, center at (50,50)
--- Sample horizontal slice through center at y=50, crossing right edge at x=80
+-- Test 1: Filled circle, r=30, center at (50.5,50.5)
+-- Sample pixel row 50 through the center, crossing the right edge at x=80.5
 ------------------------------------------------------------
 print("Test 1: Filled circle r=30 — right edge")
 local slice = hSlice(pixels, 50, 76, 84)
@@ -45,8 +46,8 @@ check("has AA fringe at edge", #intermediates >= 1,
     string.format("found %d intermediate pixels: %s", #intermediates, fmtSlice(intermediates)))
 
 ------------------------------------------------------------
--- Test 2: Filled circle, r=30 — top edge at (50,20)
--- Sample vertical slice at x=50 crossing top edge at y=20
+-- Test 2: Filled circle, r=30, top edge at (50.5,20.5)
+-- Sample pixel column 50 crossing the top edge in row 20
 ------------------------------------------------------------
 print("\nTest 2: Filled circle r=30 — top edge")
 slice = vSlice(pixels, 50, 16, 24)
@@ -66,11 +67,11 @@ check("has AA fringe at top edge", #intermediates >= 1,
 
 ------------------------------------------------------------
 -- Test 3: Filled circle, r=30 — diagonal edge (~45 degrees)
--- At 45 degrees from center (50,50), edge is at ~(71,29).
+-- At 45 degrees from center (50.5,50.5), the edge is in pixel ~(71,29).
 -- Sample a few pixels around that area.
 ------------------------------------------------------------
 print("\nTest 3: Filled circle r=30 — diagonal edge")
--- At angle 45°, edge at (50+21.2, 50-21.2) ≈ (71, 29)
+-- At angle 45°, edge at (50.5+21.2, 50.5-21.2) ≈ (71.7, 29.3)
 slice = vSlice(pixels, 71, 25, 33)
 print("  V-section at x=71, y=25..33: " .. fmtSlice(slice))
 
@@ -79,10 +80,10 @@ check("has AA fringe at diagonal", #intermediates >= 1,
     string.format("found %d intermediate pixels: %s", #intermediates, fmtSlice(intermediates)))
 
 ------------------------------------------------------------
--- Test 4: Stroked circle, r=30, strokeWidth=1, center at (140,50)
--- At cardinal directions the edge hits integer distance (same as 1px
--- horizontal lines) so sample at y=40 where the edge is at a non-integer
--- x position: x = 140 + sqrt(30²-10²) ≈ 168.28
+-- Test 4: Stroked circle, r=30, strokeWidth=1, center at (140.5,50.5)
+-- At cardinal directions the stroke fills exactly one pixel (same as 1px
+-- horizontal lines) so sample pixel row 40 where the edge is off the pixel
+-- grid: x = 140.5 + sqrt(30²-10²) ≈ 168.78
 ------------------------------------------------------------
 print("\nTest 4: Stroked circle r=30, sw=1 — non-cardinal edge")
 slice = hSlice(pixels, 40, 164, 172)
@@ -99,8 +100,8 @@ check("has AA fringe on stroke", #intermediates >= 1,
     string.format("found %d intermediate pixels: %s", #intermediates, fmtSlice(intermediates)))
 
 ------------------------------------------------------------
--- Test 5: Small filled circle, r=5, center at (50,140)
--- Right edge at x=55.
+-- Test 5: Small filled circle, r=5, center at (50.5,140.5)
+-- Right edge at x=55.5.
 ------------------------------------------------------------
 print("\nTest 5: Small filled circle r=5 — right edge")
 slice = hSlice(pixels, 140, 51, 59)
@@ -115,10 +116,10 @@ check("has AA fringe at edge", #intermediates >= 1,
     string.format("found %d intermediate pixels: %s", #intermediates, fmtSlice(intermediates)))
 
 ------------------------------------------------------------
--- Test 6: Small stroked circle, r=5, strokeWidth=0.5, center at (140,140)
--- At y=137 (3 above center), edge at x = 140 + sqrt(25-9) = 144.0.
--- At y=138 (2 above center), edge at x = 140 + sqrt(25-4) ≈ 144.58.
--- Sample at y=138 for non-integer alignment.
+-- Test 6: Small stroked circle, r=5, strokeWidth=0.5, center at (140.5,140.5)
+-- Row 137 (3 above center), edge at x = 140.5 + sqrt(25-9) = 144.5.
+-- Row 138 (2 above center), edge at x = 140.5 + sqrt(25-4) ≈ 145.08.
+-- Sample row 138, where the edge is off pixel centers.
 ------------------------------------------------------------
 print("\nTest 6: Small stroked circle r=5, sw=0.5 — non-cardinal edge")
 slice = hSlice(pixels, 138, 141, 149)

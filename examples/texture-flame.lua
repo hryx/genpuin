@@ -1,7 +1,7 @@
 -- texture-flame.lua: a random fractal flame.
 -- gen.randomFlame picks transforms and variations from the seed, so
--- --vary 1..9 sweeps through different flames. The log-toned density is
--- drawn in gray, then the color Field multiplies it through a palette.
+-- --vary 1..9 sweeps through different flames. The color Field is drawn
+-- through a palette, then the log-toned density multiplies it as brightness.
 
 local gen = require("genpuin")
 
@@ -31,7 +31,7 @@ for i = 0, 8 do
     light[#light + 1] = {t, {v, v, v}}
 end
 
-gen.draw(c, gen.image(density, 0, 0, W, H, {palette = light, tone = "log", toneK = 500}))
-gen.draw(c, gen.image(hue, 0, 0, W, H, {palette = palette, range = {0, 1}}), {blendMode = "multiply"})
+gen.draw(c, gen.image(hue, 0, 0, W, H, {palette = palette, range = {0, 1}}))
+gen.draw(c, gen.image(density, 0, 0, W, H, {palette = light, tone = "log", toneK = 500}), {blendMode = "multiply"})
 
 return c

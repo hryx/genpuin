@@ -17,10 +17,6 @@ pub const Options = struct {
     /// Supersampling factor. The scene renders at scale * ss, then box
     /// filters down.
     ss: u32 = 1,
-    /// Added to every scene coordinate after scaling. 0.5 puts scene
-    /// integers on pixel centers, which is what the original Lua renderer
-    /// did and what the tests expect. 0 matches SVG.
-    pixel_offset: f64 = 0.5,
 };
 
 pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) !Raster {
@@ -37,7 +33,6 @@ pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) !Raster {
         .mask = try .init(gpa, w, h),
         .k = k,
         .ss = opts.ss,
-        .off = opts.pixel_offset * @as(f64, @floatFromInt(opts.ss)),
     };
     defer ctx.deinit();
 
@@ -60,7 +55,6 @@ const Context = struct {
     visited: std.AutoHashMapUnmanaged(u32, std.DynamicBitSetUnmanaged) = .empty,
     k: f64,
     ss: u32,
-    off: f64,
 
     fn deinit(self: *Context) void {
         self.mask.deinit(self.gpa);
@@ -72,7 +66,7 @@ const Context = struct {
     }
 
     fn tx(self: *const Context, p: Vec2) Vec2 {
-        return .{ p[0] * self.k + self.off, p[1] * self.k + self.off };
+        return .{ p[0] * self.k, p[1] * self.k };
     }
 
     fn draw(self: *Context, d: *const scene.Draw) !void {
@@ -341,8 +335,8 @@ const Context = struct {
 
     fn paintAt(self: *const Context, paint: scene.Paint, shape: *const scene.Shape, range: [2]f32, px: u32, py: u32) scene.Rgba {
         // Pixel center in scene coordinates.
-        const sx = (@as(f64, @floatFromInt(px)) + 0.5 - self.off) / self.k;
-        const sy = (@as(f64, @floatFromInt(py)) + 0.5 - self.off) / self.k;
+        const sx = (@as(f64, @floatFromInt(px)) + 0.5) / self.k;
+        const sy = (@as(f64, @floatFromInt(py)) + 0.5) / self.k;
         if (shape.* == .field) return fieldColor(&shape.field, range, sx, sy);
         return switch (paint) {
             .none => .{ 0, 0, 0, 0 },
@@ -403,14 +397,16 @@ fn blend(mode: scene.Blend, s: f32, d: f32) f32 {
 test "render: opaque rect fills its pixels" {
     const gpa = std.testing.allocator;
     const items = [_]scene.Item{.{ .draw = .{
-        .shape = .{ .rect = .{ .x = 1.5, .y = 1.5, .w = 2, .h = 2 } },
+        .shape = .{ .rect = .{ .x = 2, .y = 2, .w = 2, .h = 2 } },
         .style = .{ .fill = .{ .solid = .{ 1, 0, 0, 1 } } },
     } }};
     const s: scene.Scene = .{ .w = 6, .h = 6, .bg = .{ 0, 0, 0 }, .items = &items };
     var r = try render(gpa, &s, .{});
     defer r.deinit(gpa);
     try std.testing.expectEqual(Raster.Rgb{ 1, 0, 0 }, r.get(2, 2));
-    try std.testing.expectEqual(Raster.Rgb{ 0, 0, 0 }, r.get(0, 0));
+    try std.testing.expectEqual(Raster.Rgb{ 1, 0, 0 }, r.get(3, 3));
+    try std.testing.expectEqual(Raster.Rgb{ 0, 0, 0 }, r.get(1, 1));
+    try std.testing.expectEqual(Raster.Rgb{ 0, 0, 0 }, r.get(4, 4));
 }
 
 test "render: stroke over fill keeps full stroke width" {
@@ -423,6 +419,34 @@ test "render: stroke over fill keeps full stroke width" {
     var r = try render(gpa, &s, .{});
     defer r.deinit(gpa);
     // One pixel inside the top edge sits under the inner half of the stroke.
-    try std.testing.expectEqual(Raster.Rgb{ 0, 0, 0 }, r.get(7, 3));
+    try std.testing.expectEqual(Raster.Rgb{ 0, 0, 0 }, r.get(7, 2));
     try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(7, 7));
+}
+
+test "render: rect over the whole scene covers the corner pixels" {
+    const gpa = std.testing.allocator;
+    const items = [_]scene.Item{.{ .draw = .{
+        .shape = .{ .rect = .{ .x = 0, .y = 0, .w = 5, .h = 4 } },
+        .style = .{ .fill = .{ .solid = .{ 1, 1, 1, 1 } } },
+    } }};
+    const s: scene.Scene = .{ .w = 5, .h = 4, .bg = .{ 0, 0, 0 }, .items = &items };
+    var r = try render(gpa, &s, .{ .scale = 2 });
+    defer r.deinit(gpa);
+    try std.testing.expectEqual(@as(u32, 10), r.w);
+    try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(0, 0));
+    try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(9, 7));
+}
+
+test "render: rects sharing an edge leave no seam" {
+    const gpa = std.testing.allocator;
+    const white: scene.Style = .{ .fill = .{ .solid = .{ 1, 1, 1, 1 } } };
+    const items = [_]scene.Item{
+        .{ .draw = .{ .shape = .{ .rect = .{ .x = 0, .y = 0, .w = 3, .h = 4 } }, .style = white } },
+        .{ .draw = .{ .shape = .{ .rect = .{ .x = 3, .y = 0, .w = 3, .h = 4 } }, .style = white } },
+    };
+    const s: scene.Scene = .{ .w = 6, .h = 4, .bg = .{ 0, 0, 0 }, .items = &items };
+    var r = try render(gpa, &s, .{});
+    defer r.deinit(gpa);
+    try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(2, 1));
+    try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(3, 1));
 }

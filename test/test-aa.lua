@@ -1,6 +1,8 @@
 -- test-aa.lua — Anti-aliasing verification
 -- Renders examples/test-aa.lua to PPM and checks cross-sections for correct
--- AA fringe pixels, line widths, and gap-free continuity.
+-- AA fringe pixels, line widths, and gap-free continuity. The scene puts
+-- lines on pixel centers (half units), so pixel row 50 holds the line at
+-- y=50.5.
 
 local T = require("test.testkit")
 
@@ -22,9 +24,9 @@ local pixels, W, H = T.readPpm("out/test/test-aa.ppm")
 print(string.format("Loaded %dx%d PPM\n", W, H))
 
 ------------------------------------------------------------
--- Test 1: Horizontal line at y=20, strokeWidth=0.3
+-- Test 1: Horizontal line on pixel row 20, strokeWidth=0.3
 ------------------------------------------------------------
-print("Test 1: Horizontal 0.3px line at y=20")
+print("Test 1: Horizontal 0.3px line on row 20")
 local slice = vSlice(pixels, 100, 17, 23)
 print("  Cross-section: " .. fmtSlice(slice))
 
@@ -54,9 +56,9 @@ end
 check("no gaps along line", noGaps, gapDetail)
 
 ------------------------------------------------------------
--- Test 2: Horizontal line at y=50, strokeWidth=1.0
+-- Test 2: Horizontal line on pixel row 50, strokeWidth=1.0
 ------------------------------------------------------------
-print("\nTest 2: Horizontal 1.0px line at y=50")
+print("\nTest 2: Horizontal 1.0px line on row 50")
 slice = vSlice(pixels, 100, 47, 53)
 print("  Cross-section: " .. fmtSlice(slice))
 
@@ -64,17 +66,17 @@ local v50 = gray(pixels, 100, 50)
 check("center pixel dark", v50 < 50,
     string.format("y=50 gray=%d, expected <50", v50))
 
--- A 1px line perfectly aligned to an integer pixel center correctly has no AA
--- fringe — the line covers exactly 1 pixel. AA is verified on diagonal lines
+-- A 1px line centered on a pixel row correctly has no AA fringe. The line
+-- covers exactly 1 pixel. AA is verified on diagonal lines
 -- (Tests 4-6) where sub-pixel alignment naturally occurs.
 local affected = countAffected(slice)
 check("affected width is 1px", affected == 1,
     string.format("affected=%d pixels, expected exactly 1", affected))
 
 ------------------------------------------------------------
--- Test 3: Horizontal line at y=80, strokeWidth=2.5
+-- Test 3: Horizontal line on pixel row 80, strokeWidth=2.5
 ------------------------------------------------------------
-print("\nTest 3: Horizontal 2.5px line at y=80")
+print("\nTest 3: Horizontal 2.5px line on row 80")
 slice = vSlice(pixels, 100, 76, 84)
 print("  Cross-section: " .. fmtSlice(slice))
 
@@ -105,7 +107,7 @@ check("far pixels white", v76 > 250 and v84 > 250,
 -- Test 4: 45-degree diagonal, strokeWidth=1.0
 ------------------------------------------------------------
 print("\nTest 4: 45-degree 1.0px diagonal")
--- Line from (10,110) to (70,170). At x=40 the line is at y=140.
+-- Line from (10.5,110.5) to (70.5,170.5). Pixel column 40 meets it on row 140.
 slice = vSlice(pixels, 40, 137, 143)
 print("  Cross-section at x=40: " .. fmtSlice(slice))
 
@@ -121,7 +123,7 @@ check("has AA fringe", #intermediates >= 1,
 -- Test 5: 45-degree diagonal, strokeWidth=2.5
 ------------------------------------------------------------
 print("\nTest 5: 45-degree 2.5px diagonal")
--- Line from (10,155) to (55,200). Midpoint ~(32,177).
+-- Line from (10.5,155.5) to (55.5,200.5). Midpoint near pixel (32,177).
 slice = vSlice(pixels, 32, 173, 181)
 print("  Cross-section at x=32: " .. fmtSlice(slice))
 
@@ -137,7 +139,7 @@ check("has AA fringe", #intermediates >= 1,
 -- Test 6: Steep (~66 degree) line, strokeWidth=1.0
 ------------------------------------------------------------
 print("\nTest 6: Steep ~66-degree 1.0px line")
--- Line from (150,110) to (170,190). Midpoint ~(160,150).
+-- Line from (150.5,110.5) to (170.5,190.5). Midpoint near pixel (160,150).
 -- Nearly vertical, so horizontal cross-section is more revealing.
 slice = hSlice(pixels, 150, 157, 163)
 print("  H-section at y=150: " .. fmtSlice(slice))

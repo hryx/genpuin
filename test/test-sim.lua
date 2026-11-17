@@ -127,4 +127,16 @@ check("center of the ring is dark", T.gray(pixels, 30, 30) == 0, tostring(T.gray
 check("the ring is lit", T.gray(pixels, 30 + 18, 30) == 255 and T.gray(pixels, 30, 30 - 18) == 255,
     string.format("%d %d", T.gray(pixels, 48, 30), T.gray(pixels, 30, 12)))
 
+local full = gen.canvas(60, 60)
+gen.background(full, {1, 0, 0})
+gen.draw(full, gen.image(ring, 0, 0, 60, 60, {palette = {{0, 0, 1}, {0, 0, 1}}}))
+gen.exportPpm(full, "out/test/test-sim-full.ppm")
+local fp = T.readPpm("out/test/test-sim-full.ppm")
+local function blue(x, y)
+    local r, g, b = T.rgb(fp, x, y)
+    return r == 0 and g == 0 and b == 255
+end
+check("full-canvas image covers the first pixel", blue(0, 0), string.format("%d %d %d", T.rgb(fp, 0, 0)))
+check("full-canvas image covers the last pixel", blue(59, 59), string.format("%d %d %d", T.rgb(fp, 59, 59)))
+
 T.summary()
