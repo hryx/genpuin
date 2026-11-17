@@ -9,8 +9,8 @@ local OX, OY = (W - COLS * CELL) / 2, (H - ROWS * CELL) / 2
 gen.seed(7)
 gen.noiseSeed(7)
 
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#14121c"))
+gen.canvas(W, H)
+gen.background(gen.hex("#14121c"))
 
 -- Sockets: 0 open air, 1 thin wire, 2 thick pipe.
 local tiles = {
@@ -99,7 +99,7 @@ end
 -- Collect primitives in pixel space first so each layer can be drawn in
 -- passes: dark casing, body, then highlight.
 local prims = {{}, {}}
-gen.wfcDraw(c, result, {
+gen.wfcDraw(result, {
     size = CELL, x = OX, y = OY,
     draw = function(tile, x, y, size, rot, flip)
         local half = size / 2
@@ -154,32 +154,30 @@ for layer = 1, 2 do
                 stroke, width = gen.lighten(col, 0.35), wd.glint
             end
             if p.kind == "line" or p.kind == "arc" then
-                gen.draw(c, shapeOf(p), {stroke = stroke, strokeWidth = width, strokeLinecap = "butt"})
+                gen.draw(shapeOf(p), {stroke = stroke, strokeWidth = width, strokeLinecap = "butt"})
             elseif p.kind == "band" then
                 if pass == 1 then
-                    gen.draw(c, shapeOf(p), {stroke = casing, strokeWidth = wd.case + 4})
+                    gen.draw(shapeOf(p), {stroke = casing, strokeWidth = wd.case + 4})
                 elseif pass == 2 then
-                    gen.draw(c, shapeOf(p), {stroke = gen.darken(col, 0.25), strokeWidth = wd.body + 4})
+                    gen.draw(shapeOf(p), {stroke = gen.darken(col, 0.25), strokeWidth = wd.body + 4})
                 end
             elseif p.kind == "ring" then
                 if pass == 1 then
-                    gen.draw(c, shapeOf(p), {fill = casing, stroke = casing, strokeWidth = 4})
+                    gen.draw(shapeOf(p), {fill = casing, stroke = casing, strokeWidth = 4})
                 elseif pass == 2 then
-                    gen.draw(c, shapeOf(p), {stroke = col, strokeWidth = 2.2})
+                    gen.draw(shapeOf(p), {stroke = col, strokeWidth = 2.2})
                 else
-                    gen.draw(c, gen.circle(p.center, p.r * 0.35), {fill = gen.lighten(col, 0.5)})
+                    gen.draw(gen.circle(p.center, p.r * 0.35), {fill = gen.lighten(col, 0.5)})
                 end
             else
                 if pass == 1 then
-                    gen.draw(c, gen.circle(p.center, p.r + (wd.case - wd.body) / 2), {fill = casing})
+                    gen.draw(gen.circle(p.center, p.r + (wd.case - wd.body) / 2), {fill = casing})
                 elseif pass == 2 then
-                    gen.draw(c, shapeOf(p), {fill = col})
+                    gen.draw(shapeOf(p), {fill = col})
                 else
-                    gen.draw(c, gen.circle(p.center, p.r * 0.35), {fill = gen.lighten(col, 0.4)})
+                    gen.draw(gen.circle(p.center, p.r * 0.35), {fill = gen.lighten(col, 0.4)})
                 end
             end
         end
     end
 end
-
-return c

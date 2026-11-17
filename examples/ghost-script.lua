@@ -2,8 +2,8 @@
 -- Shows gen.smooth, gen.jitter and gen.resample.
 
 local W, H = 800, 700
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#ffffff"))
+gen.canvas(W, H)
+gen.background(gen.hex("#ffffff"))
 gen.seed(77)
 
 local ROWS = 8
@@ -28,14 +28,14 @@ end
 
 local function drawSplatter(sx, sy, intensity)
     local mainR = gen.randRange(1.5, 3) + intensity * 5
-    gen.draw(c, gen.circle({sx, sy}, mainR), {
+    gen.draw(gen.circle({sx, sy}, mainR), {
         fill = ink, opacity = gen.randRange(0.15, 0.35),
     })
     local nDrops = gen.randInt(1, math.floor(2 + intensity * 8))
     for _ = 1, nDrops do
         local dp = gen.randInCircle({sx, sy}, mainR * gen.randRange(1.5, 3.5))
         local dr = gen.randRange(0.3, 1.0 + intensity * 1.5)
-        gen.draw(c, gen.circle(dp, dr), {
+        gen.draw(gen.circle(dp, dr), {
             fill = ink, opacity = gen.randRange(0.1, 0.3),
         })
     end
@@ -98,7 +98,7 @@ local function drawWithGhosts(stroke)
     }
     for _, g in ipairs(ghosts) do
         local ghostShape = gen.smooth(gen.jitter(gen.resample(stroke, 8), g.jitter), 3)
-        gen.draw(c, ghostShape, {
+        gen.draw(ghostShape, {
             stroke = ink,
             strokeWidth = g.sw,
             opacity = g.opacity,
@@ -117,7 +117,7 @@ local function drawWithGhosts(stroke)
         style.fillOpacity = 0.7
         style.strokeWidth = 0.6
     end
-    gen.draw(c, stroke, style)
+    gen.draw(stroke, style)
 end
 
 local idx = 0
@@ -137,5 +137,3 @@ for row = 0, ROWS - 1 do
         end
     end
 end
-
-return c

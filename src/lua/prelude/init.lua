@@ -59,6 +59,7 @@ gen.withAlpha = color.withAlpha
 
 -- canvas
 gen.canvas = canvas.canvas
+gen.size = canvas.size
 gen.background = canvas.background
 gen.draw = canvas.draw
 gen.style = canvas.style

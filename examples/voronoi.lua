@@ -5,9 +5,9 @@ local W, H = 800, 800
 gen.seed(11)
 gen.noiseSeed(11)
 
-local c = gen.canvas(W, H)
+gen.canvas(W, H)
 local mortar = gen.hex("#16181c")
-gen.background(c, mortar)
+gen.background(mortar)
 
 local bounds = {0, 0, W, H}
 local circles = gen.packCircles{
@@ -52,10 +52,8 @@ for _, v in ipairs(gen.voronoi(sites, bounds)) do
     local tone = gen.clamp(gen.fbm(cx * 0.01, cy * 0.01, 3) * 0.6 + 0.5 + gen.gaussian(0, 0.22), 0, 0.999)
     local i = math.floor(tone * #set) + 1
     local base = gen.lerpColor(set[i], set[math.min(i + 1, #set)], gen.rand())
-    gen.draw(c, stone, {fill = base})
+    gen.draw(stone, {fill = base})
 
     local shine = gen.translate(gen.scaleAround(stone, 0.55, 0.45, {cx, cy}), -r * 0.18, -r * 0.22)
-    gen.draw(c, gen.smooth(shine, 2), {fill = gen.lighten(base, 0.12), opacity = 0.6})
+    gen.draw(gen.smooth(shine, 2), {fill = gen.lighten(base, 0.12), opacity = 0.6})
 end
-
-return c

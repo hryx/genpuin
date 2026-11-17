@@ -2,6 +2,7 @@ local import = ...
 local color = import("color")
 local geo = import("geo")
 local colormap = import("colormap")
+local canvas = import("canvas")
 
 local M = {}
 
@@ -62,8 +63,6 @@ local function pointsToD(points, closed)
     if closed then table.insert(segs, "Z") end
     return table.concat(segs, " ")
 end
-
-local warnedPass = false
 
 local function renderShape(sh, attrs)
     if sh.type == "ellipse" then
@@ -141,11 +140,6 @@ local function renderShape(sh, attrs)
             '  <image x="%s" y="%s" width="%s" height="%s" preserveAspectRatio="none" href="data:image/png;base64,%s"/>',
             fmt(sh.x), fmt(sh.y), fmt(sh.w), fmt(sh.h), core.field.pngBase64(sh))
 
-    elseif sh.type == "pass" then
-        if not warnedPass then
-            io.stderr:write("genpuin: raster passes are skipped in SVG output\n")
-            warnedPass = true
-        end
     end
 end
 
@@ -203,8 +197,13 @@ local function collectGradients(c)
     return grads
 end
 
--- Export the canvas to an SVG file.
-function M.exportSvg(c, filename)
+-- Write canvas c to an SVG file. Post passes need pixels, so they are
+-- skipped with a warning on stderr.
+function M.write(c, filename)
+    if c.passes > 0 then
+        io.stderr:write(string.format(
+            "warning: %s: post passes need pixels and were skipped. Write a PNG with -o file.png\n", filename))
+    end
     local parts = {}
     table.insert(parts, string.format(
         '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">',
@@ -331,6 +330,12 @@ function M.exportSvg(c, filename)
     f:write(table.concat(parts, "\n"))
     f:write("\n")
     f:close()
+end
+
+-- Export the canvas to an SVG file.
+function M.exportSvg(filename, extra)
+    canvas.rejectCanvasArg("gen.exportSvg", filename, extra, "gen.exportSvg(filename)")
+    M.write(canvas.need("gen.exportSvg"), filename)
 end
 
 return M

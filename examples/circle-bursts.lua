@@ -2,8 +2,8 @@
 -- packed inside larger rings. Shows gen.gaussian and gen.scatter.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#ffffff"))
+gen.canvas(W, H)
+gen.background(gen.hex("#ffffff"))
 gen.seed(41)
 
 local function pickColor()
@@ -27,7 +27,7 @@ local function burst(cx, cy, radius, depth, maxDepth)
     local strokeW = gen.lerp(1.2, 0.25, (depth - 1) / math.max(maxDepth - 1, 1))
 
     local parentColor, parentDark = pickColor()
-    gen.draw(c, gen.circle({cx, cy}, radius), {
+    gen.draw(gen.circle({cx, cy}, radius), {
         stroke = parentColor,
         strokeWidth = strokeW,
         opacity = gen.randRange(0.4, 0.85),
@@ -69,7 +69,7 @@ local function burst(cx, cy, radius, depth, maxDepth)
                     bondable[#bondable + 1] = {pos[1], pos[2], childR}
                 end
             end
-            gen.draw(c, gen.circle(pos, childR), style)
+            gen.draw(gen.circle(pos, childR), style)
         end
     end
 end
@@ -88,12 +88,12 @@ gen.scatter(120, {20, 20, W - 40, H - 40}, function(pos)
     local color = pickColor()
 
     if filled then
-        gen.draw(c, gen.circle(pos, r), {
+        gen.draw(gen.circle(pos, r), {
             fill = color,
             opacity = gen.randRange(0.15, 0.45),
         })
     else
-        gen.draw(c, gen.circle(pos, r), {
+        gen.draw(gen.circle(pos, r), {
             stroke = color,
             strokeWidth = gen.randRange(0.2, 0.6),
             opacity = gen.randRange(0.2, 0.5),
@@ -116,7 +116,7 @@ for i = 1, #bondable do
         local nx, ny = dx / d, dy / d
         local p1 = {a[1] + nx * a[3], a[2] + ny * a[3]}
         local p2 = {b[1] - nx * b[3], b[2] - ny * b[3]}
-        gen.draw(c, gen.line(p1, p2), {
+        gen.draw(gen.line(p1, p2), {
             stroke = gen.hsv(0, 0, gen.randRange(0.1, 0.3)),
             strokeWidth = gen.randRange(0.2, 0.6),
             opacity = gen.randRange(0.25, 0.55),
@@ -124,5 +124,3 @@ for i = 1, #bondable do
         ::skip::
     end
 end
-
-return c

@@ -6,9 +6,9 @@ local N = 640
 gen.seed(7)
 gen.noiseSeed(7)
 
-local c = gen.canvas(W, H)
+gen.canvas(W, H)
 local paper = gen.hex("#efe6d6")
-gen.background(c, paper)
+gen.background(paper)
 
 local fx, fy = N * 0.46, N * 0.52
 local kill = gen.field(N, N)
@@ -39,6 +39,4 @@ local ink = {
     {0.70, gen.hex("#6b2436")},
     {1.00, gen.hex("#1d1b31")},
 }
-gen.draw(c, gen.image(b, 0, 0, W, H, {palette = ink, range = {0.02, 0.42}}))
-
-return c
+gen.draw(gen.image(b, 0, 0, W, H, {palette = ink, range = {0.02, 0.42}}))

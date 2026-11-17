@@ -4,8 +4,8 @@
 local W, H = 800, 800
 gen.seed(11)
 
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#07080d"))
+gen.canvas(W, H)
+gen.background(gen.hex("#07080d"))
 
 local foodRes = 200
 local s = foodRes / W
@@ -40,10 +40,8 @@ local palette = {
     {0.80, gen.hex("#e3b25a")},
     {1.00, gen.hex("#fff4dc")},
 }
-gen.draw(c, gen.image(trail, 0, 0, W, H, {palette = palette, tone = "log", toneK = 60}))
+gen.draw(gen.image(trail, 0, 0, W, H, {palette = palette, tone = "log", toneK = 60}))
 
 for _, p in ipairs(sites) do
-    gen.draw(c, gen.circle({p[1], p[2]}, p[3] * 0.9), {stroke = gen.hex("#fff4dc"), strokeWidth = 1.2, opacity = 0.7})
+    gen.draw(gen.circle({p[1], p[2]}, p[3] * 0.9), {stroke = gen.hex("#fff4dc"), strokeWidth = 1.2, opacity = 0.7})
 end
-
-return c

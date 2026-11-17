@@ -96,10 +96,10 @@ check("uniform scale scales a circle", gen.scale(gen.circle({1, 1}, 4), 3).r == 
 
 print("Render")
 local W = 100
-local c = gen.canvas(W, W)
-gen.background(c, {1, 1, 1})
-gen.draw(c, gen.rotateAround(gen.arc({50, 50}, 40, 0, math.pi / 2), math.pi, {50, 50}), {fill = {0, 0, 0}})
-gen.exportPpm(c, "out/test/test-xform.ppm")
+gen.canvas(W, W)
+gen.background({1, 1, 1})
+gen.draw(gen.rotateAround(gen.arc({50, 50}, 40, 0, math.pi / 2), math.pi, {50, 50}), {fill = {0, 0, 0}})
+gen.exportPpm("out/test/test-xform.ppm")
 local pixels = T.readPpm("out/test/test-xform.ppm")
 check("half-turned quarter pie covers the upper left", T.gray(pixels, 30, 30) == 0, "gray " .. T.gray(pixels, 30, 30))
 check("and leaves its old quadrant empty", T.gray(pixels, 70, 70) == 255, "gray " .. T.gray(pixels, 70, 70))

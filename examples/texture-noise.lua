@@ -2,8 +2,8 @@
 -- Shows gen.noiseGrid and gen.traceFlow.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#0d1b2a"))
+gen.canvas(W, H)
+gen.background(gen.hex("#0d1b2a"))
 gen.seed(8)
 gen.noiseSeed(8)
 
@@ -23,7 +23,7 @@ local palette = {
     {0.86, gen.hex("#c76b3e")},
     {1.00, gen.hex("#4a1f1a")},
 }
-gen.draw(c, gen.image(marble, 0, 0, W, H, {palette = palette}))
+gen.draw(gen.image(marble, 0, 0, W, H, {palette = palette}))
 
 local paths = gen.traceFlow({
     bounds = {0, 0, W, H},
@@ -35,10 +35,8 @@ local paths = gen.traceFlow({
 })
 for _, pts in ipairs(paths) do
     if #pts > 20 then
-        gen.draw(c, gen.polyline(pts), {
+        gen.draw(gen.polyline(pts), {
             stroke = gen.hex("#f4ecd8"), strokeWidth = 0.7, fill = "none", opacity = 0.5,
         })
     end
 end
-
-return c

@@ -1,9 +1,10 @@
-//! core.post: read gen.post(c, name, opts) options into a Pass. Option
-//! docs live on the parse functions below. Distances are scene units, so
-//! a script looks the same at any -s. Random passes read opts.seed.
+//! core.post: read the options of a gen.post.name(opts) call into a Pass.
+//! The options are documented on gen.post in src/lua/prelude/raster.lua.
+//! Distances are scene units, so a script looks the same at any -s.
+//! Random passes read opts.seed.
 //!
-//! gen.post runs core.post.check when it is called, so a bad pass fails
-//! at the script's line. parse runs again when the canvas is rendered.
+//! gen.post.name runs core.post.check when it is called, so a bad pass
+//! fails at the script's line. parse runs again when the canvas is rendered.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -55,14 +56,13 @@ const names: std.StaticStringMap(Name) = .initComptime(.{
     .{ "scanlines", .scanlines },
 });
 
-/// Build a Pass from its name and the options table at `opts`.
-///
-/// Passes: invert, pixelSort, channelShift, displace, tear, blockRepeat,
-/// dither, posterize, blur, bloom, grain, levels, scanlines.
-///
-/// Every pass takes region = {x, y, w, h} in scene units to run on that
-/// rectangle only. Fields given as options are stretched over the whole
-/// image, regions or not.
+/// The pass names a script can use, as gen.post keys.
+pub fn passNames() []const []const u8 {
+    return names.keys();
+}
+
+/// Build a Pass from its name and the options table at `opts`. Every pass
+/// takes region = {x, y, w, h} in scene units.
 pub fn parse(lua: *Lua, arena: Allocator, name: []const u8, opts: i32) !Pass {
     const tag = names.get(name) orelse {
         var near: core.Nearest = .init(name);
@@ -154,7 +154,7 @@ fn isOptionKey(keys: []const []const u8, key: []const u8) bool {
 fn optionKeys(tag: Name) []const []const u8 {
     return switch (tag) {
         .invert => &.{},
-        .pixel_sort => &.{ "direction", "angle", "key", "sortBy", "lo", "hi", "mask", "maskThreshold", "reverse", "minLength", "maxLength", "jitter", "chance" },
+        .pixel_sort => &.{ "direction", "angle", "key", "sortBy", "lo", "hi", "mask", "maskThreshold", "reverse", "minLength", "maxLength", "jitter", "chance", "passes", "passesField" },
         .channel_shift => &.{ "r", "g", "b", "wrap" },
         .displace => &.{ "fieldX", "fieldY", "amount", "ampX", "periodX", "ampY", "periodY", "phase" },
         .tear => &.{ "axis", "minHeight", "maxHeight", "minShift", "maxShift", "chance", "wrap" },
@@ -183,20 +183,6 @@ fn readRegion(lua: *Lua, opts: i32) ?[4]f64 {
     return rect;
 }
 
-/// pixelSort: sort runs of pixels along lines.
-///   direction = "x" (rows, default) or "y" (columns).
-///   angle = degrees, overrides direction (0 runs left to right, 90 top
-///     to bottom, 180 right to left).
-///   key = "luma" | "hue" | "sat" | "r" | "g" | "b" picks pixels into runs
-///     where lo <= key <= hi (defaults 0.25, 0.8). With lo > hi it picks
-///     values outside the window instead.
-///   sortBy = key to order runs by (default: same as key).
-///   mask = Field, replaces the key window: pixels where the mask is at
-///     least maskThreshold (default 0.5) join runs.
-///   reverse = true sorts high to low.
-///   minLength, maxLength in scene units (maxLength 0 means no limit).
-///   jitter = 0..1 shortens each run's maxLength by a random fraction.
-///   chance = probability a run is sorted (default 1). seed.
 fn pixelSort(lua: *Lua, arena: Allocator, opts: i32) !passes.PixelSort {
     if (lua.isTable(opts)) {
         defer lua.pop(1);
@@ -210,6 +196,11 @@ fn pixelSort(lua: *Lua, arena: Allocator, opts: i32) !passes.PixelSort {
         .y => 90,
     };
     const key = util.optEnum(lua, passes.SortKey, opts, "key", .luma);
+    const passes_count = optPasses(lua, opts);
+    const passes_field = optField(lua, opts, "passesField");
+    if (passes_field != null and passes_count == null) {
+        lua.raiseErrorStr("option 'passesField' scales passes, so it needs passes too", .{});
+    }
     return .{
         .angle = util.optNumber(lua, opts, "angle", angle),
         .key = key,
@@ -224,12 +215,25 @@ fn pixelSort(lua: *Lua, arena: Allocator, opts: i32) !passes.PixelSort {
         .jitter = std.math.clamp(optF32(lua, opts, "jitter", 0), 0, 1),
         .chance = optF32(lua, opts, "chance", 1),
         .seed = util.optSeed(lua, opts),
+        .passes = passes_count,
+        .passes_field = passes_field,
     };
 }
 
-/// channelShift: offset each channel.
-///   r, g, b = {dx, dy} in scene units (default {0, 0}).
-///   wrap = true wraps around the edges instead of clamping.
+fn optPasses(lua: *Lua, opts: i32) ?u32 {
+    if (!lua.isTable(opts)) return null;
+    defer lua.pop(1);
+    return switch (lua.getField(opts, "passes")) {
+        .nil, .none => null,
+        .number => blk: {
+            const n = lua.toNumber(-1) catch unreachable; // type checked by the switch
+            if (!(n >= 0 and n == @floor(n))) lua.raiseErrorStr("option 'passes' must be a whole number, 0 or more", .{});
+            break :blk @intFromFloat(@min(n, std.math.maxInt(u32)));
+        },
+        else => lua.raiseErrorStr("option 'passes' must be a number", .{}),
+    };
+}
+
 fn channelShift(lua: *Lua, opts: i32) passes.ChannelShift {
     return .{
         .offsets = .{ optVec2(lua, opts, "r"), optVec2(lua, opts, "g"), optVec2(lua, opts, "b") },
@@ -237,13 +241,6 @@ fn channelShift(lua: *Lua, opts: i32) passes.ChannelShift {
     };
 }
 
-/// displace: move pixels, sampling bilinearly.
-///   fieldX, fieldY = Fields. A value v moves by (v - 0.5) * 2 * amount,
-///     so a 0..1 field moves by up to amount either way.
-///   amount in scene units (default 10).
-///   ampX, periodX: rows slide along x by ampX * sin(2 pi y / periodX + phase).
-///   ampY, periodY: columns slide along y the same way. Scene units,
-///     periods default 100. phase in radians.
 fn displace(lua: *Lua, opts: i32) passes.Displace {
     return .{
         .field_x = optField(lua, opts, "fieldX"),
@@ -257,12 +254,6 @@ fn displace(lua: *Lua, opts: i32) passes.Displace {
     };
 }
 
-/// tear: cut the image into bands and slide some of them sideways.
-///   axis = "x" (bands of rows move along x, default) or "y".
-///   minHeight, maxHeight = band thickness in scene units (2, 30).
-///   minShift, maxShift = shift size in scene units (5, 80), random sign.
-///   chance = probability a band moves (0.3).
-///   wrap = false clamps to the edge instead of wrapping. seed.
 fn tear(lua: *Lua, opts: i32) passes.Tear {
     return .{
         .axis = util.optEnum(lua, passes.Axis, opts, "axis", .x),
@@ -283,13 +274,6 @@ const block_modes: std.StaticStringMap(passes.BlockMode) = .initComptime(.{
     .{ "mixed", .mixed },
 });
 
-/// blockRepeat: datamosh blocks.
-///   count = number of blocks (40).
-///   minSize, maxSize = block sides in scene units (10, 80).
-///   grid = snap blocks to this grid in scene units, like codec
-///     macroblocks (0 is off).
-///   mode = "copy" (from a random place), "smearX" (left column streaked
-///     across), "smearY" (top row streaked down) or "mixed" (default). seed.
 fn blockRepeat(lua: *Lua, arena: Allocator, opts: i32) !passes.BlockRepeat {
     const mode_name = (try util.optString(lua, arena, opts, "mode", "mixed")).?;
     const mode = block_modes.get(mode_name) orelse
@@ -306,16 +290,7 @@ fn blockRepeat(lua: *Lua, arena: Allocator, opts: i32) !passes.BlockRepeat {
     };
 }
 
-/// dither: quantize with a dither pattern.
-///   levels = steps per channel (2), or palette = list of colors to snap
-///     to (nearest in RGB).
-///   method = "bayer" (ordered, default), "floyd" (Floyd-Steinberg error
-///     diffusion), "blue" (tiled 64x64 void-and-cluster blue noise) or "none".
-///   matrix = Bayer size 2, 4, 8 or 16 (4).
-///   cell = dot size in scene units (0 is one pixel).
-///   spread = threshold strength (default one quantization step).
-///
-/// posterize: the same options with method "none".
+/// Options for dither and posterize, which differ only in the default method.
 fn dither(lua: *Lua, arena: Allocator, opts: i32, method: passes.DitherMethod) !passes.Dither {
     const levels_count = util.optInt(lua, opts, "levels", 2);
     if (levels_count < 2 or levels_count > 65536) lua.raiseErrorStr("option 'levels' must be 2 or more", .{});
@@ -342,9 +317,6 @@ fn dither(lua: *Lua, arena: Allocator, opts: i32, method: passes.DitherMethod) !
     };
 }
 
-/// bloom: glow around bright pixels.
-///   threshold = luma where glow starts (0.7). radius in scene units (20).
-///   strength = how much glow is added back (1).
 fn bloom(lua: *Lua, opts: i32) passes.Bloom {
     return .{
         .threshold = optF32(lua, opts, "threshold", 0.7),
@@ -353,15 +325,10 @@ fn bloom(lua: *Lua, opts: i32) passes.Bloom {
     };
 }
 
-/// blur: gaussian blur. radius = standard deviation in scene units (4).
 fn blur(lua: *Lua, opts: i32) passes.Blur {
     return .{ .radius = nonNegative(lua, opts, "radius", 4) };
 }
 
-/// grain: film grain.
-///   amount = peak noise per channel (0.1).
-///   mono = false gives each channel its own noise.
-///   size = grain size in scene units (1). seed.
 fn grain(lua: *Lua, opts: i32) passes.Grain {
     return .{
         .amount = optF32(lua, opts, "amount", 0.1),
@@ -371,9 +338,6 @@ fn grain(lua: *Lua, opts: i32) passes.Grain {
     };
 }
 
-/// levels: remap black and white points, then gamma.
-///   black (0), white (1), gamma (1, above 1 brightens midtones),
-///   outBlack (0), outWhite (1).
 fn levels(lua: *Lua, opts: i32) passes.Levels {
     return .{
         .black = optF32(lua, opts, "black", 0),
@@ -384,10 +348,6 @@ fn levels(lua: *Lua, opts: i32) passes.Levels {
     };
 }
 
-/// scanlines: darken bands.
-///   period = line spacing in scene units (4). width = dark band width in
-///   scene units (2). strength = 0..1 darkening (0.5).
-///   axis = "x" (horizontal lines, default) or "y" (vertical).
 fn scanlines(lua: *Lua, arena: Allocator, opts: i32) !passes.Scanlines {
     const axis = try optAxis(lua, arena, opts, "axis");
     return .{

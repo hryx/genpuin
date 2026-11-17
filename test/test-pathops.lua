@@ -77,14 +77,14 @@ check("simplify keeps a square's corners", #gen.simplify(gen.polygon({{0, 0}, {5
 -- Render: xor of two squares, a disc shrunk by an offset, and a hatch.
 ------------------------------------------------------------
 print("\nRendering test-pathops.ppm...")
-local c = gen.canvas(200, 200)
-gen.background(c, {1, 1, 1})
-gen.draw(c, gen.clip(gen.rect(20, 20, 80, 80), gen.rect(60, 60, 80, 80), "xor"), {fill = {0, 0, 0}})
-gen.draw(c, gen.offset(gen.circle({160, 40}, 30), -10), {fill = {0, 0, 0}})
+gen.canvas(200, 200)
+gen.background({1, 1, 1})
+gen.draw(gen.clip(gen.rect(20, 20, 80, 80), gen.rect(60, 60, 80, 80), "xor"), {fill = {0, 0, 0}})
+gen.draw(gen.offset(gen.circle({160, 40}, 30), -10), {fill = {0, 0, 0}})
 for _, l in ipairs(gen.hatch(gen.rect(20, 150, 160, 40), {spacing = 8, offset = 2})) do
-    gen.draw(c, l, {stroke = {0, 0, 0}, strokeWidth = 2})
+    gen.draw(l, {stroke = {0, 0, 0}, strokeWidth = 2})
 end
-gen.exportPpm(c, "out/test/test-pathops.ppm")
+gen.exportPpm("out/test/test-pathops.ppm")
 local px = T.readPpm("out/test/test-pathops.ppm")
 
 local function ink(name, x, y, dark)

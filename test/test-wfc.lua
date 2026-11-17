@@ -108,17 +108,17 @@ local board = gen.wfc({w = 6, h = 6, seed = 1, tiles = {
     {name = "blue", edges = {"br", "br", "br", "br"}},
 }, constraints = {{x = 1, y = 1, tile = "red"}}})
 
-local c = gen.canvas(60, 60)
-gen.background(c, gen.rgb(1, 1, 1))
+gen.canvas(60, 60)
+gen.background(gen.rgb(1, 1, 1))
 local colors = {red = gen.rgb(1, 0, 0), blue = gen.rgb(0, 0, 1)}
-local placed = gen.wfcDraw(c, board, {size = 10, draw = function(tile, x, y, size)
+local placed = gen.wfcDraw(board, {size = 10, draw = function(tile, x, y, size)
     return gen.rect(x - size / 2, y - size / 2, size, size), {fill = colors[tile]}
 end})
 check("one placement per cell", #placed == 36, #placed .. " placements")
 check("placement is the cell center", placed[1].x == 5 and placed[1].y == 5,
     string.format("(%g, %g)", placed[1].x, placed[1].y))
 
-gen.exportPpm(c, "out/test/test-wfc.ppm")
+gen.exportPpm("out/test/test-wfc.ppm")
 local pixels = T.readPpm("out/test/test-wfc.ppm")
 local wrong = 0
 for row = 0, 5 do

@@ -8,8 +8,8 @@ local COLS, ROWS = W / CELL, H / CELL
 gen.seed(21)
 gen.noiseSeed(21)
 
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#0e1d22"))
+gen.canvas(W, H)
+gen.background(gen.hex("#0e1d22"))
 
 -- 1 ground, 2 trace, 3 trace edge, 4 solder pad.
 local sample = {
@@ -40,7 +40,7 @@ local pad, hole = gen.hex("#bfeedd"), gen.hex("#0b1418")
 for y = 1, ROWS, 2 do
     for x = 1, COLS, 2 do
         if grid[y][x] == 1 then
-            gen.draw(c, gen.circle({(x - 0.5) * CELL, (y - 0.5) * CELL}, 0.7), {fill = mask, opacity = 0.8})
+            gen.draw(gen.circle({(x - 0.5) * CELL, (y - 0.5) * CELL}, 0.7), {fill = mask, opacity = 0.8})
         end
     end
 end
@@ -57,9 +57,9 @@ for y = 1, ROWS do
         local v = grid[y][x]
         local px, py = (x - 1) * CELL, (y - 1) * CELL
         if v == 2 or v == 4 then
-            gen.draw(c, gen.rect(px, py, S, S), {fill = copperAt(x, y)})
+            gen.draw(gen.rect(px, py, S, S), {fill = copperAt(x, y)})
         elseif v == 3 then
-            gen.draw(c, gen.rect(px, py, S, S), {fill = mask})
+            gen.draw(gen.rect(px, py, S, S), {fill = mask})
         end
     end
 end
@@ -71,10 +71,8 @@ for y = 1, ROWS - 1 do
         if at(x, y) == 4 and at(x + 1, y) == 4 and at(x, y + 1) == 4 and at(x + 1, y + 1) == 4
             and at(x - 1, y) ~= 4 and at(x, y - 1) ~= 4 then
             local center = {x * CELL, y * CELL}
-            gen.draw(c, gen.circle(center, CELL * 1.25), {fill = pad})
-            gen.draw(c, gen.circle(center, CELL * 0.55), {fill = hole})
+            gen.draw(gen.circle(center, CELL * 1.25), {fill = pad})
+            gen.draw(gen.circle(center, CELL * 0.55), {fill = hole})
         end
     end
 end
-
-return c

@@ -2,8 +2,8 @@
 -- difference. Shows gen.hatch, gen.clip and gen.orderPaths.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#fbfaf6"))
+gen.canvas(W, H)
+gen.background(gen.hex("#fbfaf6"))
 gen.seed(3)
 
 local sun = gen.circle({520, 300}, 170)
@@ -52,7 +52,5 @@ end
 
 local ordered = gen.orderPaths(work, {start = {0, 0}})
 for _, s in ipairs(ordered) do
-    gen.draw(c, s, {stroke = gen.hex("#20232b"), strokeWidth = 0.9, strokeLinecap = "round"})
+    gen.draw(s, {stroke = gen.hex("#20232b"), strokeWidth = 0.9, strokeLinecap = "round"})
 end
-
-return c

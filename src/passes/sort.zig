@@ -57,6 +57,12 @@ pub const PixelSort = struct {
     /// Probability that a run is sorted at all.
     chance: f32 = 1,
     seed: u64 = 1,
+    /// Null sorts runs fully. A count stops the sort after that many
+    /// odd-even transposition passes, so a pixel moves at most that far.
+    passes: ?u32 = null,
+    /// Scales `passes` per run by the field's mean over the run, clamped
+    /// to 0..1, so the partial sort can vary across the image.
+    passes_field: ?*const Field = null,
 };
 
 const SortKey = packed struct(u64) {
@@ -112,6 +118,8 @@ const Line = struct {
     color: []Rgb,
     selected: []bool,
     keys: []u64,
+    /// passes_field sampled at each pixel, when there is one.
+    weight: []f32,
     len: u32 = 0,
 
     fn init(gpa: Allocator, n: u32) !Line {
@@ -122,7 +130,9 @@ const Line = struct {
         const selected = try gpa.alloc(bool, n);
         errdefer gpa.free(selected);
         const keys = try gpa.alloc(u64, n);
-        return .{ .pix = pix, .color = color, .selected = selected, .keys = keys };
+        errdefer gpa.free(keys);
+        const weight = try gpa.alloc(f32, n);
+        return .{ .pix = pix, .color = color, .selected = selected, .keys = keys, .weight = weight };
     }
 
     fn deinit(self: *Line, gpa: Allocator) void {
@@ -130,6 +140,7 @@ const Line = struct {
         gpa.free(self.color);
         gpa.free(self.selected);
         gpa.free(self.keys);
+        gpa.free(self.weight);
         self.* = undefined;
     }
 
@@ -144,6 +155,7 @@ const Line = struct {
             const v = p.key.of(c);
             break :blk if (p.lo <= p.hi) v >= p.lo and v <= p.hi else v >= p.lo or v <= p.hi;
         };
+        if (p.passes_field) |f| self.weight[i] = frame.sampleField(f, @floatFromInt(x), @floatFromInt(y));
         self.len += 1;
     }
 
@@ -174,6 +186,15 @@ const Line = struct {
             const sk: SortKey = .{ .index = @intCast(j), .key = @intFromFloat(v * 16777215) };
             key.* = @bitCast(sk);
         }
+        if (p.passes) |passes| {
+            oddEvenTransposition(keys, self.runPasses(p, passes, start, run_len), p.reverse);
+            for (keys, start..) |key, target| {
+                const sk: SortKey = @bitCast(key);
+                const i = @as(usize, self.pix[target]) * 3;
+                r.pix[i..][0..3].* = self.color[start + sk.index];
+            }
+            return;
+        }
         std.mem.sortUnstable(u64, keys, {}, std.sort.asc(u64));
         for (keys, 0..) |key, j| {
             const sk: SortKey = @bitCast(key);
@@ -182,7 +203,36 @@ const Line = struct {
             r.pix[i..][0..3].* = self.color[start + sk.index];
         }
     }
+
+    fn runPasses(self: *const Line, p: *const PixelSort, passes: u32, start: u32, run_len: u32) u32 {
+        if (p.passes_field == null) return passes;
+        var sum: f64 = 0;
+        for (self.weight[start..][0..run_len]) |w| sum += w;
+        const mean = std.math.clamp(sum / @as(f64, @floatFromInt(run_len)), 0, 1);
+        return @intFromFloat(@round(@as(f64, @floatFromInt(passes)) * mean));
+    }
 };
+
+/// Odd-even transposition sort (Habermann 1972, "Parallel neighbor-sort"),
+/// stopped after `passes` passes. Each pass swaps out-of-order neighbors
+/// over disjoint pairs, alternating pairs that start at even and odd
+/// indexes, so an element moves at most one place per pass. keys.len
+/// passes sort fully. Keys carry their run index in the low bits, so none
+/// are equal and descending order is the full sort reversed.
+fn oddEvenTransposition(keys: []u64, passes: u32, descending: bool) void {
+    const count = @min(passes, keys.len);
+    for (0..count) |pass| {
+        var i = pass % 2;
+        while (i + 1 < keys.len) : (i += 2) {
+            const a = keys[i];
+            const b = keys[i + 1];
+            if (if (descending) a < b else a > b) {
+                keys[i] = b;
+                keys[i + 1] = a;
+            }
+        }
+    }
+}
 
 fn rowLumas(r: *const Raster, y: u32, out: []f32) void {
     for (out, 0..) |*v, x| v.* = Raster.luminance(r.get(@intCast(x), y));
@@ -250,4 +300,90 @@ test "pixelSort: diagonal lines permute pixels without loss" {
     std.mem.sort(f32, &seen, {}, std.sort.asc(f32));
     for (seen, 0..) |v, i| try std.testing.expectEqual(@as(f32, @floatFromInt(i)), v);
     try std.testing.expect(r.get(0, 0)[0] != 0);
+}
+
+fn rampRow(gpa: Allocator, values: []const f32) !Raster {
+    var r: Raster = try .init(gpa, @intCast(values.len), 1, .{ 0, 0, 0 });
+    for (values, 0..) |v, x| r.set(@intCast(x), 0, .{ v, v, v });
+    return r;
+}
+
+fn inversions(r: *const Raster) u32 {
+    var count: u32 = 0;
+    for (0..r.w) |i| for (i + 1..r.w) |j| {
+        count += @intFromBool(r.get(@intCast(i), 0)[0] > r.get(@intCast(j), 0)[0]);
+    };
+    return count;
+}
+
+const descending_ramp = [_]f32{ 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2 };
+
+test "pixelSort: zero passes leaves the image unchanged" {
+    const gpa = std.testing.allocator;
+    var r = try rampRow(gpa, &descending_ramp);
+    defer r.deinit(gpa);
+    try apply(gpa, &r, &.{ .lo = 0, .hi = 1, .passes = 0 }, .whole(&r, 1));
+    for (descending_ramp, 0..) |v, x| try std.testing.expectEqual(v, r.get(@intCast(x), 0)[0]);
+}
+
+test "pixelSort: enough passes equal the full sort, forward and reversed" {
+    const gpa = std.testing.allocator;
+    // Pixels 1 and 4 share a red key with different green, so ties must
+    // land as the full sort puts them.
+    const row = [_]Rgb{ .{ 0.6, 0, 0 }, .{ 0.3, 0.1, 0 }, .{ 0.9, 0, 0 }, .{ 0.2, 0, 0 }, .{ 0.3, 0.7, 0 }, .{ 0.5, 0, 0 } };
+    for ([_]bool{ false, true }) |reverse| {
+        var full: Raster = try .init(gpa, row.len, 1, .{ 0, 0, 0 });
+        defer full.deinit(gpa);
+        var partial: Raster = try .init(gpa, row.len, 1, .{ 0, 0, 0 });
+        defer partial.deinit(gpa);
+        for (row, 0..) |c, x| {
+            full.set(@intCast(x), 0, c);
+            partial.set(@intCast(x), 0, c);
+        }
+        const opts: PixelSort = .{ .key = .r, .sort_by = .r, .lo = 0, .hi = 1, .reverse = reverse };
+        try apply(gpa, &full, &opts, .whole(&full, 1));
+        var many = opts;
+        many.passes = 1000;
+        try apply(gpa, &partial, &many, .whole(&partial, 1));
+        try std.testing.expectEqualSlices(f32, full.pix, partial.pix);
+    }
+}
+
+test "pixelSort: a few passes sort partway and move pixels at most that far" {
+    const gpa = std.testing.allocator;
+    var r = try rampRow(gpa, &descending_ramp);
+    defer r.deinit(gpa);
+    const before = inversions(&r);
+    try std.testing.expectEqual(@as(u32, 120), before);
+    const passes = 4;
+    try apply(gpa, &r, &.{ .lo = 0, .hi = 1, .passes = passes }, .whole(&r, 1));
+    const after = inversions(&r);
+    try std.testing.expect(after > 0);
+    try std.testing.expect(after < before);
+    for (0..r.w) |x| {
+        const v = r.get(@intCast(x), 0)[0];
+        const from = std.mem.indexOfScalar(f32, &descending_ramp, v).?;
+        try std.testing.expect(@max(from, x) - @min(from, x) <= passes);
+    }
+}
+
+test "pixelSort: passesField scales the pass count by its mean" {
+    const gpa = std.testing.allocator;
+    var half: Field = try .init(gpa, 2, 2, 0.5);
+    defer half.deinit(gpa);
+    var zero: Field = try .init(gpa, 2, 2, 0);
+    defer zero.deinit(gpa);
+
+    var scaled = try rampRow(gpa, &descending_ramp);
+    defer scaled.deinit(gpa);
+    try apply(gpa, &scaled, &.{ .lo = 0, .hi = 1, .passes = 8, .passes_field = &half }, .whole(&scaled, 1));
+    var direct = try rampRow(gpa, &descending_ramp);
+    defer direct.deinit(gpa);
+    try apply(gpa, &direct, &.{ .lo = 0, .hi = 1, .passes = 4 }, .whole(&direct, 1));
+    try std.testing.expectEqualSlices(f32, direct.pix, scaled.pix);
+
+    var still = try rampRow(gpa, &descending_ramp);
+    defer still.deinit(gpa);
+    try apply(gpa, &still, &.{ .lo = 0, .hi = 1, .passes = 8, .passes_field = &zero }, .whole(&still, 1));
+    try std.testing.expectEqual(@as(u32, 120), inversions(&still));
 }

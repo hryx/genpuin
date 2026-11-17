@@ -2,8 +2,8 @@
 -- drawn as a dot colored by when it last lived. Shows gen.evolve and gen.life.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#0b0d17"))
+gen.canvas(W, H)
+gen.background(gen.hex("#0b0d17"))
 gen.seed(5)
 
 local N, size, gens = 160, 5, 320
@@ -44,12 +44,10 @@ for y = 1, N do
             local r = gen.clamp(0.9 + math.sqrt(count[y][x]) * 0.35, 0.9, size * 0.5)
             local p = {(x - 0.5) * size, (y - 0.5) * size}
             if last[y][x] == gens then
-                gen.draw(c, gen.circle(p, size * 0.5), {fill = gen.hex("#ffffff")})
+                gen.draw(gen.circle(p, size * 0.5), {fill = gen.hex("#ffffff")})
             else
-                gen.draw(c, gen.circle(p, r), {fill = ramp(t), opacity = gen.lerp(0.55, 1, t)})
+                gen.draw(gen.circle(p, r), {fill = ramp(t), opacity = gen.lerp(0.55, 1, t)})
             end
         end
     end
 end
-
-return c

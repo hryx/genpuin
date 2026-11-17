@@ -5,7 +5,7 @@
 //! bits(x) and num(hex) convert between a number and its IEEE bit pattern
 //! as 16 hex digits. call(name, x, y) runs one src/math.zig function from
 //! Zig. render(script, path, {scale, ss, depth}) runs a script in a fresh
-//! state as the CLI would and writes the canvas it returns to path.
+//! state as the CLI would and writes the canvas it draws to path.
 
 const std = @import("std");
 
@@ -122,7 +122,7 @@ fn call(lua: *Lua) i32 {
 }
 
 /// render(script, path, opts?) runs script in a fresh state and writes
-/// the canvas it returns to path. Raises the script's error, if any.
+/// the canvas it draws to path. Raises the script's error, if any.
 fn render(lua: *Lua) i32 {
     const script = lua.checkString(1);
     const path = lua.checkString(2);
@@ -133,7 +133,7 @@ fn render(lua: *Lua) i32 {
     lua.pop(1);
     renderScript(lua, config, script, path, opts) catch |err| switch (err) {
         error.ScriptFailed, error.CanvasFailed => lua.raiseError(),
-        error.NoCanvas => lua.raiseErrorStr("%s returned no canvas", .{script.ptr}),
+        error.NoCanvas => lua.raiseErrorStr("%s made no canvas. Call gen.canvas(w, h)", .{script.ptr}),
         else => lua.raiseErrorStr("rendering %s failed: %s", .{ script.ptr, @errorName(err).ptr }),
     };
     return 0;
@@ -155,7 +155,7 @@ fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []
         _ = lua.pushString(inner.toString(-1) catch "script failed");
         return error.ScriptFailed;
     };
-    if (!host_mod.isCanvas(inner, -1)) return error.NoCanvas;
+    if (!host_mod.pushCanvas(inner)) return error.NoCanvas;
     host_mod.exportCanvas(inner, path, opts) catch |err| {
         if (err == error.CanvasFailed) _ = lua.pushString(inner.toString(-1) catch "canvas is malformed");
         return err;

@@ -104,12 +104,11 @@ print("\nSplat render")
 local script = "out/test/texture-splat.lua"
 local fh = assert(io.open(script, "w"))
 fh:write([[
-local c = gen.canvas(40, 40)
-gen.background(c, {0, 0, 0})
+gen.canvas(40, 40)
+gen.background({0, 0, 0})
 local f = gen.field(4, 4, 0)
 gen.splat(f, {{15, 25}, {15, 25, 3}}, {x = 0, y = 0, w = 40, h = 40, splat = "nearest"})
-gen.draw(c, gen.image(f, 0, 0, 40, 40, {smooth = false}))
-return c
+gen.draw(gen.image(f, 0, 0, 40, 40, {smooth = false}))
 ]])
 fh:close()
 T.render(script, "out/test/texture-splat.ppm")

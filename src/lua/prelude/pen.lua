@@ -6,10 +6,12 @@ local xform = import("xform")
 local Pen = {}
 Pen.__index = Pen
 
--- Create a new pen bound to a canvas.
-function Pen.new(c)
+-- Create a new pen. It draws onto the canvas.
+function Pen.new(...)
+    if select("#", ...) > 0 then
+        canvas.rejectCanvasArg("gen.pen", nil, true, "gen.pen()")
+    end
     return setmetatable({
-        _canvas = c,
         x = 0, y = 0,
         _heading = 0,
         _color = {1, 1, 1, 1},
@@ -113,7 +115,7 @@ function Pen:stroke()
     if self._opacity then style.opacity = self._opacity end
     if self._dash then style.strokeDasharray = self._dash end
     if self._blendMode then style.blendMode = self._blendMode end
-    canvas.draw(self._canvas, shape, style)
+    canvas.add(shape, style)
     self._points = {{self.x, self.y}}
     self._hasArcs = false
     return shape
@@ -152,7 +154,7 @@ function Pen:stamp(shape, style)
         }
         if self._opacity then style.opacity = self._opacity end
     end
-    canvas.draw(self._canvas, placed, style)
+    canvas.add(placed, style)
     return self
 end
 

@@ -2,8 +2,8 @@
 -- turtle drawing with gen.pen.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#0a0e14"))
+gen.canvas(W, H)
+gen.background(gen.hex("#0a0e14"))
 gen.seed(77)
 
 -- F = draw forward, + = turn left, - = turn right, [ = push, ] = pop
@@ -17,7 +17,7 @@ local rules = {
 }
 local str = gen.rewrite(axiom, rules, 4)
 
-local p = gen.pen(c)
+local p = gen.pen()
 local startX, startY = W / 2, H - 60
 p:moveTo({startX, startY})
 p:heading(-math.pi / 2)
@@ -69,7 +69,7 @@ for ch in tipStr:gmatch(".") do
         if tipDepth >= 5 and gen.rand() < 0.3 then
             local r = gen.randRange(3, 8)
             local hue = gen.randRange(0.25, 0.42)
-            gen.draw(c, gen.circle(p:pos(), r), {
+            gen.draw(gen.circle(p:pos(), r), {
                 fill = gen.hsv(hue, 0.6, 0.5),
                 opacity = gen.randRange(0.3, 0.7),
             })
@@ -92,5 +92,3 @@ for ch in tipStr:gmatch(".") do
         end
     end
 end
-
-return c

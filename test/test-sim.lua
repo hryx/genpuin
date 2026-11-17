@@ -115,19 +115,18 @@ print("\nRender")
 -- facing inward. After three unit steps the trail is a ring about 18
 -- cells out and the middle has never been touched.
 local ring = gen.physarum{w = 60, h = 60, agents = 6000, steps = 3, spawn = "ring", decay = 0, diffuse = 0, seed = 8}
-local c = gen.canvas(60, 60)
-gen.background(c, {1, 1, 1})
-gen.draw(c, gen.image(ring, 0, 0, 60, 60, {palette = {{0, 0, 0}, {1, 1, 1}}, range = {0, 1}, smooth = false}))
-gen.exportPpm(c, "out/test/test-sim.ppm")
+gen.canvas(60, 60)
+gen.background({1, 1, 1})
+gen.draw(gen.image(ring, 0, 0, 60, 60, {palette = {{0, 0, 0}, {1, 1, 1}}, range = {0, 1}, smooth = false}))
+gen.exportPpm("out/test/test-sim.ppm")
 local pixels = T.readPpm("out/test/test-sim.ppm")
 check("center of the ring is dark", T.gray(pixels, 30, 30) == 0, tostring(T.gray(pixels, 30, 30)))
 check("the ring is lit", T.gray(pixels, 30 + 18, 30) == 255 and T.gray(pixels, 30, 30 - 18) == 255,
     string.format("%d %d", T.gray(pixels, 48, 30), T.gray(pixels, 30, 12)))
 
-local full = gen.canvas(60, 60)
-gen.background(full, {1, 0, 0})
-gen.draw(full, gen.image(ring, 0, 0, 60, 60, {palette = {{0, 0, 1}, {0, 0, 1}}}))
-gen.exportPpm(full, "out/test/test-sim-full.ppm")
+gen.background({1, 0, 0})
+gen.draw(gen.image(ring, 0, 0, 60, 60, {palette = {{0, 0, 1}, {0, 0, 1}}}))
+gen.exportPpm("out/test/test-sim-full.ppm")
 local fp = T.readPpm("out/test/test-sim-full.ppm")
 local function blue(x, y)
     local r, g, b = T.rgb(fp, x, y)

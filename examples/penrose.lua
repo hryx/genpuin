@@ -2,8 +2,8 @@
 -- subdivision in plain Lua.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#f0d020"))
+gen.canvas(W, H)
+gen.background(gen.hex("#f0d020"))
 
 local psi = (math.sqrt(5) - 1) / 2
 local psi2 = 1 - psi
@@ -93,7 +93,7 @@ for _, pair in ipairs(order) do
         local d = math.sqrt((rmx - cx) ^ 2 + (rmy - cy) ^ 2)
         if d <= clipR then
             local fillCol = t1.t == 0 and thickFill or thinFill
-            gen.draw(c, gen.polygon(shrunk), {
+            gen.draw(gen.polygon(shrunk), {
                 fill = fillCol, stroke = "none",
             })
         end
@@ -104,11 +104,9 @@ for _, pair in ipairs(order) do
         local d = math.sqrt((tmx - cx) ^ 2 + (tmy - cy) ^ 2)
         if d <= clipR then
             local fillCol = tri.t == 0 and thickFill or thinFill
-            gen.draw(c, gen.polygon(shrunk), {
+            gen.draw(gen.polygon(shrunk), {
                 fill = fillCol, stroke = "none",
             })
         end
     end
 end
-
-return c

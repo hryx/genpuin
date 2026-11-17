@@ -4,9 +4,9 @@
 local W, H = 800, 800
 gen.seed(21)
 
-local c = gen.canvas(W, H)
+gen.canvas(W, H)
 local paper = gen.hex("#efe7da")
-gen.background(c, paper)
+gen.background(paper)
 
 local loop = {}
 for i = 1, 40 do
@@ -31,10 +31,8 @@ end
 -- the one that grew out of it.
 local tones = {"#2d2a3e", "#5b3346", "#8f3f3f", "#c0643f", "#e3a467"}
 for i = #stages, 1, -1 do
-    gen.draw(c, gen.polygon(stages[i]), {
+    gen.draw(gen.polygon(stages[i]), {
         fill = gen.hex(tones[#stages - i + 1]),
         stroke = gen.hex("#1d1b29"), strokeWidth = 0.6,
     })
 end
-
-return c

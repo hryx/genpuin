@@ -2,8 +2,8 @@
 -- Shows gen.noiseField, gen.flowField and gen.trace.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#efe7d6"))
+gen.canvas(W, H)
+gen.background(gen.hex("#efe7d6"))
 gen.seed(11)
 gen.noiseSeed(11)
 
@@ -62,10 +62,8 @@ for _, pts in ipairs(lines) do
     local mid = pts[math.floor(#pts / 2) + 1]
     local tone = gen.perlin(mid[1] * 0.003, mid[2] * 0.003) * 2 + 0.5
     local band = gen.clamp(math.floor(tone * 4) + 1, 1, 4)
-    gen.draw(c, gen.polyline(pts), {
+    gen.draw(gen.polyline(pts), {
         stroke = palette[band], fill = "none",
         strokeWidth = gen.lerp(0.9, 3.6, t * t), strokeLinecap = "round",
     })
 end
-
-return c

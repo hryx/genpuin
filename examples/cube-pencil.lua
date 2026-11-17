@@ -2,8 +2,8 @@
 -- strands. Shows gen.gaussian and gen.perlin.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#f4f1eb"))
+gen.canvas(W, H)
+gen.background(gen.hex("#f4f1eb"))
 gen.seed(42)
 gen.noiseSeed(11)
 
@@ -81,7 +81,7 @@ local function pencilEdge(a, b, nStrands, seedBase)
             local alpha = gen.randRange(0.08, 0.22)
 
             if alpha > 0.01 then
-                gen.draw(c, gen.circle({jx, jy}, gen.randRange(0.3, 0.7)), {
+                gen.draw(gen.circle({jx, jy}, gen.randRange(0.3, 0.7)), {
                     fill = col,
                     fillOpacity = alpha,
                 })
@@ -93,5 +93,3 @@ end
 for i, edge in ipairs(edges) do
     pencilEdge(edge[1], edge[2], 40, i * 137)
 end
-
-return c

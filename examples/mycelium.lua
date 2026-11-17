@@ -2,8 +2,8 @@
 -- through a noise field. Shows gen.pen, gen.noiseField and gen.poissonDisk.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#0c0c0f"))
+gen.canvas(W, H)
+gen.background(gen.hex("#0c0c0f"))
 gen.seed(42)
 gen.noiseSeed(42)
 
@@ -14,7 +14,7 @@ local spores = gen.poissonDisk({80, 80, W - 160, H - 160}, 120)
 local junctions = {}
 
 local function growTendril(startX, startY, baseHue, maxSteps, width)
-    local p = gen.pen(c)
+    local p = gen.pen()
     p:moveTo({startX, startY})
     p:set("width", width)
     p:set("color", gen.hsv(baseHue, 0.3, 0.8))
@@ -68,7 +68,7 @@ end
 
 for _, j in ipairs(junctions) do
     local hue = gen.mod(0.75 + gen.perlin(j[1] * 0.005, j[2] * 0.005) * 0.15, 1)
-    gen.draw(c, gen.circle(j, gen.randRange(1.0, 2.5)), {
+    gen.draw(gen.circle(j, gen.randRange(1.0, 2.5)), {
         fill = gen.hsv(hue, 0.2, 0.9),
         opacity = 0.8,
     })
@@ -76,14 +76,12 @@ end
 
 for _, spore in ipairs(spores) do
     local hue = gen.mod(0.75 + gen.perlin(spore[1] * 0.005, spore[2] * 0.005) * 0.15, 1)
-    gen.draw(c, gen.circle(spore, 6), {
+    gen.draw(gen.circle(spore, 6), {
         fill = gen.hsv(hue, 0.15, 0.85),
         opacity = 0.2,
     })
-    gen.draw(c, gen.circle(spore, 2.5), {
+    gen.draw(gen.circle(spore, 2.5), {
         fill = gen.hsv(hue, 0.25, 0.9),
         opacity = 0.8,
     })
 end
-
-return c

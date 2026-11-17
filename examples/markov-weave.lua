@@ -2,8 +2,8 @@
 -- Shows gen.markov and gen.markovGenerate.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#1a1a2e"))
+gen.canvas(W, H)
+gen.background(gen.hex("#1a1a2e"))
 gen.seed(42)
 
 local mood = gen.markov({
@@ -38,21 +38,21 @@ for row = 1, rows do
             local x = margin + (col - 0.5) * ((W - 2 * margin) / cols)
             if (row + col) % 2 == 0 then
                 if m == "thin" then
-                    gen.draw(c, gen.line({x - cellW * 0.4, y}, {x + cellW * 0.4, y}), {
+                    gen.draw(gen.line({x - cellW * 0.4, y}, {x + cellW * 0.4, y}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
                         strokeWidth = 2,
                         strokeLinecap = "round",
                         opacity = 0.9,
                     })
                 elseif m == "thick" then
-                    gen.draw(c, gen.line({x - cellW * 0.4, y}, {x + cellW * 0.4, y}), {
+                    gen.draw(gen.line({x - cellW * 0.4, y}, {x + cellW * 0.4, y}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
                         strokeWidth = 4.5,
                         strokeLinecap = "round",
                         opacity = 0.9,
                     })
                 elseif m == "dot" then
-                    gen.draw(c, gen.circle({x, y}, 2.8), {
+                    gen.draw(gen.circle({x, y}, 2.8), {
                         fill = gen.hsv(p.hue, p.sat, p.val),
                         opacity = 0.8,
                     })
@@ -71,21 +71,21 @@ for col = 1, cols do
             local y = margin + (row - 0.5) * ((H - 2 * margin) / rows)
             if (row + col) % 2 == 1 then
                 if m == "thin" then
-                    gen.draw(c, gen.line({x, y - cellH * 0.4}, {x, y + cellH * 0.4}), {
+                    gen.draw(gen.line({x, y - cellH * 0.4}, {x, y + cellH * 0.4}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
                         strokeWidth = 2,
                         strokeLinecap = "round",
                         opacity = 0.9,
                     })
                 elseif m == "thick" then
-                    gen.draw(c, gen.line({x, y - cellH * 0.4}, {x, y + cellH * 0.4}), {
+                    gen.draw(gen.line({x, y - cellH * 0.4}, {x, y + cellH * 0.4}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
                         strokeWidth = 4.5,
                         strokeLinecap = "round",
                         opacity = 0.9,
                     })
                 elseif m == "dot" then
-                    gen.draw(c, gen.circle({x, y}, 2.8), {
+                    gen.draw(gen.circle({x, y}, 2.8), {
                         fill = gen.hsv(p.hue, p.sat, p.val),
                         opacity = 0.8,
                     })
@@ -94,5 +94,3 @@ for col = 1, cols do
         end
     end
 end
-
-return c

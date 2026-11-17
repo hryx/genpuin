@@ -2,8 +2,8 @@
 -- density field. Shows gen.attractor and gen.image with log tone.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#070302"))
+gen.canvas(W, H)
+gen.background(gen.hex("#070302"))
 gen.seed(3)
 
 local density = gen.attractor({
@@ -23,6 +23,4 @@ local hot = {
     {1.00, gen.hex("#fff4c9")},
 }
 
-gen.draw(c, gen.image(density, 0, 0, W, H, {palette = hot, tone = "log", toneK = 400}))
-
-return c
+gen.draw(gen.image(density, 0, 0, W, H, {palette = hot, tone = "log", toneK = 400}))

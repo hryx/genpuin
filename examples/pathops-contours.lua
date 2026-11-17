@@ -2,8 +2,8 @@
 -- roughened with fbm. Shows gen.sdfField and gen.contours.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#efe9dc"))
+gen.canvas(W, H)
+gen.background(gen.hex("#efe9dc"))
 gen.seed(11)
 gen.noiseSeed(11)
 
@@ -37,7 +37,7 @@ for _, line in ipairs(gen.contours(height, levels, {rect = rect, simplify = 0.3}
         style = {stroke = ink, strokeWidth = major and 1.6 or 0.8}
     end
     if k == 0 then style = {stroke = ink, strokeWidth = 2.2} end
-    gen.draw(c, line, style)
+    gen.draw(line, style)
 end
 
 local coast = {}
@@ -49,7 +49,5 @@ local grid = {}
 for x = 100, 700, 100 do grid[#grid + 1] = gen.line({x, 40}, {x, 760}) end
 for y = 100, 700, 100 do grid[#grid + 1] = gen.line({40, y}, {760, y}) end
 for _, l in ipairs(gen.clipLines(grid, land, {outside = true})) do
-    gen.draw(c, l, {stroke = sea, strokeWidth = 0.9, strokeDasharray = {6, 5}})
+    gen.draw(l, {stroke = sea, strokeWidth = 0.9, strokeDasharray = {6, 5}})
 end
-
-return c

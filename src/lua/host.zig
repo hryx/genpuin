@@ -4,7 +4,8 @@
 //! sibling file once and caches its result. The native module is
 //! imported as "core". Before a script runs, the prelude's init.lua is
 //! installed as the global `gen` and global reads turn strict (see
-//! prelude/strict.lua). Setting GENPUIN_LUA_DIR to a prelude directory,
+//! prelude/strict.lua). The state's one canvas lives in prelude/canvas.lua
+//! and is rendered after the script returns. Setting GENPUIN_LUA_DIR to a prelude directory,
 //! such as src/lua/prelude in a checkout, loads the same files from disk
 //! instead, so prelude edits need no rebuild. Files new since the build
 //! are not picked up. The math table is evened out across Lua flavors
@@ -20,6 +21,7 @@ const genpuin = @import("genpuin");
 
 const bind_field = @import("bind_field.zig");
 const bind_math = @import("bind_math.zig");
+const bind_passes = @import("bind_passes.zig");
 const core = @import("core.zig");
 const util = @import("util.zig");
 const Lua = util.Lua;
@@ -118,8 +120,8 @@ fn logError(lua: *Lua, what: []const u8, err: anyerror) anyerror {
     return err;
 }
 
-/// Load and run a script, leaving its first return value on the stack.
-/// On failure the error message or traceback is on top of the stack.
+/// Load and run a script. Its return values are dropped. On failure the
+/// error message or traceback is on top of the stack.
 pub fn runScript(lua: *Lua, path: [:0]const u8) error{ScriptFailed}!void {
     _ = lua.getGlobal("debug");
     _ = lua.getField(-1, "traceback");
@@ -128,20 +130,37 @@ pub fn runScript(lua: *Lua, path: [:0]const u8) error{ScriptFailed}!void {
     util.loadFile(lua, path) catch {
         return error.ScriptFailed;
     };
-    lua.protectedCall(.{ .args = 0, .results = 1, .msg_handler = handler }) catch {
+    lua.protectedCall(.{ .args = 0, .results = 0, .msg_handler = handler }) catch {
         return error.ScriptFailed;
     };
     lua.remove(handler);
 }
 
-/// Whether the value at `index` is a canvas. The read is raw, since a
-/// script may return a table whose __index raises, such as `gen`.
-pub fn isCanvas(lua: *Lua, index_in: i32) bool {
-    if (!lua.isTable(index_in)) return false;
-    const index = lua.absIndex(index_in);
-    _ = lua.pushStringZ("width");
+/// Push the canvas made by gen.canvas and return true, or push nothing
+/// and return false when the script made none.
+pub fn pushCanvas(lua: *Lua) bool {
+    pushPreludeField(lua, "canvas", "current");
+    lua.call(.{ .args = 0, .results = 1 });
+    if (lua.isTable(-1)) return true;
+    lua.pop(1);
+    return false;
+}
+
+/// How many post passes the canvas at `index` holds.
+pub fn passCount(lua: *Lua, index: i32) u32 {
     defer lua.pop(1);
-    return lua.getTableRaw(index) == .number;
+    if (lua.getField(index, "passes") != .number) return 0;
+    return std.math.cast(u32, lua.toInteger(-1) catch 0) orelse 0;
+}
+
+/// Push `field` of the prelude module `module`. The prelude's import is
+/// a plain Lua function, so a cached module comes back without raising.
+fn pushPreludeField(lua: *Lua, module: [:0]const u8, field: [:0]const u8) void {
+    _ = lua.getField(zlua.registry_index, import_key);
+    _ = lua.pushString(module);
+    lua.call(.{ .args = 1, .results = 1 });
+    _ = lua.getField(-1, field);
+    lua.remove(-2);
 }
 
 /// Write the canvas on top of the stack to `path`, in the format its
@@ -159,11 +178,7 @@ pub fn exportCanvas(lua: *Lua, path: []const u8, opts: core.RenderOptions) !void
 
 fn exportSvg(lua: *Lua, path: []const u8) error{CanvasFailed}!void {
     const canvas = lua.absIndex(-1);
-    _ = lua.getField(zlua.registry_index, import_key);
-    _ = lua.pushStringZ("svg");
-    lua.protectedCall(.{ .args = 1, .results = 1 }) catch return error.CanvasFailed;
-    _ = lua.getField(-1, "exportSvg");
-    lua.remove(-2);
+    pushPreludeField(lua, "svg", "write");
     lua.pushValue(canvas);
     _ = lua.pushString(path);
     lua.protectedCall(.{ .args = 2, .results = 0 }) catch return error.CanvasFailed;
@@ -193,21 +208,47 @@ test "host: a canvas error at render time comes back as a message" {
     const lua = try create(&host, .{});
     defer lua.deinit();
     const script =
-        \\local c = gen.canvas(10, 10)
-        \\table.insert(c.elements, {shape = {type = "blob"}, style = {}})
-        \\return c
+        \\gen.canvas(10, 10)
+        \\gen.draw({type = "blob"})
     ;
     try util.loadBuffer(lua, script, "=script");
-    try lua.protectedCall(.{ .args = 0, .results = 1 });
-    try std.testing.expect(isCanvas(lua, -1));
+    try lua.protectedCall(.{ .args = 0, .results = 0 });
+    try std.testing.expect(pushCanvas(lua));
     try std.testing.expectError(error.CanvasFailed, exportCanvas(lua, "never-written.png", .{}));
     try std.testing.expectEqualStrings("unknown shape type 'blob'", try lua.toString(-1));
 }
 
-test "host: isCanvas does not run a strict __index" {
+test "host: no canvas until gen.canvas, then one with its passes counted" {
+    var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
+    const lua = try create(&host, .{});
+    defer lua.deinit();
+    try std.testing.expect(!pushCanvas(lua));
+    const script =
+        \\gen.canvas(10, 10)
+        \\gen.post.invert()
+        \\gen.post.blur({radius = 1})
+        \\return gen
+    ;
+    try util.loadBuffer(lua, script, "=script");
+    try lua.protectedCall(.{ .args = 0, .results = 0 });
+    try std.testing.expect(pushCanvas(lua));
+    try std.testing.expectEqual(@as(u32, 2), passCount(lua, -1));
+}
+
+test "host: gen.post has a function for every pass core.post knows" {
     var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
     const lua = try create(&host, .{});
     defer lua.deinit();
     _ = lua.getGlobal("gen");
-    try std.testing.expect(!isCanvas(lua, -1));
+    _ = lua.getField(-1, "post");
+    const post = lua.absIndex(-1);
+    for (bind_passes.passNames()) |name| {
+        _ = lua.pushString(name);
+        try std.testing.expectEqual(zlua.LuaType.function, lua.getTableRaw(post));
+        lua.pop(1);
+    }
+    var count: usize = 0;
+    lua.pushNil();
+    while (lua.next(post)) : (lua.pop(1)) count += 1;
+    try std.testing.expectEqual(bind_passes.passNames().len, count);
 }

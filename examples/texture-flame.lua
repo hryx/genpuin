@@ -2,8 +2,8 @@
 -- gen.randomFlame, gen.flame and gen.image.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, {0, 0, 0})
+gen.canvas(W, H)
+gen.background({0, 0, 0})
 gen.seed(3)
 
 local opts = gen.randomFlame(nil, 3)
@@ -27,7 +27,5 @@ for i = 0, 8 do
     light[#light + 1] = {t, {v, v, v}}
 end
 
-gen.draw(c, gen.image(hue, 0, 0, W, H, {palette = palette, range = {0, 1}}))
-gen.draw(c, gen.image(density, 0, 0, W, H, {palette = light, tone = "log", toneK = 500}), {blendMode = "multiply"})
-
-return c
+gen.draw(gen.image(hue, 0, 0, W, H, {palette = palette, range = {0, 1}}))
+gen.draw(gen.image(density, 0, 0, W, H, {palette = light, tone = "log", toneK = 500}), {blendMode = "multiply"})

@@ -2,8 +2,8 @@
 -- diagonal. Shows gen.elementary with a custom first row.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#f5f0e8"))
+gen.canvas(W, H)
+gen.background(gen.hex("#f5f0e8"))
 
 local cellW = 200
 local steps = 200
@@ -24,7 +24,7 @@ for row = 1, #rowsTop do
             local val = gen.lerp(0.2, 0.4, t)
             local x = (col - 1) * cellSize
             local y = (row - 1) * cellSize
-            gen.draw(c, gen.rect(x, y, cellSize, cellSize), {
+            gen.draw(gen.rect(x, y, cellSize, cellSize), {
                 fill = gen.hsv(hue, sat, val),
             })
         end
@@ -46,11 +46,9 @@ for row = 1, #rowsBot do
             local val = gen.lerp(0.25, 0.45, t)
             local x = (col - 1) * cellSize
             local y = H - row * cellSize
-            gen.draw(c, gen.rect(x, y, cellSize, cellSize), {
+            gen.draw(gen.rect(x, y, cellSize, cellSize), {
                 fill = gen.hsv(hue, sat, val),
             })
         end
     end
 end
-
-return c

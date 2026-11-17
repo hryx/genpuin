@@ -1,4 +1,4 @@
-//! genpuin CLI: run an art script and export what it returns.
+//! genpuin CLI: run an art script and export the canvas it draws.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -16,7 +16,9 @@ const usage =
     \\Usage: genpuin <script.lua> [options] [-- script args]
     \\
     \\  -o <file>        Output file, format from extension: .svg .png .ppm
-    \\                   (default <script>.svg, or <script>-sheet.png for a sweep)
+    \\                   (default <script>.svg, <script>.png when the script
+    \\                   uses a post pass, or <script>-sheet.png for a sweep)
+    \\                   SVG cannot hold post passes and skips them
     \\  -s <number>      Raster scale factor (default 1)
     \\  --ss <n>         Supersample n x n per pixel (default 1)
     \\  --depth <8|16>   PNG bits per channel (default 8)
@@ -123,9 +125,7 @@ pub fn main(init: std.process.Init) !void {
 
     if (args.vary_hi) |hi| return sweep(arena, ctx, hi);
 
-    const stem = std.fs.path.stem(args.script);
-    const output = args.output orelse try std.fmt.allocPrint(arena, "{s}.svg", .{stem});
-    runOne(ctx, args.vary_lo, .{ .file = output }) catch std.process.exit(1);
+    runOne(ctx, args.vary_lo, .{ .file = args.output }) catch std.process.exit(1);
 }
 
 const RunContext = struct {
@@ -137,7 +137,9 @@ const RunContext = struct {
 };
 
 const Target = union(enum) {
-    file: []const u8,
+    /// Null picks a name from the script's: .png when it uses post
+    /// passes, .svg otherwise.
+    file: ?[]const u8,
     /// Render to a raster scaled to this width, for a contact sheet.
     tile: struct { width: u32, out: *?genpuin.Raster },
 };
@@ -155,9 +157,9 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
         std.debug.print("{s}\n", .{lua.toString(-1) catch "script failed"});
         return error.ScriptFailed;
     };
-    if (!host_mod.isCanvas(lua, -1)) {
+    if (!host_mod.pushCanvas(lua)) {
         if (target == .tile) {
-            std.debug.print("vary {d}: script returned no canvas\n", .{vary});
+            std.debug.print("vary {d}: script made no canvas\n", .{vary});
             return error.NoCanvas;
         }
         return;
@@ -165,7 +167,9 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
     const opts: core.RenderOptions = .{ .scale = ctx.args.scale, .ss = ctx.args.ss, .depth = ctx.args.depth };
 
     switch (target) {
-        .file => |path| {
+        .file => |output| {
+            var buf: [Io.Dir.max_path_bytes]u8 = undefined;
+            const path = output orelse defaultOutput(&buf, ctx.args.script, host_mod.passCount(lua, -1) > 0);
             host_mod.exportCanvas(lua, path, opts) catch |err| return reportRenderError(lua, err);
             std.debug.print("Wrote {s}\n", .{path});
         },
@@ -176,6 +180,12 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
             t.out.* = try r.resizeBox(ctx.gpa, t.width, h);
         },
     }
+}
+
+fn defaultOutput(buf: []u8, script: []const u8, has_passes: bool) []const u8 {
+    const ext = if (has_passes) "png" else "svg";
+    return std.fmt.bufPrint(buf, "{s}.{s}", .{ std.fs.path.stem(script), ext }) catch
+        fail("script name too long for an output name", .{});
 }
 
 fn reportRenderError(lua: *Lua, err: anyerror) anyerror {

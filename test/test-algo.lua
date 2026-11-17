@@ -58,14 +58,14 @@ local seq = gen.markovGenerate(chain, "c", 4)
 check("markovGenerate", #seq == 4 and seq[2] == "a")
 
 print("colorMap render")
-local c = gen.canvas(40, 20)
-gen.background(c, {1, 1, 1})
-gen.draw(c, gen.rect(0, 0, 20, 20), {fill = {1, 0, 0}})
-gen.draw(c, gen.rect(10, 0, 30, 20), {fill = {0, 0, 0}, colorMap = {
+gen.canvas(40, 20)
+gen.background({1, 1, 1})
+gen.draw(gen.rect(0, 0, 20, 20), {fill = {1, 0, 0}})
+gen.draw(gen.rect(10, 0, 30, 20), {fill = {0, 0, 0}, colorMap = {
     {from = {0, 0, 0}, to = {1, 1, 1}},
     {from = {1, 1, 1}, to = {0, 0, 0}},
 }})
-gen.exportPpm(c, "out/test/test-algo.ppm")
+gen.exportPpm("out/test/test-algo.ppm")
 local px = T.readPpm("out/test/test-algo.ppm")
 local function isRgb(name, x, y, r, g, b)
     local pr, pg, pb = T.rgb(px, x, y)

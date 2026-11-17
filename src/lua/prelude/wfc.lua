@@ -58,8 +58,9 @@ end
 -- {tile, x, y, size, rot, flip} where x, y is the cell center in pixels.
 -- opts: size (cell size in pixels, default 10), x, y (top-left origin,
 -- default 0), draw (optional function(tile, x, y, size, rot, flip)
--- called per cell, if it returns a shape and a style they go onto c).
-function M.wfcDraw(c, result, opts)
+-- called per cell, if it returns a shape and a style they are drawn).
+function M.wfcDraw(result, opts)
+    canvas.rejectCanvasArg("gen.wfcDraw", result, opts, "gen.wfcDraw(result, opts)")
     opts = opts or {}
     local size = opts.size or 10
     local ox, oy = opts.x or 0, opts.y or 0
@@ -74,9 +75,7 @@ function M.wfcDraw(c, result, opts)
             out[#out + 1] = {tile = cell.tile, x = x, y = y, size = size, rot = cell.rot, flip = cell.flip}
             if draw then
                 local shape, style = draw(cell.tile, x, y, size, cell.rot, cell.flip)
-                if shape and c then
-                    canvas.draw(c, shape, style)
-                end
+                if shape then canvas.add(shape, style) end
             end
         end
     end

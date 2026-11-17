@@ -5,13 +5,13 @@ local W, H = 800, 800
 gen.seed(4)
 gen.noiseSeed(4)
 
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#f4ecdc"))
+gen.canvas(W, H)
+gen.background(gen.hex("#f4ecdc"))
 
 local paper = gen.linearGradient(0, 0, 0, H, {
     {0, gen.hex("#f6efe0")}, {1, gen.hex("#ecd6c8")},
 })
-gen.draw(c, gen.rect(0, 0, W, H), {fill = paper})
+gen.draw(gen.rect(0, 0, W, H), {fill = paper})
 
 local function arch(x, top, w, bottom)
     local r = w / 2
@@ -40,23 +40,21 @@ local arches = {
 for _, a in ipairs(arches) do
     local ink = inks[a.ink]
     local fill = gen.linearGradient(0, a.top, 0, 720, {{0, ink[1]}, {1, ink[2]}})
-    gen.draw(c, arch(a.x, a.top, a.w, 720), {fill = fill, blendMode = "multiply"})
+    gen.draw(arch(a.x, a.top, a.w, 720), {fill = fill, blendMode = "multiply"})
 end
 
 local pink = inks[1][1]
 local moon = gen.radialGradient(560, 210, 150, {
     {0, pink}, {0.8, gen.withAlpha(pink, 0.85)}, {1, gen.withAlpha(pink, 0)},
 })
-gen.draw(c, gen.circle({560, 210}, 150), {fill = moon, blendMode = "multiply"})
+gen.draw(gen.circle({560, 210}, 150), {fill = moon, blendMode = "multiply"})
 
 for i = 0, 13 do
     local y = 470 + i * 18
-    gen.draw(c, gen.rect(100, y, 610, 8), {fill = gen.hex("#f4ecdc"), blendMode = "difference"})
+    gen.draw(gen.rect(100, y, 610, 8), {fill = gen.hex("#f4ecdc"), blendMode = "difference"})
 end
 
 local glow = gen.radialGradient(W / 2, H / 2, 620, {
     {0.55, gen.withAlpha(gen.hex("#2a1a3a"), 0)}, {1, gen.withAlpha(gen.hex("#2a1a3a"), 0.3)},
 })
-gen.draw(c, gen.rect(0, 0, W, H), {fill = glow, blendMode = "multiply"})
-
-return c
+gen.draw(gen.rect(0, 0, W, H), {fill = glow, blendMode = "multiply"})

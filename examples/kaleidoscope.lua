@@ -2,8 +2,8 @@
 -- rings. Shows gen.kaleidoscope, gen.rotateAround and gen.scaleAround.
 
 local W, H = 800, 800
-local c = gen.canvas(W, H)
-gen.background(c, gen.hex("#101820"))
+gen.canvas(W, H)
+gen.background(gen.hex("#101820"))
 gen.seed(3)
 
 local center = {W / 2, H / 2}
@@ -48,12 +48,10 @@ for k, ring in ipairs(rings) do
         local shape = gen.scaleAround(m.shape, ring.scale, ring.scale, center)
         shape = gen.rotateAround(shape, ring.turn, center)
         for _, s in ipairs(gen.kaleidoscope(n, center, {shape})) do
-            gen.draw(c, s, {
+            gen.draw(s, {
                 fill = palette[(m.color + k) % #palette + 1], fillOpacity = 0.92,
                 stroke = gen.hex("#101820"), strokeWidth = 2 * ring.scale,
             })
         end
     end
 end
-
-return c
