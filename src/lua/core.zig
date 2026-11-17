@@ -129,7 +129,7 @@ test {
     inline for (groups) |g| _ = g[1];
 }
 
-test "core: edit distance counts a swap of neighbours as one edit" {
+test "core: edit distance counts a swap of neighbors as one edit" {
     try std.testing.expectEqual(@as(?u32, 1), editDistance("cirlce", "circle", 2));
     try std.testing.expectEqual(@as(?u32, 1), editDistance("stpe", "step", 2));
     try std.testing.expectEqual(@as(?u32, 0), editDistance("rect", "rect", 2));

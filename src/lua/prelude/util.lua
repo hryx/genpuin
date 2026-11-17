@@ -7,7 +7,7 @@ local M = {}
 -- b. Lua 5.4 and LuaJIT round float % differently (1 % 0.1 is 0.0999..
 -- on one and 0 on the other), while mod gives Lua 5.4's exact result on
 -- both. Use it instead of % when an operand can be a non-integer float
--- and the output must match across Lua flavours. Integer operands agree
+-- and the output must match across Lua flavors. Integer operands agree
 -- either way. The result is always a float.
 M.mod = native.mod
 

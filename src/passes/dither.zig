@@ -307,7 +307,7 @@ test "dither: bayer 4x4 is a permutation of all ranks" {
     try std.testing.expectEqual(@as(f32, 8.5 / 16.0), m.t[1]);
 }
 
-test "dither: blue noise map is a permutation with no clumped neighbours" {
+test "dither: blue noise map is a permutation with no clumped neighbors" {
     const gpa = std.testing.allocator;
     const m: ThresholdMap = try .blueNoise(gpa, 16, blue_seed);
     defer gpa.free(m.t);

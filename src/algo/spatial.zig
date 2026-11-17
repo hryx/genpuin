@@ -83,7 +83,7 @@ pub const SeparateOptions = struct {
 
 /// Push overlapping circles apart in place, up to `iterations` sweeps or
 /// until nothing moves. Circles update in order within a sweep.
-/// Coincident centres get a random push direction from `rng`.
+/// Coincident centers get a random push direction from `rng`.
 pub fn separate(rng: *Rng, circles: []Circle, opts: SeparateOptions) void {
     var k: f64 = 1;
     while (k <= opts.iterations) : (k += 1) {

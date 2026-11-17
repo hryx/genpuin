@@ -1,7 +1,7 @@
 //! Makes the embedded Lua's math library, its `^` operator and the calls
-//! LuaJIT's compiled traces make run the same maths as src/math.zig.
+//! LuaJIT's compiled traces make run the same math as src/math.zig.
 //!
-//! Both VMs reach the maths by C symbol: lmathlib.c and lj_vmmath.c call
+//! Both VMs reach the math by C symbol: lmathlib.c and lj_vmmath.c call
 //! it from C, LuaJIT's interpreter with `bl extern sin` and its JIT
 //! through the addresses in lj_ir_callinfo. All of those are resolved by
 //! the static linker.

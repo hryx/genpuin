@@ -258,7 +258,7 @@ fn overlap(lua: *Lua) !i32 {
             error.Contradiction => raiseContradiction(lua, tries),
             error.TooManyPatterns => lua.raiseErrorStr("wfc: more than 65535 patterns or tile variants", .{}),
             error.BadSample => lua.raiseErrorStr("wfc: sample is smaller than n, or output is smaller than n", .{}),
-            error.TooManyColours => lua.raiseErrorStr("wfc: sample has more than 256 distinct values", .{}),
+            error.TooManyColors => lua.raiseErrorStr("wfc: sample has more than 256 distinct values", .{}),
             error.OutOfMemory => return err,
         }
     };

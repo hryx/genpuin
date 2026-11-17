@@ -8,7 +8,7 @@
 //! Engineering Software 64 (2013): endpoint events in lexicographic order,
 //! a status line of segments ordered bottom to top, and subdivision of
 //! every crossing and collinear overlap when two segments become
-//! neighbours.
+//! neighbors.
 //!
 //! Where the papers flag each edge with in/out parity and give overlapping
 //! edges special types, here every edge carries a winding delta per
@@ -189,7 +189,7 @@ const Sweep = struct {
         if (geom.lexLess(s.events.items[e].point, p) and geom.lexLess(p, s.right(e))) try s.divide(e, p);
     }
 
-    /// Subdivide two status neighbours, a below b, so that they meet only
+    /// Subdivide two status neighbors, a below b, so that they meet only
     /// at shared endpoints. An overlap is cut down to one coincident piece
     /// and, once both pieces are in the status, b is merged into a and
     /// removed. Returns the removed piece.
@@ -235,9 +235,9 @@ const Sweep = struct {
         try s.status.insert(s.arena, lo, e);
     }
 
-    /// Check the new piece against its neighbours, walking on past
+    /// Check the new piece against its neighbors, walking on past
     /// collinear ones so stacked overlaps all get cut and merged.
-    fn checkNeighbours(s: *Sweep, e: u32) !void {
+    fn checkNeighbors(s: *Sweep, e: u32) !void {
         var skip: usize = 0;
         while (true) {
             const idx = std.mem.indexOfScalar(u32, s.status.items, e) orelse return;
@@ -284,7 +284,7 @@ fn subdivide(arena: Allocator, subject: geom.Contours, clip: geom.Contours) Erro
         if (s.events.items.len > limit) return error.TooComplex;
         if (s.events.items[e].left) {
             try s.insert(e);
-            try s.checkNeighbours(e);
+            try s.checkNeighbors(e);
             continue;
         }
         const l = s.events.items[e].other;
@@ -372,7 +372,7 @@ const ClassifyCtx = struct {
 };
 
 /// Second sweep over edges that no longer cross: each edge learns the
-/// winding numbers just below it from its status neighbour, and edges
+/// winding numbers just below it from its status neighbor, and edges
 /// where membership changes across them make the result.
 fn classify(arena: Allocator, edges: []const Edge, op: Op, rule: FillRule) ![][2]Vec2 {
     const ctx: ClassifyCtx = .{ .edges = edges };
@@ -479,7 +479,7 @@ fn pickNext(edges: []const [2]Vec2, used: []const bool, v: Vec2, din: Vec2) ?usi
     return best;
 }
 
-/// Remove vertices that sit on the line through their neighbours, which
+/// Remove vertices that sit on the line through their neighbors, which
 /// undoes the splits the sweep made along straight edges.
 fn dropCollinear(pts: *std.ArrayList(Vec2)) void {
     var n: usize = 0;

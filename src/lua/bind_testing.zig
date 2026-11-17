@@ -1,5 +1,5 @@
 //! The `testing` global, which only the test runner (src/test_runner.zig)
-//! installs next to `gen`. Test scripts reach genpuin's maths and render
+//! installs next to `gen`. Test scripts reach genpuin's math and render
 //! other scripts through it, without a shell.
 //!
 //! bits(x) and num(hex) convert between a number and its IEEE bit pattern
@@ -117,7 +117,7 @@ fn call(lua: *Lua) i32 {
     const name = lua.checkString(1);
     const x = lua.checkNumber(2);
     const y = lua.optNumber(3) orelse 0;
-    lua.pushNumber(byName(name, x, y) orelse lua.argError(1, "unknown maths function"));
+    lua.pushNumber(byName(name, x, y) orelse lua.argError(1, "unknown math function"));
     return 1;
 }
 

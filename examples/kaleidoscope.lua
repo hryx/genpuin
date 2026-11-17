@@ -1,4 +1,4 @@
--- A rose window of shards mirrored round the circle in three turned, shrunken
+-- A rose window of shards mirrored around the circle in three turned, shrunken
 -- rings. Shows gen.kaleidoscope, gen.rotateAround and gen.scaleAround.
 
 local W, H = 800, 800

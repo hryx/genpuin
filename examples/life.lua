@@ -1,5 +1,5 @@
 -- A Game of Life soup run for 320 generations, every cell that ever lived
--- drawn as a dot coloured by when it last lived. Shows gen.evolve and gen.life.
+-- drawn as a dot colored by when it last lived. Shows gen.evolve and gen.life.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

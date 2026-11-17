@@ -3,7 +3,7 @@
 //!
 //! Every n by n window of the sample, with up to eight of its rotations
 //! and reflections, becomes a pattern weighted by how often it occurs.
-//! Each output cell picks one pattern, and neighbouring patterns must
+//! Each output cell picks one pattern, and neighboring patterns must
 //! agree where they overlap, so every n by n window of the output is a
 //! window of the sample.
 
@@ -49,11 +49,11 @@ pub const Result = struct {
     }
 };
 
-pub const Error = error{ BadSample, TooManyColours } || Solver.Error;
+pub const Error = error{ BadSample, TooManyColors } || Solver.Error;
 
 const Patterns = struct {
     n: u32,
-    /// Pattern t occupies data[t * n * n ..][0 .. n * n], colour indices.
+    /// Pattern t occupies data[t * n * n ..][0 .. n * n], color indices.
     data: []const u8,
 
     fn get(ps: *const Patterns, t: u32) []const u8 {
@@ -97,7 +97,7 @@ pub fn solve(gpa: Allocator, sample: Sample, opts: Options) Error!Result {
     const indexed = try arena.alloc(u8, sample.values.len);
     for (indexed, sample.values) |*o, v| {
         const k = std.mem.indexOfScalar(i32, palette.items, v) orelse blk: {
-            if (palette.items.len == 256) return error.TooManyColours;
+            if (palette.items.len == 256) return error.TooManyColors;
             try palette.append(arena, v);
             break :blk palette.items.len - 1;
         };

@@ -4,7 +4,7 @@
 //! resolving the ambiguity in marching cubes", IEEE Visualization 1991).
 //!
 //! Every segment is directed with values at or above the level on its
-//! right (see geom.orient), so neighbouring cells chain head to tail and
+//! right (see geom.orient), so neighboring cells chain head to tail and
 //! a closed line around a low region turns positively.
 
 const std = @import("std");
@@ -153,7 +153,7 @@ const Tracer = struct {
             for (cs, 0..) |c, start| {
                 if (c.visited) continue;
                 // Open lines start where nothing leads in, at the field
-                // border. Whatever is left afterwards is closed.
+                // border. Whatever is left afterward is closed.
                 if (pass == 0 and c.has_prev) continue;
                 pts.clearRetainingCapacity();
                 var cur: u32 = @intCast(start);

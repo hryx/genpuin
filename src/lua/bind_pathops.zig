@@ -317,7 +317,7 @@ fn simplify(lua: *Lua) !i32 {
     return 1;
 }
 
-/// orderPaths(ends, {start, budget, neighbours}) -> order, reversed,
+/// orderPaths(ends, {start, budget, neighbors}) -> order, reversed,
 /// before, after. `ends` lists {start, end} per path, and order holds
 /// 1-based indices.
 fn orderPaths(lua: *Lua) !i32 {
@@ -333,7 +333,7 @@ fn orderPaths(lua: *Lua) !i32 {
     const opts: pathops.order.Options = .{
         .start = if (lua.isTable(2)) optVec2(lua, 2, "start", .{ 0, 0 }) else .{ 0, 0 },
         .budget = @intCast(std.math.clamp(util.optInt(lua, 2, "budget", 4_000_000), 0, 1 << 40)),
-        .neighbours = @intCast(std.math.clamp(util.optInt(lua, 2, "neighbours", 10), 1, 64)),
+        .neighbors = @intCast(std.math.clamp(util.optInt(lua, 2, "neighbors", 10), 1, 64)),
     };
     const o = try pathops.order.orderPaths(arena, ends, opts);
     lua.createTable(@intCast(o.order.len), 0);

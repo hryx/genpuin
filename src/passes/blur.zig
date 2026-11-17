@@ -151,7 +151,7 @@ test "blur: radius is in scene units" {
     try std.testing.expectEqualSlices(f32, a.pix, b.pix);
 }
 
-test "bloom: dark pixels stay, bright ones glow onto neighbours" {
+test "bloom: dark pixels stay, bright ones glow onto neighbors" {
     const gpa = std.testing.allocator;
     var r: Raster = try .init(gpa, 21, 1, .{ 0.1, 0.1, 0.1 });
     defer r.deinit(gpa);

@@ -1,4 +1,4 @@
--- test-mod.lua: gen.mod gives the same bits on every Lua flavour
+-- test-mod.lua: gen.mod gives the same bits on every Lua flavor
 -- It is src/math.zig's mod, Lua 5.4's float % with an exact fmod, in
 -- the interpreter and in compiled traces. On Lua 5.4 it must equal %.
 

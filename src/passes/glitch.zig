@@ -248,7 +248,7 @@ test "channelShift: moves only the shifted channel, in scene units" {
     try std.testing.expectEqual(common.Rgb{ 0, 0, 1 }, r.get(0, 0));
 }
 
-test "channelShift: wrap brings pixels round the edge" {
+test "channelShift: wrap brings pixels around the edge" {
     const gpa = std.testing.allocator;
     var r: Raster = try .init(gpa, 4, 1, .{ 0, 0, 0 });
     defer r.deinit(gpa);

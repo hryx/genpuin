@@ -1,4 +1,4 @@
--- A black eclipse in a noise sky, bloomed and crushed to four colours with
+-- A black eclipse in a noise sky, bloomed and crushed to four colors with
 -- blue noise and Bayer screens. Shows gen.post with bloom and dither.
 
 local W, H = 800, 800

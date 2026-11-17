@@ -206,7 +206,7 @@ inline fn splat(comptime T: type, v: f32) T {
     return if (T == f32) v else @splat(v);
 }
 
-/// One cell, or `lanes` contiguous cells when T is a vector. Neighbours
+/// One cell, or `lanes` contiguous cells when T is a vector. Neighbors
 /// at xl and xr are offsets of the same width as x.
 inline fn cell(self: *const ReactionDiffusion, comptime T: type, comptime mapped: bool, r: Rows, xl: usize, x: usize, xr: usize) void {
     const edge = splat(T, 0.2);

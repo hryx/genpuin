@@ -1,4 +1,4 @@
-//! The transcendental maths genpuin uses, in place of the platform libm.
+//! The transcendental math genpuin uses, in place of the platform libm.
 //! Zig code calls these rather than the builtins directly, and the CLI's
 //! Lua binds to the same code (src/lua/math_exports.zig), so a result is
 //! the same on every OS.
@@ -9,7 +9,7 @@
 //! noinline so LLVM never sees a builtin next to another or with a
 //! constant argument: it would merge sin and cos of one value into
 //! Darwin's __sincos_stret and fold constants with the compiler's own
-//! maths. Correctly rounded operations (@sqrt, @floor, + - * /) give the
+//! math. Correctly rounded operations (@sqrt, @floor, + - * /) give the
 //! same bits everywhere and stay builtins at the call sites.
 
 const std = @import("std");
@@ -87,7 +87,7 @@ pub fn logBase(x: f64, b: f64) f64 {
 }
 
 /// Floored modulo, the result taking the sign of b: Lua 5.4's float `%`
-/// and gen.mod on every flavour. fmod is exact, so the only rounding is
+/// and gen.mod on every flavor. fmod is exact, so the only rounding is
 /// the one addition that moves a remainder of the wrong sign into b's
 /// range.
 pub fn mod(a: f64, b: f64) f64 {

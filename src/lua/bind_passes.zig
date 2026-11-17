@@ -137,7 +137,7 @@ fn pixelSort(lua: *Lua, arena: Allocator, opts: i32) !passes.PixelSort {
 
 /// channelShift: offset each channel.
 ///   r, g, b = {dx, dy} in scene units (default {0, 0}).
-///   wrap = true wraps round the edges instead of clamping.
+///   wrap = true wraps around the edges instead of clamping.
 fn channelShift(lua: *Lua, opts: i32) passes.ChannelShift {
     return .{
         .offsets = .{ optVec2(lua, opts, "r"), optVec2(lua, opts, "g"), optVec2(lua, opts, "b") },

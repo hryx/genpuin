@@ -56,7 +56,7 @@ pub const Perlin = struct {
 
     /// Fractal Brownian motion: `octaves` layers of noise, each at
     /// `lacunarity` times the frequency and `gain` times the amplitude
-    /// of the one before, normalised by the total amplitude.
+    /// of the one before, normalized by the total amplitude.
     pub fn fbm(n: *const Perlin, x: f64, y: f64, octaves: f64, lacunarity: f64, gain: f64) f64 {
         var sum: f64 = 0;
         var amp: f64 = 1;

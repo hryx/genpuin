@@ -7,7 +7,7 @@
 //! prelude/strict.lua). Setting GENPUIN_LUA_DIR to a prelude directory,
 //! such as src/lua/prelude in a checkout, loads the same files from disk
 //! instead, so prelude edits need no rebuild. Files new since the build
-//! are not picked up. The math table is evened out across Lua flavours
+//! are not picked up. The math table is evened out across Lua flavors
 //! by bind_math.zig.
 
 const std = @import("std");
@@ -26,14 +26,14 @@ const Lua = util.Lua;
 
 pub const Host = util.Host;
 
-// The pinned maths symbols must be in every binary that runs Lua.
+// The pinned math symbols must be in every binary that runs Lua.
 comptime {
     _ = @import("math_exports.zig");
 }
 
 pub const Options = struct {
     /// Directory of the script, added to package.path so scripts can
-    /// require their neighbours.
+    /// require their neighbors.
     script_dir: []const u8 = ".",
     /// Prelude directory to load instead of the embedded copy.
     lua_dir: ?[]const u8 = null,
@@ -71,7 +71,7 @@ pub fn create(host: *Host, opts: Options) !*Lua {
     util.setHost(lua, host);
     bind_field.registerMetatable(lua);
 
-    // Only the script's neighbours and the working directory, so a Lua
+    // Only the script's neighbors and the working directory, so a Lua
     // install elsewhere on the machine cannot shadow anything.
     _ = lua.getGlobal("package");
     const path = try std.fmt.allocPrint(host.gpa, "{s}/?.lua;./?.lua", .{opts.script_dir});

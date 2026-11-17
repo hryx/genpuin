@@ -3,7 +3,7 @@
 //!
 //! Every cell holds the set of patterns still possible there. Observe
 //! collapses the lowest-entropy cell to one weighted-random pattern, and
-//! propagation removes patterns that lost all support from a neighbour.
+//! propagation removes patterns that lost all support from a neighbor.
 //! Support counts per cell, pattern and direction make propagation the
 //! AC-4 style of the reference. A lazy min-heap keyed on entropy plus a
 //! fixed per-cell noise replaces the reference's linear scan.
@@ -54,7 +54,7 @@ pub fn opposite(d: u2) u2 {
 }
 
 /// For each direction and pattern, the patterns allowed in the
-/// neighbouring cell that way. The relation must be symmetric:
+/// neighboring cell that way. The relation must be symmetric:
 /// b is in list(d, a) exactly when a is in list(opposite(d), b).
 pub const Propagator = struct {
     pattern_count: u32,
@@ -287,7 +287,7 @@ fn clear(s: *Solver, gpa: Allocator, random: std.Random) !bool {
     for (0..s.observed.len) |i| {
         var needs_support: [4]bool = @splat(false);
         if (!s.onBoundary(i)) {
-            for (&needs_support, 0..) |*o, d| o.* = s.neighbour(@intCast(i), opposite(@intCast(d))) != null;
+            for (&needs_support, 0..) |*o, d| o.* = s.neighbor(@intCast(i), opposite(@intCast(d))) != null;
         }
         for (0..t_count) |t| {
             const k = i * t_count + t;
@@ -351,7 +351,7 @@ fn ban(s: *Solver, cell: usize, t: usize) bool {
     return s.sums_of_ones[cell] > 0;
 }
 
-fn neighbour(s: *const Solver, cell: u32, d: u2) ?u32 {
+fn neighbor(s: *const Solver, cell: u32, d: u2) ?u32 {
     const w: i32 = @intCast(s.width);
     const h: i32 = @intCast(s.height);
     var x = @as(i32, @intCast(cell % s.width)) + dx[d];
@@ -372,7 +372,7 @@ fn propagate(s: *Solver, gpa: Allocator) !bool {
         const b = s.stack[s.stack_len];
         for (0..4) |d_index| {
             const d: u2 = @intCast(d_index);
-            const cell2 = s.neighbour(b.cell, d) orelse continue;
+            const cell2 = s.neighbor(b.cell, d) orelse continue;
             for (s.propagator.list(d, b.pattern)) |t2| {
                 const w = @as(usize, cell2) * t_count + t2;
                 if (!s.wave[w]) continue;
@@ -391,12 +391,12 @@ fn propagate(s: *Solver, gpa: Allocator) !bool {
 }
 
 fn testAgrees(_: void, d: u2, a: u32, b: u32) bool {
-    // Two patterns on a line: 0 may only neighbour 1 east-west, anything goes north-south.
+    // Two patterns on a line: 0 may only neighbor 1 east-west, anything goes north-south.
     if (d == 1 or d == 3) return a != b;
     return true;
 }
 
-test "Solver: two-colour stripes alternate horizontally" {
+test "Solver: two-color stripes alternate horizontally" {
     const gpa = std.testing.allocator;
     var prop: Propagator = try .build(gpa, 2, {}, testAgrees);
     defer prop.deinit(gpa);

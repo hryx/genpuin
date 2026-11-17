@@ -20,7 +20,7 @@ const exported = [_][]const u8{
     "cosh", "tanh", "exp", "log",  "log2", "log10", "pow",   "fmod",
 };
 
-/// Every Lua flavour calls these, so the binary must define them.
+/// Every Lua flavor calls these, so the binary must define them.
 const always = [_][]const u8{ "sin", "pow" };
 
 /// Results that differ between libms. Each also stands for its f and l
@@ -179,7 +179,7 @@ pub fn main(init: std.process.Init) !void {
     }
     if (r.ok()) return;
 
-    std.debug.print("math guard: {s} does not run genpuin's maths for every script maths call.\n", .{exe});
+    std.debug.print("math guard: {s} does not run genpuin's math for every script math call.\n", .{exe});
     for (exported, 0..) |name, i| {
         if (r.nameOk(i)) continue;
         if (r.address[i] == null) {

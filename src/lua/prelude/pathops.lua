@@ -333,7 +333,7 @@ local function reversedShape(s)
 end
 
 -- Reorder line work to cut pen-up travel for plotters: greedy nearest
--- neighbour on a grid of endpoints, then bounded 2-opt. Paths are flipped
+-- neighbor on a grid of endpoints, then bounded 2-opt. Paths are flipped
 -- where that helps. list holds lines, polylines and polygons. opts.start =
 -- pen position (default {0, 0}), opts.budget = 2-opt move evaluations
 -- (default 4e6). Returns the reordered list, then the travel distance

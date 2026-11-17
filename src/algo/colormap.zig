@@ -1,4 +1,4 @@
-//! Affine colour maps fitted to {from, to} colour pairs. Up to three
+//! Affine color maps fitted to {from, to} color pairs. Up to three
 //! pairs give a per-channel linear fit with no cross-channel terms.
 //! Four or more give the minimum-norm 3x4 affine matrix through the
 //! pseudoinverse, x = A^T (A A^T)^-1 t.

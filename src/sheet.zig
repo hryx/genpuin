@@ -1,5 +1,5 @@
-//! Contact sheets: a grid of variation renders, each labelled with its
-//! --vary number so a favourite can be re-rendered on its own.
+//! Contact sheets: a grid of variation renders, each labeled with its
+//! --vary number so a favorite can be re-rendered on its own.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

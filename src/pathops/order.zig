@@ -1,10 +1,10 @@
 //! Plotter path planning: reorder and flip paths to cut pen-up travel,
 //! and join paths whose ends meet.
 //!
-//! Ordering is greedy nearest neighbour over a grid of path endpoints,
+//! Ordering is greedy nearest neighbor over a grid of path endpoints,
 //! then 2-opt moves (Croes, "A method for solving traveling-salesman
 //! problems", Operations Research 6, 1958) that reverse a run of paths,
-//! tried only against each path's nearest neighbours and capped by a
+//! tried only against each path's nearest neighbors and capped by a
 //! budget of move evaluations.
 
 const std = @import("std");
@@ -108,8 +108,8 @@ pub const Options = struct {
     start: Vec2 = .{ 0, 0 },
     /// Upper bound on 2-opt move evaluations.
     budget: u64 = 4_000_000,
-    /// Neighbours per path that 2-opt tries.
-    neighbours: u32 = 10,
+    /// Neighbors per path that 2-opt tries.
+    neighbors: u32 = 10,
 };
 
 pub const Order = struct {
@@ -151,8 +151,8 @@ pub fn orderPaths(gpa: Allocator, ends: []const [2]Vec2, opts: Options) !Order {
             pts[2 * i + 1] = e[1];
         }
         try greedy(arena, &plan, pts);
-        const near = try neighbours(arena, pts, opts.neighbours);
-        plan.twoOpt(near, opts.neighbours, opts.budget);
+        const near = try neighbors(arena, pts, opts.neighbors);
+        plan.twoOpt(near, opts.neighbors, opts.budget);
     }
     return .{ .order = plan.seq, .reversed = plan.rev, .travel_before = before, .travel_after = plan.travel() };
 }
@@ -293,7 +293,7 @@ const NearCtx = struct {
 };
 
 /// Up to k nearest other paths to each path's tail, padded with maxInt.
-fn neighbours(arena: Allocator, pts: []const Vec2, k: u32) ![]u32 {
+fn neighbors(arena: Allocator, pts: []const Vec2, k: u32) ![]u32 {
     const n = pts.len / 2;
     var grid: PointGrid = try .init(arena, pts, 0);
     const out = try arena.alloc(u32, n * k);

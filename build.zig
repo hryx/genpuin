@@ -5,7 +5,7 @@ const Lang = enum { lua51, lua52, lua53, lua54, lua55, luajit };
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
-    const lang = b.option(Lang, "lang", "Lua flavour to embed (default luajit)") orelse .luajit;
+    const lang = b.option(Lang, "lang", "Lua flavor to embed (default luajit)") orelse .luajit;
 
     const zlua_dep = b.dependency("zlua", .{
         .target = target,
@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
     run.addPassthruArgs();
     b.step("run", "Run genpuin with the given arguments").dependOn(&run.step);
 
-    const test_step = b.step("test", "Run the Zig unit tests, the Lua tests and the maths guard");
+    const test_step = b.step("test", "Run the Zig unit tests, the Lua tests and the math guard");
     const core_tests = b.addTest(.{ .root_module = core_mod });
     test_step.dependOn(&b.addRunArtifact(core_tests).step);
     const exe_tests = b.addTest(.{ .root_module = exe_mod });

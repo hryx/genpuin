@@ -1,7 +1,7 @@
 //! Line simplification: Ramer-Douglas-Peucker (Douglas and Peucker,
 //! "Algorithms for the reduction of the number of points required to
 //! represent a digitized line or its caricature", 1973) and
-//! Visvalingam-Whyatt ("Line generalisation by repeated elimination of
+//! Visvalingam-Whyatt ("Line generalization by repeated elimination of
 //! points", The Cartographic Journal 30, 1993).
 
 const std = @import("std");
@@ -14,7 +14,7 @@ const Vec2 = geom.Vec2;
 pub const Method = enum { distance, area };
 
 /// Simplify an open or closed path. `tolerance` is a distance. The area
-/// method drops points whose triangle with its neighbours has an area
+/// method drops points whose triangle with its neighbors has an area
 /// under tolerance squared. Endpoints of an open path always stay and a
 /// closed path keeps at least three points. Caller owns the result.
 pub fn simplify(gpa: Allocator, pts: []const Vec2, tolerance: f64, closed: bool, method: Method) ![]Vec2 {
@@ -141,7 +141,7 @@ fn visvalingam(gpa: Allocator, pts: []const Vec2, area_min: f64, closed: bool, k
         keep[e.index] = false;
         left -= 1;
         // Areas never drop below the last removed one, so a removal
-        // cannot make a neighbour cheaper than what came before it.
+        // cannot make a neighbor cheaper than what came before it.
         floor = @max(floor, e.area);
         const p = prev[e.index];
         const q = next[e.index];

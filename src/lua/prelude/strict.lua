@@ -8,7 +8,7 @@ local closest = import("core").closest
 
 local M = {}
 
--- Names a misspelt global might have meant: globals, and the locals and
+-- Names a misspelled global might have meant: globals, and the locals and
 -- upvalues of the function doing the read, which sits at level 3 from here.
 local function candidates(globals, declared)
     local names = {}

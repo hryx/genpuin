@@ -1,9 +1,9 @@
-//! Lua's `math` table on genpuin's maths, the same on every Lua flavour.
+//! Lua's `math` table on genpuin's math, the same on every Lua flavor.
 //!
 //! The transcendental math.* functions and `^` already run src/math.zig
 //! through the C symbols math_exports.zig provides. `install` evens out
-//! what the flavours offer. math.atan2, math.pow, math.log10, math.sinh,
-//! math.cosh and math.tanh are added where the flavour lacks them (Lua
+//! what the flavors offer. math.atan2, math.pow, math.log10, math.sinh,
+//! math.cosh and math.tanh are added where the flavor lacks them (Lua
 //! 5.3 and later). On PUC Lua math.log(x, b) is replaced by LuaJIT's
 //! log2(x) * (1 / log2(b)), so a based log gives the same bits on both.
 

@@ -1,7 +1,7 @@
 //! The simple tiled model of wave function collapse, after Maxim Gumin's
 //! SimpleTiledModel.cs (https://github.com/mxgmn/WaveFunctionCollapse).
 //!
-//! Adjacency comes from edge sockets instead of an explicit neighbour
+//! Adjacency comes from edge sockets instead of an explicit neighbor
 //! list. Each edge label is read clockwise around its tile, so two
 //! touching edges fit when one label is the reverse of the other. A
 //! palindrome like "a" or "aba" fits itself, "ab" fits only "ba".
@@ -60,7 +60,7 @@ pub const Edge = struct {
     }
 };
 
-/// Whether edge `a` of one tile may touch edge `b` of its neighbour.
+/// Whether edge `a` of one tile may touch edge `b` of its neighbor.
 pub fn fits(a: Edge, b: Edge) bool {
     if (a.socket.atomic != b.socket.atomic) return false;
     if (a.socket.atomic) return std.mem.eql(u8, a.socket.label, b.socket.label);
@@ -320,7 +320,7 @@ test "tiled: directional sockets chain in one direction" {
     try expectSocketsHold(&tiles, &r, true);
 }
 
-test "tiled: pre-collapsed cells are honoured" {
+test "tiled: pre-collapsed cells are honored" {
     const gpa = std.testing.allocator;
     const constraints = [_]Constraint{
         .{ .x = 0, .y = 0, .tile = 4 },

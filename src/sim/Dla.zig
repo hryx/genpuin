@@ -3,7 +3,7 @@
 //! as long as the gap to the nearest particle allows, so they cross empty
 //! space fast and slow to a fraction of a radius near the cluster. On
 //! contact a walker snaps to exactly touch the particle it hit, which
-//! becomes its parent. A grid of linked lists finds neighbours.
+//! becomes its parent. A grid of linked lists finds neighbors.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

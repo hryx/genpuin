@@ -7,7 +7,7 @@ local check = T.check
 local rgb = T.rgb
 
 ------------------------------------------------------------
--- Test 1: socket rule holds for every neighbour pair
+-- Test 1: socket rule holds for every neighbor pair
 ------------------------------------------------------------
 print("Test 1: pipe tiles connect")
 

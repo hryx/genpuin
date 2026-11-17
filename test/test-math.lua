@@ -1,7 +1,7 @@
--- test-math.lua: genpuin's maths, seen from Lua, against the Zig side
+-- test-math.lua: genpuin's math, seen from Lua, against the Zig side
 -- Every math.* transcendental and the ^ operator must give the same bits
 -- as src/math.zig computed in Zig (testing.call), in the interpreter and
--- in compiled traces, on every Lua flavour. The golden table pins the
+-- in compiled traces, on every Lua flavor. The golden table pins the
 -- exact bits so drift on any platform fails.
 
 local T = require("test.testkit")
@@ -307,7 +307,7 @@ local hardSet = {sin = "trig", cos = "trig", tan = "trig", asin = "asin", acos =
 
 -- Park-Miller, exact in doubles and in 5.3+ integers alike. Inputs are
 -- built from it with exact arithmetic only, so they do not depend on the
--- maths under test.
+-- math under test.
 local seed = 12345
 local function u()
     seed = (seed * 16807) % 2147483647
@@ -401,7 +401,7 @@ end
 ------------------------------------------------------------
 -- A polynomial hash of the bits of all 400 results per function. Like
 -- the golden table below, a failure after a Zig upgrade means the
--- toolchain's maths changed, not that the test is wrong.
+-- toolchain's math changed, not that the test is wrong.
 local function digest(values)
     local h = 0
     for i = 1, #values do
@@ -478,9 +478,9 @@ end
 ------------------------------------------------------------
 -- Golden bits: {function, x, y, result}
 ------------------------------------------------------------
--- These pin the exact results of the maths genpuin links, compiler-rt and
+-- These pin the exact results of the math genpuin links, compiler-rt and
 -- std.math from Zig 0.17. A failure after a toolchain upgrade means the
--- maths changed, not that the test is wrong: check the change is
+-- math changed, not that the test is wrong: check the change is
 -- intended, then regenerate the table. Each function has rows where
 -- macOS's libm gives a different last bit, so a fall back to the
 -- platform libm fails here too.
@@ -1019,9 +1019,9 @@ check(string.format("%d golden results", #golden), #fails == 0, table.concat(fai
 -- traces and constant folding. PUC Lua takes fmod(a, b) and adds b when
 -- the signs disagree. The two differ in the low bits whenever the
 -- remainder is inexact, and on signed zeros and infinite divisors, so
--- each flavour is checked against its own formula in src/math.zig. The
+-- each flavor is checked against its own formula in src/math.zig. The
 -- golden rows are inputs where both agree. gen.mod gives the PUC result
--- on every flavour, see test-mod.lua.
+-- on every flavor, see test-mod.lua.
 local function modRef(a, b)
     return call(jit and "luajitMod" or "mod", a, b)
 end
@@ -1110,7 +1110,7 @@ else
 end
 
 ------------------------------------------------------------
--- The same functions exist on every flavour
+-- The same functions exist on every flavor
 ------------------------------------------------------------
 print("\nmath table")
 for _, name in ipairs({"atan2", "pow", "log10", "sinh", "cosh", "tanh"}) do

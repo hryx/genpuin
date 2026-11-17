@@ -75,7 +75,7 @@ pub fn downsample(self: *const Raster, gpa: Allocator, factor: u32) !Raster {
     return out;
 }
 
-/// Nearest-neighbour resize to an exact size. Used for contact sheet tiles.
+/// Nearest-neighbor resize to an exact size. Used for contact sheet tiles.
 pub fn resizeBox(self: *const Raster, gpa: Allocator, w: u32, h: u32) !Raster {
     var out: Raster = try .init(gpa, w, h, .{ 0, 0, 0 });
     const sx: f32 = @as(f32, @floatFromInt(self.w)) / @as(f32, @floatFromInt(w));

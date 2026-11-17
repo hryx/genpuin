@@ -213,7 +213,7 @@ pub fn bezierTangent(c: Cubic, t: f64) Vec2 {
 }
 
 /// The Bezier form of the uniform Catmull-Rom segment from p1 to p2,
-/// with p0 and p3 as neighbours.
+/// with p0 and p3 as neighbors.
 pub fn catmullRomToBezier(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2) Cubic {
     return .{
         p1,
@@ -224,7 +224,7 @@ pub fn catmullRomToBezier(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2) Cubic {
 }
 
 /// One Bezier segment per gap between points of a Catmull-Rom spline.
-/// The end points are doubled as their own neighbours.
+/// The end points are doubled as their own neighbors.
 pub fn splineToBeziers(gpa: Allocator, pts: []const Vec2) ![]Cubic {
     if (pts.len < 2) return gpa.alloc(Cubic, 0);
     const out = try gpa.alloc(Cubic, pts.len - 1);

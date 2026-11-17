@@ -1,7 +1,7 @@
 //! Hatch fills and line masking. Hatching scans the region with parallel
 //! lines (an active edge list over the contours rotated so the lines run
 //! along x) and keeps the spans inside under the fill rule. Connected
-//! hatching joins the spans of neighbouring lines end to end into
+//! hatching joins the spans of neighboring lines end to end into
 //! zigzags when the joining stroke stays inside, near the boundary.
 
 const std = @import("std");

@@ -42,7 +42,7 @@ local function ellipsePoints(c, rx, ry)
     return pts
 end
 
--- Corner order and arc parameterisation follow the renderer's rounded rect.
+-- Corner order and arc parameterization follow the renderer's rounded rect.
 local function rectPoints(shape)
     local x, y, w, h = shape.x, shape.y, shape.w, shape.h
     local rx0, ry0 = shape.rx or 0, shape.ry or 0

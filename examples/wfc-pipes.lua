@@ -82,7 +82,7 @@ local geometry = {
     reducer = {{"line", 1, 0, 0, 0, 1}, {"line", 2, 0, -1, 0, 0.05}, {"dot", 2, 0, 0.05, 0.5}},
 }
 
--- Strokes that end on the cell edge run a hair past it so neighbouring
+-- Strokes that end on the cell edge run a hair past it so neighboring
 -- cells overlap instead of leaving an antialiased seam.
 local function bleed(x)
     if x == 1 then return 1.04 elseif x == -1 then return -1.04 end

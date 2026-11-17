@@ -1,10 +1,10 @@
 //! Differential growth of a polyline, after Anders Hoff's differential
 //! line (inconvergent.net, 2016). Each step every node is pushed away
-//! from non-neighbours within a radius, pulled toward its two neighbours
+//! from non-neighbors within a radius, pulled toward its two neighbors
 //! to a rest length, smoothed toward their midpoint and jittered. Edges
 //! longer than max_edge are then split. Repulsion between nodes along
 //! the curve stretches it, splitting adds nodes, and the line buckles.
-//! Neighbour queries go through a grid rebuilt by counting sort each step.
+//! Neighbor queries go through a grid rebuilt by counting sort each step.
 
 const std = @import("std");
 const math = @import("../math.zig");
@@ -31,7 +31,7 @@ prng: std.Random.DefaultPrng,
 pub const Options = struct {
     closed: bool = true,
     max_edge: f64 = 4,
-    /// Spring length between neighbours. Defaults to half of max_edge.
+    /// Spring length between neighbors. Defaults to half of max_edge.
     rest_length: ?f64 = null,
     repel_radius: f64 = 10,
     repel: f64 = 0.6,
@@ -149,7 +149,7 @@ fn buildGrid(self: *DifferentialGrowth, gpa: Allocator) !void {
     self.grid = g;
 }
 
-fn neighbours(self: *const DifferentialGrowth, i: usize) [2]?usize {
+fn neighbors(self: *const DifferentialGrowth, i: usize) [2]?usize {
     const n = self.nodes.items.len;
     const prev: ?usize = if (i > 0) i - 1 else if (self.opts.closed) n - 1 else null;
     const next: ?usize = if (i + 1 < n) i + 1 else if (self.opts.closed) 0 else null;
@@ -166,7 +166,7 @@ fn computeForces(self: *DifferentialGrowth, gpa: Allocator) !void {
     const radius2 = o.repel_radius * o.repel_radius;
     for (nodes, self.force.items, 0..) |p, *f, i| {
         f.* = .{ 0, 0 };
-        const nb = self.neighbours(i);
+        const nb = self.neighbors(i);
         for (nb) |maybe| if (maybe) |j| {
             const q = nodes[j];
             const d = common.dist(p, q);
