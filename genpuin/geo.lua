@@ -1,3 +1,5 @@
+local algo = require("genpuin.core").algo
+
 local M = {}
 
 -- Create a 2D vector.
@@ -99,122 +101,47 @@ function M.compound(contours)
 end
 
 -- Convert Catmull-Rom segment (p0,p1,p2,p3) to cubic bezier control points.
--- The curve is drawn between p1 and p2; p0 and p3 are context points.
+-- The curve is drawn between p1 and p2. p0 and p3 are context points.
 -- Uses tau=0.5 (standard Catmull-Rom).
-function M.catmullRomToBezier(p0, p1, p2, p3)
-    return {
-        {p1[1], p1[2]},
-        {p1[1] + (p2[1] - p0[1]) / 6, p1[2] + (p2[2] - p0[2]) / 6},
-        {p2[1] - (p3[1] - p1[1]) / 6, p2[2] - (p3[2] - p1[2]) / 6},
-        {p2[1], p2[2]},
-    }
-end
+M.catmullRomToBezier = algo.catmullRomToBezier
 
 -- Convert a spline's points into a list of cubic bezier segments.
 -- Each segment is {b0, b1, b2, b3}.
 -- First/last points are duplicated as phantom control points.
-function M.splineToBeziers(points)
-    if #points < 2 then return {} end
-    local pts = {}
-    -- Duplicate first and last as phantom control points
-    pts[1] = points[1]
-    for i = 1, #points do pts[i + 1] = points[i] end
-    pts[#pts + 1] = points[#points]
-    local segments = {}
-    for i = 1, #pts - 3 do
-        segments[#segments + 1] = M.catmullRomToBezier(pts[i], pts[i+1], pts[i+2], pts[i+3])
-    end
-    return segments
-end
+M.splineToBeziers = algo.splineToBeziers
 
 -- Evaluate a cubic bezier at parameter t, returning the point.
-function M.bezierPoint(p0, p1, p2, p3, t)
-    local u = 1 - t
-    return {
-        u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1],
-        u*u*u*p0[2] + 3*u*u*t*p1[2] + 3*u*t*t*p2[2] + t*t*t*p3[2],
-    }
-end
+M.bezierPoint = algo.bezierPoint
 
 -- Tangent vector of a cubic bezier at parameter t.
-function M.bezierTangent(p0, p1, p2, p3, t)
-    local u = 1 - t
-    return {
-        3*u*u*(p1[1]-p0[1]) + 6*u*t*(p2[1]-p1[1]) + 3*t*t*(p3[1]-p2[1]),
-        3*u*u*(p1[2]-p0[2]) + 6*u*t*(p2[2]-p1[2]) + 3*t*t*(p3[2]-p2[2]),
-    }
-end
+M.bezierTangent = algo.bezierTangent
 
--- Extract points from any point-based shape, returns nil for circles/arcs
-local function getPoints(shape)
-    if shape.type == "polyline" or shape.type == "polygon" then
-        return shape.points
+-- Points of a polyline, polygon or line, and whether the path is closed.
+-- Nil for shapes without a point list.
+function M.pathPoints(shape)
+    if shape.type == "polyline" then
+        return shape.points, false
+    elseif shape.type == "polygon" then
+        return shape.points, true
     elseif shape.type == "line" then
-        return {shape.a, shape.b}
+        return {shape.a, shape.b}, false
     end
-    return nil
-end
-
--- Compute cumulative segment lengths along a point list
-local function cumLengths(pts)
-    local lengths = {0}
-    local total = 0
-    for i = 2, #pts do
-        local dx = pts[i][1] - pts[i-1][1]
-        local dy = pts[i][2] - pts[i-1][2]
-        total = total + math.sqrt(dx * dx + dy * dy)
-        lengths[i] = total
-    end
-    return lengths, total
-end
-
--- Interpolate along a point list at distance d from start
-local function pointAtDist(pts, lengths, d)
-    for i = 2, #pts do
-        if d <= lengths[i] then
-            local segLen = lengths[i] - lengths[i-1]
-            if segLen == 0 then return {pts[i][1], pts[i][2]} end
-            local t = (d - lengths[i-1]) / segLen
-            return {
-                pts[i-1][1] + (pts[i][1] - pts[i-1][1]) * t,
-                pts[i-1][2] + (pts[i][2] - pts[i-1][2]) * t,
-            }
-        end
-    end
-    return {pts[#pts][1], pts[#pts][2]}
+    return nil, false
 end
 
 -- Sample n evenly-spaced points along a path, returning a polyline.
+-- Shapes without at least two points are returned unchanged.
 function M.sampleAlong(shape, n)
-    local pts = getPoints(shape)
+    local pts = M.pathPoints(shape)
     if not pts or #pts < 2 then return shape end
-    local lengths, total = cumLengths(pts)
-    local out = {}
-    for i = 0, n - 1 do
-        local d = (i / (n - 1)) * total
-        table.insert(out, pointAtDist(pts, lengths, d))
-    end
-    return M.polyline(out)
+    return M.polyline(algo.sampleAlong(pts, n))
 end
 
 -- Subdivide a shape by inserting midpoints between each pair of points.
 function M.subdivide(shape, iterations)
-    iterations = iterations or 1
-    local pts = getPoints(shape)
+    local pts, closed = M.pathPoints(shape)
     if not pts or #pts < 2 then return shape end
-    local closed = shape.type == "polygon"
-    for iter = 1, iterations do
-        local out = {}
-        local count = closed and #pts or #pts - 1
-        for i = 1, count do
-            local a = pts[i]
-            local b = pts[(i % #pts) + 1]
-            table.insert(out, a)
-            table.insert(out, {(a[1] + b[1]) * 0.5, (a[2] + b[2]) * 0.5})
-        end
-        if not closed then table.insert(out, pts[#pts]) end
-        pts = out
-    end
+    pts = algo.subdivide(pts, closed, iterations or 1)
     if closed then return M.polygon(pts) end
     return M.polyline(pts)
 end

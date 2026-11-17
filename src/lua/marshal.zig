@@ -248,37 +248,19 @@ fn readStyle(ctx: *Ctx, index_in: i32) !scene.Style {
     return st;
 }
 
-/// colorMap tables are solved by the Lua colormap module, the same code
-/// the SVG writer uses, so both outputs agree.
+/// colorMap tables are solved by the Zig solver behind colormap.lua, so
+/// raster and SVG output agree. Matrices that print alike at the six
+/// significant digits the SVG writer groups by share a key.
 fn readColorMap(ctx: *Ctx, index_in: i32) !scene.ColorMap {
-    const lua = ctx.lua;
-    const index = lua.absIndex(index_in);
-    _ = lua.getGlobal("require");
-    _ = lua.pushStringZ("genpuin.colormap");
-    lua.call(.{ .args = 1, .results = 1 });
-    const mod = lua.absIndex(-1);
-    defer lua.pop(1);
-
-    _ = lua.getField(mod, "solve");
-    lua.pushValue(index);
-    lua.call(.{ .args = 1, .results = 1 });
-    const matrix = lua.absIndex(-1);
-    defer lua.pop(1);
-    if (!lua.isTable(matrix)) lua.raiseErrorStr("colorMap could not be solved", .{});
-
+    const bind_algo = @import("bind_algo.zig");
+    const m = try bind_algo.solveColorMap(ctx.lua, index_in);
     var cm: scene.ColorMap = .{ .m = undefined, .key = 0 };
-    for (0..3) |r| {
-        _ = util.rawGet(lua, matrix, r + 1);
-        for (0..4) |c| cm.m[r][c] = @floatCast(util.numberAt(lua, -1, c + 1) orelse 0);
-        lua.pop(1);
-    }
-
-    _ = lua.getField(mod, "toSvgValues");
-    lua.pushValue(matrix);
-    lua.call(.{ .args = 1, .results = 1 });
-    const key_str = try ctx.arena.dupe(u8, lua.toString(-1) catch "");
-    lua.pop(1);
-    const gop = try ctx.color_map_keys.getOrPut(ctx.arena, key_str);
+    var key: std.ArrayList(u8) = .empty;
+    for (m, 0..) |row, r| for (row, 0..) |v, c| {
+        cm.m[r][c] = @floatCast(v);
+        try key.print(ctx.arena, "{e:.5} ", .{v});
+    };
+    const gop = try ctx.color_map_keys.getOrPut(ctx.arena, key.items);
     if (!gop.found_existing) gop.value_ptr.* = ctx.color_map_keys.count() - 1;
     cm.key = gop.value_ptr.*;
     return cm;

@@ -1,179 +1,50 @@
-local compat = require("genpuin.compat")
-local core = require("genpuin.core")
-local bxor   = compat.bxor
-local lshift  = compat.lshift
-local rshift  = compat.rshift
+local algo = require("genpuin.core").algo
+local native = require("genpuin.compat").native
 
 local M = {}
 
--- xorshift32: fast, portable PRNG with 2^32-1 period.
--- All state values fit in doubles, works on every Lua version.
-local state = 1
+-- xorshift32 stream, one per Lua state, kept in Zig.
 
 -- Seed the random number generator.
--- With --vary N on the command line, N is mixed into every seed.
-function M.seed(n)
-    n = n + core.vary * 1000003
-    -- Mix the seed a bit and ensure non-zero state
-    state = bxor(math.floor(math.abs(n)) % 0x100000000, 0x12345678)
-    if state == 0 then state = 1 end
-    -- Warm up: discard first few values to diffuse the seed
-    for _ = 1, 8 do M.rand() end
-end
+-- With --vary N on the command line, N is mixed into every seed, and a
+-- script that never seeds behaves as if it called seed(0).
+M.seed = algo.seed
 
 -- Return a random number in [0, 1).
-function M.rand()
-    state = bxor(state, lshift(state, 13))
-    state = bxor(state, rshift(state, 17))
-    state = bxor(state, lshift(state, 5))
-    return state / 0x100000000  -- normalize to [0, 1)
-end
+M.rand = native.rand
 
 -- Return a random number in [lo, hi).
-function M.randRange(lo, hi)
-    return lo + M.rand() * (hi - lo)
-end
+M.randRange = native.randRange
 
 -- Return a random integer in [lo, hi] (inclusive).
-function M.randInt(lo, hi)
-    return lo + math.floor(M.rand() * (1 + hi - lo))
-end
+M.randInt = native.randInt
 
 -- Sample from a normal distribution with the given mean and stddev.
-function M.gaussian(mean, stddev)
-    local u1 = M.rand()
-    local u2 = M.rand()
-    local z = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
-    return mean + z * stddev
-end
+M.gaussian = native.gaussian
 
 -- Pick a random element from a list.
-function M.pick(list)
-    return list[M.randInt(1, #list)]
-end
+M.pick = algo.pick
 
 -- Return a shuffled copy of a list.
-function M.shuffle(list)
-    local out = {}
-    for i = 1, #list do out[i] = list[i] end
-    for i = #out, 2, -1 do
-        local j = M.randInt(1, i)
-        out[i], out[j] = out[j], out[i]
-    end
-    return out
-end
+M.shuffle = algo.shuffle
 
 -- Pick from a list with weighted probabilities.
-function M.weightedPick(list, weights)
-    local total = 0
-    for i = 1, #weights do total = total + weights[i] end
-    local r = M.rand() * total
-    local acc = 0
-    for i = 1, #list do
-        acc = acc + weights[i]
-        if r < acc then return list[i] end
-    end
-    return list[#list]
-end
+M.weightedPick = algo.weightedPick
 
 -- Return a random point uniformly distributed inside a circle.
-function M.randInCircle(center, r)
-    local angle = M.rand() * 2 * math.pi
-    local dist = r * math.sqrt(M.rand())
-    return {center[1] + dist * math.cos(angle),
-            center[2] + dist * math.sin(angle)}
-end
+M.randInCircle = algo.randInCircle
 
 -- Return a random point on the circumference of a circle.
-function M.randOnCircle(center, r)
-    local angle = M.rand() * 2 * math.pi
-    return {center[1] + r * math.cos(angle),
-            center[2] + r * math.sin(angle)}
-end
+M.randOnCircle = algo.randOnCircle
 
 -- Return a random point inside a rectangle.
-function M.randInRect(x, y, w, h)
-    return {x + M.rand() * w, y + M.rand() * h}
-end
+M.randInRect = algo.randInRect
 
 -- Poisson disk sampling using Bridson's algorithm.
--- bounds = {x, y, w, h}, minDist = minimum distance between points.
+-- bounds = {x, y, w, h}, minDist = minimum distance between points,
+-- maxAttempts = candidates tried around each point (default 30).
 function M.poissonDisk(bounds, minDist, maxAttempts)
-    maxAttempts = maxAttempts or 30
-    local bx, by, bw, bh = bounds[1], bounds[2], bounds[3], bounds[4]
-    local cellSize = minDist / math.sqrt(2)
-    local cols = math.ceil(bw / cellSize)
-    local rows = math.ceil(bh / cellSize)
-
-    -- grid stores point indices (0 = empty)
-    local grid = {}
-    for i = 0, cols * rows - 1 do grid[i] = 0 end
-
-    local points = {}
-    local active = {}
-
-    local function gridIdx(px, py)
-        local c = math.floor((px - bx) / cellSize)
-        local r = math.floor((py - by) / cellSize)
-        return r * cols + c
-    end
-
-    local function tooClose(px, py)
-        local c = math.floor((px - bx) / cellSize)
-        local r = math.floor((py - by) / cellSize)
-        for dr = -2, 2 do
-            for dc = -2, 2 do
-                local nc, nr = c + dc, r + dr
-                if nc >= 0 and nc < cols and nr >= 0 and nr < rows then
-                    local idx = grid[nr * cols + nc]
-                    if idx > 0 then
-                        local other = points[idx]
-                        local dx, dy = px - other[1], py - other[2]
-                        if dx * dx + dy * dy < minDist * minDist then
-                            return true
-                        end
-                    end
-                end
-            end
-        end
-        return false
-    end
-
-    -- seed with first point
-    local p0 = {bx + M.rand() * bw, by + M.rand() * bh}
-    table.insert(points, p0)
-    grid[gridIdx(p0[1], p0[2])] = #points
-    table.insert(active, #points)
-
-    while #active > 0 do
-        local ai = M.randInt(1, #active)
-        local pi = active[ai]
-        local pt = points[pi]
-        local found = false
-
-        for _ = 1, maxAttempts do
-            local angle = M.rand() * 2 * math.pi
-            local dist = minDist + M.rand() * minDist
-            local nx = pt[1] + math.cos(angle) * dist
-            local ny = pt[2] + math.sin(angle) * dist
-
-            if nx >= bx and nx < bx + bw and ny >= by and ny < by + bh then
-                if not tooClose(nx, ny) then
-                    table.insert(points, {nx, ny})
-                    grid[gridIdx(nx, ny)] = #points
-                    table.insert(active, #points)
-                    found = true
-                    break
-                end
-            end
-        end
-
-        if not found then
-            table.remove(active, ai)
-        end
-    end
-
-    return points
+    return algo.poissonDisk(bounds, minDist, maxAttempts or 30)
 end
 
 return M

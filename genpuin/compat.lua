@@ -1,87 +1,60 @@
--- Portable bitwise operations for Lua 5.1 / 5.2 / 5.3+ / LuaJIT
+-- Portability between Lua versions.
 --
--- Exports: band, bxor, rshift, lshift
--- All operate on 32-bit unsigned integers represented as Lua numbers.
+-- band, bxor, rshift and lshift operate on 32-bit unsigned integers held
+-- in Lua numbers and give the same results on every Lua version.
+--
+-- native holds the core.algo functions that scripts call in hot loops.
+-- On LuaJIT they are FFI calls into Zig, which compiled traces make
+-- directly. Elsewhere they are the plain core.algo functions.
+
+local algo = require("genpuin.core").algo
 
 local M = {}
 
--- Try to detect the runtime and pick the best available bit library.
+-- Bitwise and of two 32-bit unsigned integers.
+M.band = algo.band
+
+-- Bitwise exclusive or of two 32-bit unsigned integers.
+M.bxor = algo.bxor
+
+-- Logical right shift of a 32-bit unsigned integer by n bits.
+M.rshift = algo.rshift
+
+-- Left shift of a 32-bit unsigned integer by n bits, wrapping at 32 bits.
+M.lshift = algo.lshift
+
+local native = {
+    rand = algo.rand,
+    randRange = algo.randRange,
+    randInt = algo.randInt,
+    gaussian = algo.gaussian,
+    perlin = algo.perlin,
+    fbm = algo.fbm,
+}
+
 if jit then
-    -- LuaJIT: use the built-in bit library
-    local bit = require("bit")
-    M.band   = function(a, b) return bit.band(a, b) % 0x100000000 end
-    M.bxor   = function(a, b) return bit.bxor(a, b) % 0x100000000 end
-    M.rshift = function(a, n) return bit.rshift(a, n) % 0x100000000 end
-    M.lshift = function(a, n) return bit.lshift(a, n) % 0x100000000 end
-
-elseif _VERSION >= "Lua 5.3" then
-    -- Lua 5.3+: compile native operators from strings at runtime,
-    -- so this file's syntax stays valid on older Lua.
-    local load = load or loadstring
-    M.band   = load("return function(a, b) return (a & b) % 0x100000000 end")()
-    M.bxor   = load("return function(a, b) return (a ~ b) % 0x100000000 end")()
-    M.rshift = load("return function(a, n) return (a >> n) % 0x100000000 end")()
-    M.lshift = load("return function(a, n) return (a << n) % 0x100000000 end")()
-
-elseif _VERSION == "Lua 5.2" then
-    -- Lua 5.2: use the standard bit32 library
-    local bit32 = require("bit32")
-    M.band   = bit32.band
-    M.bxor   = bit32.bxor
-    M.rshift = bit32.rshift
-    M.lshift = bit32.lshift
-
-else
-    -- Lua 5.1 fallback: try LuaBitOp, then pure-math implementations
-    local ok, bit = pcall(require, "bit")
+    local ok, ffi = pcall(require, "ffi")
     if ok then
-        M.band   = function(a, b) return bit.band(a, b) % 0x100000000 end
-        M.bxor   = function(a, b) return bit.bxor(a, b) % 0x100000000 end
-        M.rshift = function(a, n) return bit.rshift(a, n) % 0x100000000 end
-        M.lshift = function(a, n) return bit.lshift(a, n) % 0x100000000 end
-    else
-        -- Pure-math fallbacks (correct for 32-bit unsigned values)
-        local floor = math.floor
-        local MOD = 0x100000000  -- 2^32
-
-        M.rshift = function(a, n)
-            return floor(a / (2 ^ n)) % MOD
-        end
-
-        M.lshift = function(a, n)
-            return (a * (2 ^ n)) % MOD
-        end
-
-        M.band = function(a, b)
-            local result = 0
-            local bit = 1
-            for _ = 1, 32 do
-                if a % 2 >= 1 and b % 2 >= 1 then
-                    result = result + bit
-                end
-                a = floor(a / 2)
-                b = floor(b / 2)
-                bit = bit * 2
-            end
-            return result
-        end
-
-        M.bxor = function(a, b)
-            local result = 0
-            local bit = 1
-            for _ = 1, 32 do
-                local ab = a % 2 >= 1
-                local bb = b % 2 >= 1
-                if ab ~= bb then
-                    result = result + bit
-                end
-                a = floor(a / 2)
-                b = floor(b / 2)
-                bit = bit * 2
-            end
-            return result
+        local p = algo.ffi()
+        local st = ffi.cast("void *", p.state)
+        local rand = ffi.cast("double (*)(void *)", p.rand)
+        local randRange = ffi.cast("double (*)(void *, double, double)", p.randRange)
+        local randInt = ffi.cast("double (*)(void *, double, double)", p.randInt)
+        local gaussian = ffi.cast("double (*)(void *, double, double)", p.gaussian)
+        local perlin = ffi.cast("double (*)(void *, double, double)", p.perlin)
+        local fbm = ffi.cast("double (*)(void *, double, double, double, double, double)", p.fbm)
+        native.rand = function() return rand(st) end
+        native.randRange = function(lo, hi) return randRange(st, lo, hi) end
+        native.randInt = function(lo, hi) return randInt(st, lo, hi) end
+        native.gaussian = function(mean, stddev) return gaussian(st, mean, stddev) end
+        native.perlin = function(x, y) return perlin(st, x, y) end
+        native.fbm = function(x, y, octaves, lacunarity, gain)
+            return fbm(st, x, y, octaves, lacunarity, gain)
         end
     end
 end
+
+-- Hot core.algo entry points, see the top of this file.
+M.native = native
 
 return M

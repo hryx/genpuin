@@ -1,6 +1,7 @@
 local geo = require("genpuin.geo")
 local rand = require("genpuin.rand")
 local xform = require("genpuin.xform")
+local algo = require("genpuin.core").algo
 
 local M = {}
 
@@ -67,12 +68,8 @@ end
 
 -- Call fn(pos, angle, i) at n points evenly spaced around a circle.
 function M.radial(n, center, radius, fn)
-    for i = 0, n - 1 do
-        local angle = (i / n) * 2 * math.pi
-        local x = center[1] + radius * math.cos(angle)
-        local y = center[2] + radius * math.sin(angle)
-        fn({x, y}, angle, i)
-    end
+    local pts, angles = algo.radial(n, center, radius)
+    for i = 1, #pts do fn(pts[i], angles[i], i - 1) end
 end
 
 -- Call fn(pos, i) at n random points within bounds {x, y, w, h}.
@@ -85,44 +82,21 @@ function M.scatter(n, bounds, fn)
 end
 
 -- Call fn(pos, angle, i) at n points along a spiral.
--- opts: angle (increment, default GOLDEN_ANGLE), spacing, growth ("sqrt" or "linear").
+-- opts: angle (increment, default GOLDEN_ANGLE), spacing (default 5),
+-- growth ("sqrt" or "linear", default "sqrt").
 function M.spiral(n, center, opts, fn)
     opts = opts or {}
-    local angleInc = opts.angle or M.GOLDEN_ANGLE
-    local spacing = opts.spacing or 5
-    local growth = opts.growth or "sqrt"
-
-    for i = 0, n - 1 do
-        local a = i * angleInc
-        local r
-        if growth == "sqrt" then
-            r = spacing * math.sqrt(i)
-        else -- "linear"
-            r = spacing * i
-        end
-        local x = center[1] + r * math.cos(a)
-        local y = center[2] + r * math.sin(a)
-        fn({x, y}, a, i)
-    end
+    local pts, angles = algo.spiral(n, center, opts.angle or M.GOLDEN_ANGLE,
+        opts.spacing or 5, opts.growth or "sqrt")
+    for i = 1, #pts do fn(pts[i], angles[i], i - 1) end
 end
 
 -- Call fn(pos, tangentAngle, t) at n evenly-spaced points along a path.
 function M.alongPath(path, n, fn)
-    -- Sample n+2 points so we can compute tangents at endpoints
-    local sampled = geo.sampleAlong(path, n + 2)
-    local pts = sampled.points
-    if not pts or #pts < 3 then return end
-
-    for i = 2, #pts - 1 do
-        local prev = pts[i - 1]
-        local curr = pts[i]
-        local next = pts[i + 1]
-        local dx = next[1] - prev[1]
-        local dy = next[2] - prev[2]
-        local tangentAngle = math.atan2(dy, dx)
-        local t = (i - 2) / math.max(n - 1, 1)
-        fn(curr, tangentAngle, t)
-    end
+    local pts = geo.pathPoints(path)
+    if not pts or #pts < 2 then return end
+    local pos, angles, ts = algo.alongPath(pts, n)
+    for i = 1, #pos do fn(pos[i], angles[i], ts[i]) end
 end
 
 -- Recursively subdivide a rectangle. fn(x, y, w, h, depth) should return

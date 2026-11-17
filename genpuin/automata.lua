@@ -1,42 +1,12 @@
+local algo = require("genpuin.core").algo
+
 local M = {}
 
 -- 1D elementary cellular automaton (Wolfram rules 0-255).
 -- Returns all generations as rows[generation][cell], values 0 or 1.
 -- Toroidal (wrapping) boundary.
 -- init: optional 1D array for initial state (default: single 1 at center).
-function M.elementary(rule, width, steps, init)
-    -- Build lookup: 3-bit neighborhood (left, center, right) -> output bit
-    local lookup = {}
-    for i = 0, 7 do
-        lookup[i] = (math.floor(rule / (2 ^ i)) % 2)
-    end
-
-    -- Initialize first row
-    local row = {}
-    if init then
-        for i = 1, width do row[i] = init[i] or 0 end
-    else
-        for i = 1, width do row[i] = 0 end
-        row[math.ceil(width / 2)] = 1
-    end
-
-    local rows = {row}
-
-    for _ = 1, steps do
-        local prev = rows[#rows]
-        local next = {}
-        for i = 1, width do
-            local l = prev[((i - 2) % width) + 1]
-            local c = prev[i]
-            local r = prev[(i % width) + 1]
-            local idx = l * 4 + c * 2 + r
-            next[i] = lookup[idx]
-        end
-        rows[#rows + 1] = next
-    end
-
-    return rows
-end
+M.elementary = algo.elementary
 
 -- Evolve a 2D grid by one generation.
 -- grid: [y][x] 2D array of values.
