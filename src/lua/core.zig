@@ -74,3 +74,7 @@ fn exportCanvas(lua: *Lua) !i32 {
     try genpuin.image_io.write(lua.allocator(), h.io, &r, path, opts.depth);
     return 0;
 }
+
+test {
+    inline for (groups) |g| _ = g[1];
+}
