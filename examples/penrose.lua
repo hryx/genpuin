@@ -5,8 +5,8 @@ local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f0d020"))
 
-local psi = (math.sqrt(5) - 1) / 2     -- ≈ 0.618
-local psi2 = 1 - psi                    -- ≈ 0.382
+local psi = (math.sqrt(5) - 1) / 2
+local psi2 = 1 - psi
 local cx, cy = W / 2, H / 2
 local initR = 380
 local clipR = 350
@@ -15,11 +15,9 @@ local nSub = 7
 -- Type 0 = BtileL: obtuse Robinson triangle (108° at B, base 36° at A,C)
 -- Type 1 = BtileS: acute Robinson triangle (36° at B, base 72° at A,C)
 
-local thickFill = gen.hex("#2060a0")    -- blue (thick rhombus)
-local thinFill = gen.hex("#d04838")     -- red (thin rhombus)
+local thickFill = gen.hex("#2060a0")
+local thinFill = gen.hex("#d04838")
 
--- Initial star: 10 BtileS with 36° apex B at center, A and C on perimeter
--- (Matches Preshing's "wheel" configuration: 10 × 36° = 360°)
 local tris = {}
 for i = 0, 9 do
     local a_angle = (2 * i - 1) * math.pi / 10
@@ -33,18 +31,17 @@ for i = 0, 9 do
     end
 end
 
--- P3 Robinson triangle subdivision
 for iter = 1, nSub do
     local nxt = {}
     for _, tri in ipairs(tris) do
         local A, B, C = tri.a, tri.b, tri.c
-        if tri.t == 0 then  -- BtileL → 3 children
+        if tri.t == 0 then
             local D = {psi2 * A[1] + psi * C[1], psi2 * A[2] + psi * C[2]}
             local E = {psi2 * A[1] + psi * B[1], psi2 * A[2] + psi * B[2]}
             nxt[#nxt + 1] = {t = 0, a = D, b = E, c = A}
             nxt[#nxt + 1] = {t = 1, a = E, b = D, c = B}
             nxt[#nxt + 1] = {t = 0, a = C, b = D, c = B}
-        else  -- BtileS → 2 children
+        else
             local D = {psi * A[1] + psi2 * B[1], psi * A[2] + psi2 * B[2]}
             nxt[#nxt + 1] = {t = 1, a = D, b = C, c = A}
             nxt[#nxt + 1] = {t = 0, a = C, b = D, c = B}
@@ -75,7 +72,6 @@ for _, tri in ipairs(tris) do
     end
 end
 
--- Shrink each shape toward its centroid to reveal background gaps
 local shrink = 0.92
 
 local function shrinkPoly(pts)
@@ -89,7 +85,6 @@ local function shrinkPoly(pts)
     return out, mx, my
 end
 
--- Draw rhombi
 for _, pair in ipairs(order) do
     if #pair == 2 then
         local t1, t2 = pair[1], pair[2]

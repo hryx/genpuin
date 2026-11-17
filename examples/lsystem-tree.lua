@@ -6,7 +6,6 @@ local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0a0e14"))
 gen.seed(77)
 
--- Stochastic branching plant
 -- F = draw forward, + = turn left, - = turn right, [ = push, ] = pop
 local axiom = "F"
 local rules = {
@@ -18,11 +17,10 @@ local rules = {
 }
 local str = gen.rewrite(axiom, rules, 4)
 
--- Draw the tree using turtle graphics
 local p = gen.pen(c)
 local startX, startY = W / 2, H - 60
 p:moveTo({startX, startY})
-p:heading(-math.pi / 2)  -- point upward
+p:heading(-math.pi / 2)
 
 local stack = {}
 local stepLen = 11
@@ -31,7 +29,6 @@ local depth = 0
 
 for ch in str:gmatch(".") do
     if ch == "F" then
-        -- Color fades from brown trunk to green tips
         local t = depth / 8
         local hue = gen.lerp(0.08, 0.3, math.min(t, 1))
         local sat = gen.lerp(0.4, 0.7, math.min(t, 1))
@@ -59,7 +56,6 @@ for ch in str:gmatch(".") do
 end
 p:stroke()
 
--- Scatter small leaf dots at branch tips
 gen.seed(77)
 local tipStr = gen.rewrite(axiom, rules, 4)
 p:moveTo({startX, startY})

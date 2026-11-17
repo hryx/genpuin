@@ -22,7 +22,6 @@ sky:fill(function(x, y)
 end)
 gen.draw(c, gen.image(sky, 0, 0, W, H, {palette = {ink, red, hot, yellow}}))
 
--- Smoke trails rising off the corona.
 for i = 1, 26 do
     local x = gen.randRange(60, 740)
     local pts = {}
@@ -47,7 +46,6 @@ local palette = {ink, red, hot, yellow}
 gen.post(c, "dither", {method = "blue", palette = palette, cell = 2})
 gen.post(c, "dither", {method = "bayer", matrix = 4, palette = palette, cell = 6, region = {600, 0, 200, H}})
 
--- Hard edge between the two screens.
 gen.draw(c, gen.rect(596, 0, 4, H), {fill = yellow})
 
 return c

@@ -7,7 +7,6 @@ gen.background(c, gen.hex("#efe9dc"))
 gen.seed(11)
 gen.noiseSeed(11)
 
--- Islands: soft blobs and a ridge, blended with a wide smooth union.
 local blobs = gen.sdCircle({300, 340}, 120)
 for _ = 1, 9 do
     local p = {gen.randRange(140, 660), gen.randRange(140, 660)}
@@ -24,7 +23,6 @@ local noise = gen.field(cols, rows)
 noise:fill(function(x, y) return gen.fbm(x * 0.03, y * 0.03, 5, 2.0, 0.5) end)
 height:combine("add", noise:map(function(v) return v * 0.45 end))
 
--- Water lines below sea level, land lines above, every fifth one heavier.
 local ink = gen.hex("#22313f")
 local sea = gen.hex("#4a7a96")
 local levels = {}
@@ -42,7 +40,6 @@ for _, line in ipairs(gen.contours(height, levels, {rect = rect, simplify = 0.3}
     gen.draw(c, line, style)
 end
 
--- A dashed survey grid masked to the water, kept off the land.
 local coast = {}
 for _, l in ipairs(gen.contours(height, 0, {rect = rect})) do
     if l.closed then coast[#coast + 1] = l end

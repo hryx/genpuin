@@ -28,8 +28,6 @@ local tiles = {
     {name = "reducer", edges = {2, 0, 1, 0}, symmetry = "T", weight = 0.5},
 }
 
--- Density steering. Air dominates the top and thins out toward the bottom,
--- thick pipe does the opposite. Noise keeps the boundary ragged.
 local FW, FH = 48, 48
 local airMap = gen.field(FW, FH)
 local heavyMap = gen.field(FW, FH)
@@ -49,7 +47,6 @@ wireMap:fill(function(x, y)
     return 0.5 + 1.2 * math.sin(math.pi * t)
 end)
 
--- Pin an air border so every pipe stays inside the frame.
 local border = {}
 for i = 1, COLS do
     border[#border + 1] = {x = i, y = 1, tile = "air"}
@@ -130,7 +127,6 @@ local function shapeOf(p)
     return gen.circle(p.center, p.r)
 end
 
--- Colour runs from a cold violet up top to molten orange at the floor.
 local top, mid, low = gen.hex("#6c6fd1"), gen.hex("#e0568a"), gen.hex("#ffb347")
 local function tint(y)
     local t = gen.clamp((y - OY) / (ROWS * CELL), 0, 1)
@@ -160,7 +156,6 @@ for layer = 1, 2 do
             if p.kind == "line" or p.kind == "arc" then
                 gen.draw(c, shapeOf(p), {stroke = stroke, strokeWidth = width, strokeLinecap = "butt"})
             elseif p.kind == "band" then
-                -- Collar where the pipe passes over a wire.
                 if pass == 1 then
                     gen.draw(c, shapeOf(p), {stroke = casing, strokeWidth = wd.case + 4})
                 elseif pass == 2 then

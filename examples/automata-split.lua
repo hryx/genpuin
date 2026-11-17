@@ -9,7 +9,6 @@ local cellW = 200
 local steps = 200
 local cellSize = W / cellW
 
--- Top automaton: Rule 110, spine along right edge, growing down-left
 local initTop = {}
 for i = 1, cellW do initTop[i] = 0 end
 initTop[cellW] = 1
@@ -32,7 +31,6 @@ for row = 1, #rowsTop do
     end
 end
 
--- Bottom automaton: Rule 30, spine along left edge, growing up-right
 local initBot = {}
 for i = 1, cellW do initBot[i] = 0 end
 initBot[1] = 1
@@ -47,7 +45,6 @@ for row = 1, #rowsBot do
             local sat = gen.lerp(0.6, 0.4, t)
             local val = gen.lerp(0.25, 0.45, t)
             local x = (col - 1) * cellSize
-            -- Flip vertically: row 1 at bottom, last row at top
             local y = H - row * cellSize
             gen.draw(c, gen.rect(x, y, cellSize, cellSize), {
                 fill = gen.hsv(hue, sat, val),

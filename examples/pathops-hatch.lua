@@ -27,19 +27,14 @@ local function add(list)
     for _, s in ipairs(list) do work[#work + 1] = s end
 end
 
--- Sun: one continuous zigzag per pass, kept off its own outline.
 add(gen.hatch(sunSeen, {angle = 0.25, spacing = 5, inset = 5, connect = true}))
 
--- Pillar: loose diagonal strokes with a little hand wobble, cross hatched
--- in its shadowed half.
 add(gen.hatch(pillarSeen, {angle = -0.9, spacing = 4.5, jitter = 0.3}))
 local shade = gen.clip(pillarSeen, gen.rect(270, 0, 200, 800), "intersect")
 add(gen.hatch(shade, {angle = 0.7, spacing = 4.5, jitter = 0.3}))
 
--- Star: dense cross hatch on the points.
 add(gen.hatch(front, {angle = 0.1, spacing = 3.2, cross = true}))
 
--- Ground: wavy lines below the horizon, masked around the shapes.
 local ground = {}
 for k = 0, 24 do
     local y0 = 470 + k * 13 + k * k * 0.25
@@ -51,13 +46,11 @@ for k = 0, 24 do
 end
 add(gen.clipLines(ground, gen.offset(everything, 10), {outside = true}))
 
--- Outlines of what can be seen.
 for _, shape in ipairs({sunSeen, pillarSeen, front}) do
     for _, ct in ipairs(shape.contours) do work[#work + 1] = gen.polygon(ct) end
 end
 
-local ordered, before, after = gen.orderPaths(work, {start = {0, 0}})
-print(string.format("pathops-hatch: %d paths, pen-up travel %.0f -> %.0f", #ordered, before, after))
+local ordered = gen.orderPaths(work, {start = {0, 0}})
 for _, s in ipairs(ordered) do
     gen.draw(c, s, {stroke = gen.hex("#20232b"), strokeWidth = 0.9, strokeLinecap = "round"})
 end

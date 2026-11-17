@@ -6,7 +6,6 @@ local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#ffffff"))
 gen.seed(41)
 
--- Color palette: returns color, isDark
 local function pickColor()
     local r = gen.rand()
     if r < 0.70 then
@@ -22,14 +21,11 @@ local function pickColor()
     end
 end
 
--- Collect black outline circles for bonding later
 local bondable = {}
 
--- Recursive burst: draw a parent circle, spawn children inside (and slightly outside)
 local function burst(cx, cy, radius, depth, maxDepth)
     local strokeW = gen.lerp(1.2, 0.25, (depth - 1) / math.max(maxDepth - 1, 1))
 
-    -- Draw parent ring
     local parentColor, parentDark = pickColor()
     gen.draw(c, gen.circle({cx, cy}, radius), {
         stroke = parentColor,
@@ -40,21 +36,18 @@ local function burst(cx, cy, radius, depth, maxDepth)
         bondable[#bondable + 1] = {cx, cy, radius}
     end
 
-    -- Number of children scales with area, fewer at deeper levels
     local nChildren = gen.randInt(
         math.max(3, math.floor(radius * 0.15)),
         math.max(5, math.floor(radius * 0.35))
     )
 
     for _ = 1, nChildren do
-        -- Child radius: fraction of parent, smaller at deeper levels
         local maxChildR = radius * gen.randRange(0.15, 0.45)
         local childR = math.max(2, maxChildR)
 
-        -- Place mostly inside, some escape
         local placementR = radius
         if gen.rand() < 0.12 then
-            placementR = radius * 1.3  -- escape
+            placementR = radius * 1.3
         end
         local pos = gen.randInCircle({cx, cy}, placementR - childR * 0.5)
 
@@ -62,10 +55,8 @@ local function burst(cx, cy, radius, depth, maxDepth)
         local color, isDark = pickColor()
 
         if not filled and childR > 12 and depth < maxDepth and gen.rand() < 0.6 then
-            -- Recurse into this child
             burst(pos[1], pos[2], childR, depth + 1, maxDepth)
         else
-            -- Terminal circle
             local style = {}
             if filled then
                 style.fill = color
@@ -83,7 +74,6 @@ local function burst(cx, cy, radius, depth, maxDepth)
     end
 end
 
--- Primary bursts: semi-random positions, clustered toward center but can reach edges
 local nBursts = gen.randInt(5, 7)
 for _ = 1, nBursts do
     local bx = gen.gaussian(W / 2, W * 0.28)
@@ -92,7 +82,6 @@ for _ = 1, nBursts do
     burst(bx, by, br, 1, 3)
 end
 
--- Scattered debris: tiny circles in the gaps
 gen.scatter(120, {20, 20, W - 40, H - 40}, function(pos)
     local r = gen.randRange(0.5, 3.5)
     local filled = gen.rand() < 0.4
@@ -112,23 +101,18 @@ gen.scatter(120, {20, 20, W - 40, H - 40}, function(pos)
     end
 end)
 
--- Bonds: thin lines between nearby black outline circles of similar size
 for i = 1, #bondable do
     local a = bondable[i]
     for j = i + 1, #bondable do
         local b = bondable[j]
-        -- Similar size: ratio within 3x
         local ratio = a[3] / b[3]
         if ratio < 0.33 or ratio > 3 then goto skip end
-        -- Proximity: gap between edges < 4x the smaller radius
         local dx, dy = b[1] - a[1], b[2] - a[2]
         local d = math.sqrt(dx * dx + dy * dy)
         local gap = d - a[3] - b[3]
         local minR = math.min(a[3], b[3])
         if gap < 0 or gap > minR * 4 then goto skip end
-        -- Only ~10% of eligible pairs
         if gen.rand() > 0.10 then goto skip end
-        -- Line from circumference to circumference
         local nx, ny = dx / d, dy / d
         local p1 = {a[1] + nx * a[3], a[2] + ny * a[3]}
         local p2 = {b[1] - nx * b[3], b[2] - ny * b[3]}

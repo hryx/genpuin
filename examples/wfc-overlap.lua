@@ -37,7 +37,6 @@ local mask = gen.hex("#173038")
 local copper = {gen.hex("#c8643b"), gen.hex("#e9a54a"), gen.hex("#f4dc8c")}
 local pad, hole = gen.hex("#bfeedd"), gen.hex("#0b1418")
 
--- Board grain: one faint dot per bare cell pair.
 for y = 1, ROWS, 2 do
     for x = 1, COLS, 2 do
         if grid[y][x] == 1 then

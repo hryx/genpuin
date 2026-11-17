@@ -15,7 +15,6 @@ local MARGIN_Y = (H - ROWS * CELL_H) / 2
 
 local ink = gen.rgb(0.05, 0.05, 0.1)
 
--- Make a wobbly closed loop (imperfect circle) from a polygon.
 local function wobblyDot(cx, cy, r)
     local nSides = gen.randInt(6, 10)
     local pts = {}
@@ -27,14 +26,11 @@ local function wobblyDot(cx, cy, r)
     return gen.smooth(gen.polygon(pts), 2)
 end
 
--- Draw a pen splatter at position (sx, sy) with given intensity (0-1).
 local function drawSplatter(sx, sy, intensity)
     local mainR = gen.randRange(1.5, 3) + intensity * 5
-    -- Main blot
     gen.draw(c, gen.circle({sx, sy}, mainR), {
         fill = ink, opacity = gen.randRange(0.15, 0.35),
     })
-    -- Satellite droplets, count scales with intensity
     local nDrops = gen.randInt(1, math.floor(2 + intensity * 8))
     for _ = 1, nDrops do
         local dp = gen.randInCircle({sx, sy}, mainR * gen.randRange(1.5, 3.5))
@@ -45,27 +41,20 @@ local function drawSplatter(sx, sy, intensity)
     end
 end
 
--- Generate a single character stroke as a smoothed polyline.
--- cx, cy: top-left corner of the character cell.
--- idx: unique index for perlin variation.
--- Returns strokes list and the first point of the main stroke.
 local function makeGlyph(cx, cy, idx)
     local nPts = gen.randInt(4, 6)
     local pts = {}
 
-    -- First point: left edge, near vertical center
     pts[1] = {
         cx + gen.randRange(2, 8),
         cy + CELL_H * 0.5 + gen.randRange(-6, 6),
     }
 
-    -- Last point: right edge, near vertical center
     pts[nPts] = {
         cx + CELL_W - gen.randRange(2, 8),
         cy + CELL_H * 0.5 + gen.randRange(-6, 6),
     }
 
-    -- Interior points: spread across cell with perlin-biased y
     for i = 2, nPts - 1 do
         local t = (i - 1) / (nPts - 1)
         local px = cx + CELL_W * t + gen.randRange(-5, 5)
@@ -77,7 +66,6 @@ local function makeGlyph(cx, cy, idx)
     local strokes = {}
     strokes[1] = gen.smooth(gen.polyline(pts), 3)
 
-    -- ~20% chance of a second flourish stroke
     if gen.rand() < 0.20 then
         local fPts = {}
         local anchor = pts[gen.randInt(2, math.max(2, nPts - 1))]
@@ -88,7 +76,6 @@ local function makeGlyph(cx, cy, idx)
         strokes[2] = gen.smooth(gen.polyline(fPts), 2)
     end
 
-    -- ~15% chance of a wobbly dot modifier above or below
     if gen.rand() < 0.15 then
         local mx = cx + gen.randRange(CELL_W * 0.3, CELL_W * 0.7)
         local above = gen.rand() < 0.5
@@ -101,10 +88,7 @@ local function makeGlyph(cx, cy, idx)
     return strokes, pts[1]
 end
 
--- Draw a stroke with ghost traces behind it.
 local function drawWithGhosts(stroke)
-    -- Ghost passes jitter a coarse resample and smooth it again, so each
-    -- reads as a separate wobbly retrace rather than fuzz.
     local ghosts = {
         {jitter = 2, opacity = 0.5, sw = 0.9},
         {jitter = 3, opacity = 0.38, sw = 0.8},
@@ -122,7 +106,6 @@ local function drawWithGhosts(stroke)
         })
     end
 
-    -- Main stroke
     local style = {
         stroke = ink,
         strokeWidth = 1.8,
@@ -137,7 +120,6 @@ local function drawWithGhosts(stroke)
     gen.draw(c, stroke, style)
 end
 
--- Generate and draw all characters
 local idx = 0
 for row = 0, ROWS - 1 do
     for col = 0, COLS - 1 do
@@ -146,7 +128,6 @@ for row = 0, ROWS - 1 do
         local cy = MARGIN_Y + row * CELL_H + gen.randRange(-2, 2)
         local strokes, startPt = makeGlyph(cx, cy, idx)
 
-        -- ~12% chance of a splatter at the stroke start, varying intensity
         if gen.rand() < 0.12 then
             drawSplatter(startPt[1], startPt[2], gen.rand())
         end

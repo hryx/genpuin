@@ -13,7 +13,6 @@ gen.noiseSeed(23)
 local c = gen.canvas(W, H)
 gen.background(c, yellow)
 
--- Sun and its halo of rings.
 local sun = {430, 360}
 for i = 14, 1, -1 do
     local col = gen.lerpColor(red, hot, i / 14)
@@ -24,7 +23,6 @@ for r = 60, 230, 14 do
     gen.draw(c, gen.circle(sun, r), {stroke = ink, strokeWidth = 1 + r / 90})
 end
 
--- Black bars, thick at the bottom and thinning out as they climb.
 local y = H
 local t = 12
 while y > 380 and t > 0.6 do
@@ -33,14 +31,12 @@ while y > 380 and t > 0.6 do
     t = t * 0.96
 end
 
--- Scattered data blocks.
 for _ = 1, 70 do
     local x, by = gen.randRange(0, W), gen.randRange(0, H)
     local w, h = gen.randRange(4, 70), gen.randRange(2, 10)
     gen.draw(c, gen.rect(x, by, w, h), {fill = gen.pick({ink, red, hot, yellow})})
 end
 
--- Sort mask: organic zones where the sun melts downward.
 local mask = gen.field(120, 120)
 mask:fill(function(x, y)
     return gen.fbm(x * 0.045, y * 0.03, 4) * 0.5 + 0.5 + (y / 120 - 0.5) * 0.25
