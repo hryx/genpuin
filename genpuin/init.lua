@@ -10,7 +10,7 @@ local noise = require("genpuin.noise")
 local field = require("genpuin.field")
 local pattern = require("genpuin.pattern")
 local fx = require("genpuin.fx")
-local ppm = require("genpuin.ppm")
+local raster = require("genpuin.raster")
 local gradient = require("genpuin.gradient")
 local voronoi = require("genpuin.voronoi")
 local spatial = require("genpuin.spatial")
@@ -66,8 +66,12 @@ gen.layer = canvas.layer
 -- svg
 gen.exportSvg = svg.exportSvg
 
--- ppm
-gen.exportPpm = ppm.exportPpm
+-- raster
+gen.exportPpm = raster.exportPpm
+gen.exportPng = raster.exportPng
+gen.field = raster.field
+gen.image = raster.image
+gen.post = raster.post
 
 -- gradient
 gen.linearGradient = gradient.linearGradient

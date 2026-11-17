@@ -37,8 +37,9 @@ local function dot2(g, x, y)
 end
 
 -- Seed the noise permutation table.
+-- With --vary N on the command line, N is mixed into every seed.
 function M.seed(n)
-    initPerm(n)
+    initPerm(n + require("genpuin.core").vary * 1000003)
 end
 
 -- 2D Perlin noise, returns a value in approximately [-1, 1].

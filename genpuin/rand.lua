@@ -1,4 +1,5 @@
 local compat = require("genpuin.compat")
+local core = require("genpuin.core")
 local bxor   = compat.bxor
 local lshift  = compat.lshift
 local rshift  = compat.rshift
@@ -10,7 +11,9 @@ local M = {}
 local state = 1
 
 -- Seed the random number generator.
+-- With --vary N on the command line, N is mixed into every seed.
 function M.seed(n)
+    n = n + core.vary * 1000003
     -- Mix the seed a bit and ensure non-zero state
     state = bxor(math.floor(math.abs(n)) % 0x100000000, 0x12345678)
     if state == 0 then state = 1 end

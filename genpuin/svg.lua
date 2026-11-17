@@ -62,6 +62,8 @@ local function pointsToD(points, closed)
     return table.concat(segs, " ")
 end
 
+local warnedPass = false
+
 local function renderShape(sh, attrs)
     if sh.type == "ellipse" then
         return string.format('  <ellipse cx="%s" cy="%s" rx="%s" ry="%s" %s/>',
@@ -131,6 +133,18 @@ local function renderShape(sh, attrs)
         end
         return string.format('  <path d="%s" fill-rule="nonzero" %s/>',
             table.concat(dParts, " "), attrs)
+
+    elseif sh.type == "field" then
+        local core = require("genpuin.core")
+        return string.format(
+            '  <image x="%s" y="%s" width="%s" height="%s" preserveAspectRatio="none" href="data:image/png;base64,%s"/>',
+            fmt(sh.x), fmt(sh.y), fmt(sh.w), fmt(sh.h), core.field.pngBase64(sh))
+
+    elseif sh.type == "pass" then
+        if not warnedPass then
+            io.stderr:write("genpuin: raster passes are skipped in SVG output\n")
+            warnedPass = true
+        end
     end
 end
 

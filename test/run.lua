@@ -1,5 +1,5 @@
 -- run.lua — Run all test/test-*.lua files
--- Usage: lua test/run.lua
+-- Usage: zig build test, or genpuin test/run.lua
 
 local function glob(pattern)
     local f = io.popen('ls ' .. pattern .. ' 2>/dev/null')
@@ -21,8 +21,8 @@ local failures = {}
 
 for _, file in ipairs(files) do
     print(string.format("\n──── %s ────", file))
-    local ok = os.execute("lua " .. file)
-    if not ok then
+    local ok = os.execute(arg[-1] .. " " .. file)
+    if ok ~= true and ok ~= 0 then
         failures[#failures + 1] = file
     end
 end
