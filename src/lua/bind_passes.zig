@@ -1,6 +1,9 @@
 //! core.post: read gen.post(c, name, opts) options into a Pass. Option
 //! docs live on the parse functions below. Distances are scene units, so
 //! a script looks the same at any -s. Random passes read opts.seed.
+//!
+//! gen.post runs core.post.check when it is called, so a bad pass fails
+//! at the script's line. parse runs again when the canvas is rendered.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -8,6 +11,7 @@ const Allocator = std.mem.Allocator;
 const zlua = @import("zlua");
 const genpuin = @import("genpuin");
 
+const core = @import("core.zig");
 const util = @import("util.zig");
 const Lua = util.Lua;
 const Field = util.Field;
@@ -15,7 +19,9 @@ const passes = genpuin.passes;
 const Pass = passes.Pass;
 const Rgb = genpuin.Raster.Rgb;
 
-pub const functions = [_]zlua.FnReg{};
+pub const functions = [_]zlua.FnReg{
+    .{ .name = "check", .func = zlua.wrap(check) },
+};
 
 const Name = enum {
     invert,
@@ -58,8 +64,15 @@ const names: std.StaticStringMap(Name) = .initComptime(.{
 /// rectangle only. Fields given as options are stretched over the whole
 /// image, regions or not.
 pub fn parse(lua: *Lua, arena: Allocator, name: []const u8, opts: i32) !Pass {
-    const tag = names.get(name) orelse
-        lua.raiseErrorStr("unknown post pass '%s'", .{(try arena.dupeSentinel(u8, name, 0)).ptr});
+    const tag = names.get(name) orelse {
+        var near: core.Nearest = .init(name);
+        for (names.keys()) |k| near.consider(k);
+        const name_z = try arena.dupeSentinel(u8, name, 0);
+        if (near.best) |b| {
+            lua.raiseErrorStr("unknown post pass '%s' (did you mean '%s'?)", .{ name_z.ptr, (try arena.dupeSentinel(u8, b, 0)).ptr });
+        }
+        lua.raiseErrorStr("unknown post pass '%s'", .{name_z.ptr});
+    };
     const pass: Pass = switch (tag) {
         .invert => .invert,
         .pixel_sort => .{ .pixel_sort = try pixelSort(lua, arena, opts) },
@@ -81,6 +94,80 @@ pub fn parse(lua: *Lua, arena: Allocator, name: []const u8, opts: i32) !Pass {
     return .{ .region = .{ .rect = rect, .inner = inner } };
 }
 
+/// check(name, opts) -> true, or false and the message parse would
+/// raise. Also rejects option keys the pass does not read. The prelude
+/// raises the message at the caller's line.
+fn check(lua: *Lua) i32 {
+    var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    lua.pushFunction(zlua.wrap(checkProtected));
+    lua.pushLightUserdata(&arena);
+    lua.pushValue(1);
+    lua.pushValue(2);
+    lua.protectedCall(.{ .args = 3, .results = 0 }) catch {
+        lua.pushBoolean(false);
+        lua.insert(-2);
+        return 2;
+    };
+    lua.pushBoolean(true);
+    return 1;
+}
+
+/// Runs under check's protected call, so raised errors cannot leak the
+/// arena check owns.
+fn checkProtected(lua: *Lua) !i32 {
+    const arena = (lua.toUserdata(Allocator, 1) catch unreachable).*; // pushed by check
+    if (lua.typeOf(2) != .string) lua.raiseErrorStr("post pass name must be a string", .{});
+    const name = lua.toString(2) catch unreachable; // type checked on the line above
+    _ = try parse(lua, arena, name, 3);
+    if (!lua.isTable(3)) return 0;
+    const keys = optionKeys(names.get(name).?); // parse raised for unknown names
+    lua.pushNil();
+    while (lua.next(3)) {
+        lua.pop(1);
+        if (lua.typeOf(-1) != .string) lua.raiseErrorStr("post pass '%s': option keys must be names", .{name.ptr});
+        const key = lua.toString(-1) catch unreachable; // type checked on the line above
+        if (isOptionKey(keys, key)) continue;
+        var near: core.Nearest = .init(key);
+        for (keys) |k| near.consider(k);
+        for (common_keys) |k| near.consider(k);
+        if (near.best) |b| {
+            lua.raiseErrorStr("post pass '%s' has no option '%s' (did you mean '%s'?)", .{ name.ptr, key.ptr, (try arena.dupeSentinel(u8, b, 0)).ptr });
+        }
+        lua.raiseErrorStr("post pass '%s' has no option '%s'", .{ name.ptr, key.ptr });
+    }
+    return 0;
+}
+
+/// Keys every pass accepts. The prelude fills seed for all of them.
+const common_keys = [_][]const u8{ "region", "seed" };
+
+fn isOptionKey(keys: []const []const u8, key: []const u8) bool {
+    for (keys) |k| if (std.mem.eql(u8, k, key)) return true;
+    for (common_keys) |k| if (std.mem.eql(u8, k, key)) return true;
+    return false;
+}
+
+/// The keys each pass's parse function reads, besides common_keys. A test
+/// below checks the lists against what parse reads.
+fn optionKeys(tag: Name) []const []const u8 {
+    return switch (tag) {
+        .invert => &.{},
+        .pixel_sort => &.{ "direction", "angle", "key", "sortBy", "lo", "hi", "mask", "maskThreshold", "reverse", "minLength", "maxLength", "jitter", "chance" },
+        .channel_shift => &.{ "r", "g", "b", "wrap" },
+        .displace => &.{ "fieldX", "fieldY", "amount", "ampX", "periodX", "ampY", "periodY", "phase" },
+        .tear => &.{ "axis", "minHeight", "maxHeight", "minShift", "maxShift", "chance", "wrap" },
+        .block_repeat => &.{ "mode", "count", "minSize", "maxSize", "grid" },
+        .dither, .posterize => &.{ "levels", "matrix", "spread", "method", "palette", "cell" },
+        .blur => &.{"radius"},
+        .bloom => &.{ "threshold", "radius", "strength" },
+        .grain => &.{ "amount", "mono", "size" },
+        .levels => &.{ "black", "white", "gamma", "outBlack", "outWhite" },
+        .scanlines => &.{ "axis", "period", "width", "strength" },
+    };
+}
+
 fn readRegion(lua: *Lua, opts: i32) ?[4]f64 {
     if (!lua.isTable(opts)) return null;
     defer lua.pop(1);
@@ -97,8 +184,9 @@ fn readRegion(lua: *Lua, opts: i32) ?[4]f64 {
 }
 
 /// pixelSort: sort runs of pixels along lines.
-///   direction = "x" (rows, default) or "y" (columns), or angle in degrees
-///     (0 runs left to right, 90 top to bottom, 180 right to left).
+///   direction = "x" (rows, default) or "y" (columns).
+///   angle = degrees, overrides direction (0 runs left to right, 90 top
+///     to bottom, 180 right to left).
 ///   key = "luma" | "hue" | "sat" | "r" | "g" | "b" picks pixels into runs
 ///     where lo <= key <= hi (defaults 0.25, 0.8). With lo > hi it picks
 ///     values outside the window instead.
@@ -110,13 +198,17 @@ fn readRegion(lua: *Lua, opts: i32) ?[4]f64 {
 ///   jitter = 0..1 shortens each run's maxLength by a random fraction.
 ///   chance = probability a run is sorted (default 1). seed.
 fn pixelSort(lua: *Lua, arena: Allocator, opts: i32) !passes.PixelSort {
-    const direction = try util.optString(lua, arena, opts, "direction", "x");
-    const angle: f64 = if (std.mem.eql(u8, direction.?, "x"))
-        0
-    else if (std.mem.eql(u8, direction.?, "y"))
-        90
-    else
-        lua.raiseErrorStr("option 'direction' must be \"x\" or \"y\"", .{});
+    if (lua.isTable(opts)) {
+        defer lua.pop(1);
+        if (lua.getField(opts, "direction") == .number) {
+            lua.raiseErrorStr("option 'direction' must be \"x\" or \"y\". Use angle for degrees", .{});
+        }
+    }
+    const direction = try optAxis(lua, arena, opts, "direction");
+    const angle: f64 = switch (direction) {
+        .x => 0,
+        .y => 90,
+    };
     const key = util.optEnum(lua, passes.SortKey, opts, "key", .luma);
     return .{
         .angle = util.optNumber(lua, opts, "angle", angle),
@@ -297,18 +389,24 @@ fn levels(lua: *Lua, opts: i32) passes.Levels {
 ///   scene units (2). strength = 0..1 darkening (0.5).
 ///   axis = "x" (horizontal lines, default) or "y" (vertical).
 fn scanlines(lua: *Lua, arena: Allocator, opts: i32) !passes.Scanlines {
-    const axis = (try util.optString(lua, arena, opts, "axis", "x")).?;
+    const axis = try optAxis(lua, arena, opts, "axis");
     return .{
         .period = positive(lua, opts, "period", 4),
         .width = nonNegative(lua, opts, "width", 2),
         .strength = optF32(lua, opts, "strength", 0.5),
-        .axis = if (std.mem.eql(u8, axis, "x"))
-            .x
-        else if (std.mem.eql(u8, axis, "y"))
-            .y
-        else
-            lua.raiseErrorStr("option 'axis' must be \"x\" or \"y\"", .{}),
+        .axis = switch (axis) {
+            .x => .x,
+            .y => .y,
+        },
     };
+}
+
+/// "x" (the default) or "y".
+fn optAxis(lua: *Lua, arena: Allocator, opts: i32, key: [:0]const u8) !passes.Axis {
+    const s = (try util.optString(lua, arena, opts, key, "x")).?;
+    if (std.mem.eql(u8, s, "x")) return .x;
+    if (std.mem.eql(u8, s, "y")) return .y;
+    lua.raiseErrorStr("option '%s' must be \"x\" or \"y\"", .{key.ptr});
 }
 
 fn optF32(lua: *Lua, opts: i32, key: [:0]const u8, default: f32) f32 {
@@ -365,4 +463,56 @@ fn optPalette(lua: *Lua, arena: Allocator, opts: i32) ![]const Rgb {
         c.* = .{ rgba[0], rgba[1], rgba[2] };
     }
     return out;
+}
+
+test "bind_passes: option key lists match the keys parse reads" {
+    const lua = try Lua.init(std.testing.allocator);
+    defer lua.deinit();
+    lua.openLibs();
+    const proxy =
+        \\local seen = {}
+        \\return setmetatable({}, {__index = function(_, k) seen[k] = true end}), seen
+    ;
+    for (names.keys(), names.values()) |name, tag| {
+        try util.loadBuffer(lua, proxy, "=proxy");
+        try lua.protectedCall(.{ .args = 0, .results = 2 });
+        var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena_state.deinit();
+        _ = try parse(lua, arena_state.allocator(), name, lua.absIndex(-2));
+
+        const keys = optionKeys(tag);
+        for (keys) |k| {
+            _ = lua.getField(-1, try arena_state.allocator().dupeSentinel(u8, k, 0));
+            defer lua.pop(1);
+            if (!lua.toBoolean(-1)) std.debug.print("{s} lists {s}, parse does not read it\n", .{ name, k });
+            try std.testing.expect(lua.toBoolean(-1));
+        }
+        lua.pushNil();
+        while (lua.next(-2)) {
+            lua.pop(1);
+            const key = try lua.toString(-1);
+            if (!isOptionKey(keys, key)) std.debug.print("{s} reads {s}, not in its list\n", .{ name, key });
+            try std.testing.expect(isOptionKey(keys, key));
+        }
+        lua.pop(2);
+    }
+}
+
+test "bind_passes: check names the closest option for a typo" {
+    const lua = try Lua.init(std.testing.allocator);
+    defer lua.deinit();
+    lua.openLibs();
+    lua.pushFunction(zlua.wrap(check));
+    lua.setGlobal("check");
+    const probe =
+        \\local a = {check("tear", {axs = "y"})}
+        \\local b = {check("pixelsort", {})}
+        \\local c = {check("blur", {radius = 2, seed = 1, region = {0, 0, 1, 1}})}
+        \\return a[2], b[2], c[1]
+    ;
+    try util.loadBuffer(lua, probe, "=probe");
+    try lua.protectedCall(.{ .args = 0, .results = 3 });
+    try std.testing.expectEqualStrings("post pass 'tear' has no option 'axs' (did you mean 'axis'?)", try lua.toString(-3));
+    try std.testing.expectEqualStrings("unknown post pass 'pixelsort' (did you mean 'pixelSort'?)", try lua.toString(-2));
+    try std.testing.expect(lua.toBoolean(-1));
 }

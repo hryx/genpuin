@@ -132,14 +132,15 @@ fn render(lua: *Lua) i32 {
         lua.raiseErrorStr("testing config missing", .{})));
     lua.pop(1);
     renderScript(lua, config, script, path, opts) catch |err| switch (err) {
-        error.ScriptFailed => lua.raiseError(),
+        error.ScriptFailed, error.CanvasFailed => lua.raiseError(),
         error.NoCanvas => lua.raiseErrorStr("%s returned no canvas", .{script.ptr}),
         else => lua.raiseErrorStr("rendering %s failed: %s", .{ script.ptr, @errorName(err).ptr }),
     };
     return 0;
 }
 
-/// On error.ScriptFailed the script's error is on top of `lua`'s stack.
+/// On error.ScriptFailed and error.CanvasFailed the error message is on
+/// top of `lua`'s stack.
 fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []const u8, opts: core.RenderOptions) !void {
     const outer = util.getHost(lua);
     var host: util.Host = .{ .gpa = outer.gpa, .io = outer.io };
@@ -155,5 +156,8 @@ fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []
         return error.ScriptFailed;
     };
     if (!host_mod.isCanvas(inner, -1)) return error.NoCanvas;
-    try host_mod.exportCanvas(inner, path, opts);
+    host_mod.exportCanvas(inner, path, opts) catch |err| {
+        if (err == error.CanvasFailed) _ = lua.pushString(inner.toString(-1) catch "canvas is malformed");
+        return err;
+    };
 }

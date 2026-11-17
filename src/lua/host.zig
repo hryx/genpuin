@@ -100,13 +100,6 @@ pub fn create(host: *Host, opts: Options) !*Lua {
     return lua;
 }
 
-/// Push the prelude module `name` (a file stem, such as "svg").
-pub fn pushModule(lua: *Lua, name: [:0]const u8) void {
-    _ = lua.getField(zlua.registry_index, import_key);
-    _ = lua.pushStringZ(name);
-    lua.call(.{ .args = 1, .results = 1 });
-}
-
 /// Push the loaded chunk for one prelude file, from `dir` when given.
 fn loadModule(lua: *Lua, gpa: Allocator, file: []const u8, source: [:0]const u8, dir: ?[]const u8) !void {
     if (dir) |d| {
@@ -141,39 +134,39 @@ pub fn runScript(lua: *Lua, path: [:0]const u8) error{ScriptFailed}!void {
     lua.remove(handler);
 }
 
-/// Whether the value at `index` is a canvas.
-pub fn isCanvas(lua: *Lua, index: i32) bool {
-    if (!lua.isTable(index)) return false;
+/// Whether the value at `index` is a canvas. The read is raw, since a
+/// script may return a table whose __index raises, such as `gen`.
+pub fn isCanvas(lua: *Lua, index_in: i32) bool {
+    if (!lua.isTable(index_in)) return false;
+    const index = lua.absIndex(index_in);
+    _ = lua.pushStringZ("width");
     defer lua.pop(1);
-    return lua.getField(index, "width") == .number;
+    return lua.getTableRaw(index) == .number;
 }
 
 /// Write the canvas on top of the stack to `path`, in the format its
-/// extension names, SVG when it names none. Failures are printed.
+/// extension names, SVG when it names none. A Lua error while reading the
+/// canvas returns error.CanvasFailed with the message on top of the stack.
 pub fn exportCanvas(lua: *Lua, path: []const u8, opts: core.RenderOptions) !void {
     const gpa = lua.allocator();
     const h = util.getHost(lua);
     const format = genpuin.image_io.Format.fromPath(path) orelse .svg;
     if (format == .svg) return exportSvg(lua, path);
-    var r = core.renderCanvas(lua, -1, opts) catch |err| {
-        std.debug.print("render failed: {s}\n", .{@errorName(err)});
-        return err;
-    };
+    var r = try core.renderCanvas(lua, -1, opts);
     defer r.deinit(gpa);
     try genpuin.image_io.write(gpa, h.io, &r, path, opts.depth);
 }
 
-fn exportSvg(lua: *Lua, path: []const u8) !void {
+fn exportSvg(lua: *Lua, path: []const u8) error{CanvasFailed}!void {
     const canvas = lua.absIndex(-1);
-    pushModule(lua, "svg");
+    _ = lua.getField(zlua.registry_index, import_key);
+    _ = lua.pushStringZ("svg");
+    lua.protectedCall(.{ .args = 1, .results = 1 }) catch return error.CanvasFailed;
     _ = lua.getField(-1, "exportSvg");
+    lua.remove(-2);
     lua.pushValue(canvas);
     _ = lua.pushString(path);
-    lua.protectedCall(.{ .args = 2, .results = 0 }) catch {
-        std.debug.print("{s}\n", .{lua.toString(-1) catch "svg export failed"});
-        return error.SvgFailed;
-    };
-    lua.pop(1);
+    lua.protectedCall(.{ .args = 2, .results = 0 }) catch return error.CanvasFailed;
 }
 
 test "host: the CLI's state has no test hooks" {
@@ -193,4 +186,28 @@ test "host: the CLI's state has no test hooks" {
     try std.testing.expect(lua.toBoolean(-3));
     try std.testing.expect(lua.toBoolean(-2));
     try std.testing.expect(lua.toBoolean(-1));
+}
+
+test "host: a canvas error at render time comes back as a message" {
+    var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
+    const lua = try create(&host, .{});
+    defer lua.deinit();
+    const script =
+        \\local c = gen.canvas(10, 10)
+        \\table.insert(c.elements, {shape = {type = "blob"}, style = {}})
+        \\return c
+    ;
+    try util.loadBuffer(lua, script, "=script");
+    try lua.protectedCall(.{ .args = 0, .results = 1 });
+    try std.testing.expect(isCanvas(lua, -1));
+    try std.testing.expectError(error.CanvasFailed, exportCanvas(lua, "never-written.png", .{}));
+    try std.testing.expectEqualStrings("unknown shape type 'blob'", try lua.toString(-1));
+}
+
+test "host: isCanvas does not run a strict __index" {
+    var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
+    const lua = try create(&host, .{});
+    defer lua.deinit();
+    _ = lua.getGlobal("gen");
+    try std.testing.expect(!isCanvas(lua, -1));
 }

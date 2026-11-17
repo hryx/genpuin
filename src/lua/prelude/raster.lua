@@ -32,10 +32,13 @@ end
 -- Add a raster pass at this point in the draw order. It rewrites the pixels
 -- drawn so far, and later draws land on top. Raster output only, SVG skips it.
 -- Passes that use randomness take opts.seed, filled from gen.rand when absent.
+-- The name and options are checked here, so mistakes fail at this call.
 function M.post(c, name, opts)
     local o = {}
     for k, v in pairs(opts or {}) do o[k] = v end
     if o.seed == nil then o.seed = rand.randInt(1, 2147483646) end
+    local ok, err = core.post.check(name, o)
+    if not ok then error("gen.post: " .. err, 2) end
     table.insert(c.elements, {pass = name, opts = o, shape = {type = "pass"}, style = {}})
     return c
 end

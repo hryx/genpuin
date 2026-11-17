@@ -56,20 +56,44 @@ pub fn readRenderOptions(lua: *Lua, index: i32) RenderOptions {
     };
 }
 
-/// Render the canvas at `index` with the Lua state's allocator.
+/// Render the canvas at `index` with the Lua state's allocator. A Lua
+/// error while reading the canvas returns error.CanvasFailed with the
+/// message pushed on top of the stack.
 pub fn renderCanvas(lua: *Lua, index: i32, opts: RenderOptions) !genpuin.Raster {
     const gpa = lua.allocator();
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
-    const s = try marshal.canvas(lua, arena_state.allocator(), index);
-    return genpuin.render.render(gpa, &s, .{ .scale = opts.scale, .ss = opts.ss });
+    var call: MarshalCall = .{ .arena = arena_state.allocator() };
+    const canvas = lua.absIndex(index);
+    lua.pushFunction(zlua.wrap(marshalProtected));
+    lua.pushLightUserdata(&call);
+    lua.pushValue(canvas);
+    lua.protectedCall(.{ .args = 2, .results = 0 }) catch return error.CanvasFailed;
+    return genpuin.render.render(gpa, &call.scene, .{ .scale = opts.scale, .ss = opts.ss });
+}
+
+/// Marshal raises Lua errors, which longjmp past Zig frames. Running it
+/// under a protected call keeps them away from the C API's panic handler
+/// and lets renderCanvas free the arena.
+const MarshalCall = struct {
+    arena: std.mem.Allocator,
+    scene: genpuin.scene.Scene = undefined,
+};
+
+fn marshalProtected(lua: *Lua) !i32 {
+    const call = lua.toUserdata(MarshalCall, 1) catch unreachable; // pushed by renderCanvas
+    call.scene = try marshal.canvas(lua, call.arena, 2);
+    return 0;
 }
 
 /// export(canvas, path, {scale, ss, depth}) writes PPM or PNG by extension.
 fn exportCanvas(lua: *Lua) !i32 {
     const path = lua.toString(2) catch lua.argError(2, "expected an output path");
     const opts = readRenderOptions(lua, 3);
-    var r = try renderCanvas(lua, 1, opts);
+    var r = renderCanvas(lua, 1, opts) catch |err| switch (err) {
+        error.CanvasFailed => lua.raiseError(),
+        else => return err,
+    };
     defer r.deinit(lua.allocator());
     const h = util.getHost(lua);
     try genpuin.image_io.write(lua.allocator(), h.io, &r, path, opts.depth);
@@ -82,23 +106,38 @@ fn exportCanvas(lua: *Lua) !i32 {
 fn closest(lua: *Lua) i32 {
     const name = lua.checkString(1);
     lua.checkType(2, .table);
-    const limit: u32 = if (name.len <= 3) 1 else 2;
-    var best: ?[]const u8 = null;
-    var best_d: u32 = limit + 1;
+    var near: Nearest = .init(name);
     lua.pushNil();
     while (lua.next(2)) {
         defer lua.pop(1);
         if (lua.typeOf(-2) != .string) continue;
-        const key = lua.toString(-2) catch continue;
-        const d = editDistance(name, key, limit) orelse continue;
-        if (d < best_d or (d == best_d and std.mem.lessThan(u8, key, best.?))) {
-            best = key;
-            best_d = d;
-        }
+        near.consider(lua.toString(-2) catch continue);
     }
-    if (best) |b| _ = lua.pushString(b) else lua.pushNil();
+    if (near.best) |b| _ = lua.pushString(b) else lua.pushNil();
     return 1;
 }
+
+/// The candidate nearest to `name` by edit distance, kept only when it is
+/// close enough to be a likely typo.
+pub const Nearest = struct {
+    name: []const u8,
+    limit: u32,
+    best: ?[]const u8 = null,
+    best_d: u32,
+
+    pub fn init(name: []const u8) Nearest {
+        const limit: u32 = if (name.len <= 3) 1 else 2;
+        return .{ .name = name, .limit = limit, .best_d = limit + 1 };
+    }
+
+    pub fn consider(near: *Nearest, key: []const u8) void {
+        const d = editDistance(near.name, key, near.limit) orelse return;
+        if (d < near.best_d or (d == near.best_d and std.mem.lessThan(u8, key, near.best.?))) {
+            near.best = key;
+            near.best_d = d;
+        }
+    }
+};
 
 /// Optimal string alignment distance (Levenshtein plus adjacent
 /// transpositions), or null when it exceeds `limit` or a string is longer

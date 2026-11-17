@@ -166,7 +166,7 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
 
     switch (target) {
         .file => |path| {
-            try host_mod.exportCanvas(lua, path, opts);
+            host_mod.exportCanvas(lua, path, opts) catch |err| return reportRenderError(lua, err);
             std.debug.print("Wrote {s}\n", .{path});
         },
         .tile => |t| {
@@ -179,13 +179,16 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
 }
 
 fn reportRenderError(lua: *Lua, err: anyerror) anyerror {
-    _ = lua;
-    std.debug.print("render failed: {s}\n", .{@errorName(err)});
+    switch (err) {
+        error.CanvasFailed => std.debug.print("render failed: {s}\n", .{lua.toString(-1) catch "canvas is malformed"}),
+        else => std.debug.print("render failed: {s}\n", .{@errorName(err)}),
+    }
     return err;
 }
 
 /// Render every variation in [lo, hi] on worker threads, then lay them
-/// out on one sheet. Each worker owns its own Lua state.
+/// out on one sheet. Each worker owns its own Lua state. The sheet is
+/// written even when some variations fail, and then the exit status is 1.
 fn sweep(arena: Allocator, ctx: RunContext, hi: i64) !void {
     const lo = ctx.args.vary_lo;
     const n: usize = @intCast(hi - lo + 1);
@@ -195,20 +198,22 @@ fn sweep(arena: Allocator, ctx: RunContext, hi: i64) !void {
     const cpu: u32 = @intCast(std.Thread.getCpuCount() catch 4);
     const jobs = @min(ctx.args.jobs orelse cpu, @as(u32, @intCast(n)));
     var next: std.atomic.Value(usize) = .init(0);
+    var failed: std.atomic.Value(bool) = .init(false);
     const Worker = struct {
-        fn run(c: RunContext, lo_: i64, ts: []?genpuin.Raster, counter: *std.atomic.Value(usize)) void {
+        fn run(c: RunContext, lo_: i64, ts: []?genpuin.Raster, counter: *std.atomic.Value(usize), any_failed: *std.atomic.Value(bool)) void {
             while (true) {
                 const i = counter.fetchAdd(1, .monotonic);
                 if (i >= ts.len) return;
                 const v = lo_ + @as(i64, @intCast(i));
                 runOne(c, v, .{ .tile = .{ .width = c.args.tile, .out = &ts[i] } }) catch |err| {
                     std.debug.print("vary {d} failed: {s}\n", .{ v, @errorName(err) });
+                    any_failed.store(true, .monotonic);
                 };
             }
         }
     };
     const threads = try arena.alloc(std.Thread, jobs);
-    for (threads) |*t| t.* = try std.Thread.spawn(.{}, Worker.run, .{ ctx, lo, tiles, &next });
+    for (threads) |*t| t.* = try std.Thread.spawn(.{}, Worker.run, .{ ctx, lo, tiles, &next, &failed });
     for (threads) |t| t.join();
 
     const sheet_tiles = try arena.alloc(genpuin.sheet.Tile, n);
@@ -221,6 +226,7 @@ fn sweep(arena: Allocator, ctx: RunContext, hi: i64) !void {
     const out = ctx.args.output orelse try std.fmt.allocPrint(arena, "{s}-sheet.png", .{stem});
     try genpuin.image_io.write(ctx.gpa, ctx.io, &sheet, out, .@"8");
     std.debug.print("Wrote {s} ({d} variations)\n", .{ out, n });
+    if (failed.load(.monotonic)) std.process.exit(1);
 }
 
 test {
