@@ -128,7 +128,6 @@ end
 function M.kaleidoscope(n, center, shapes)
     local result = {}
     local sliceAngle = (2 * math.pi) / n
-    -- Axis angle for reflection within each slice
     for _, shape in ipairs(shapes) do
         for i = 0, n - 1 do
             local angle = i * sliceAngle
@@ -136,7 +135,7 @@ function M.kaleidoscope(n, center, shapes)
             local rotated = xform.rotateAround(shape, angle, center)
             result[#result + 1] = rotated
             -- Reflected + rotated copy
-            local reflected = xform.reflect(shape, center, angle + sliceAngle / 2)
+            local reflected = xform.reflect(shape, center, (i + 1) * sliceAngle / 2)
             result[#result + 1] = reflected
         end
     end
