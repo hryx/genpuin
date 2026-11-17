@@ -1,0 +1,24 @@
+.{
+    .name = .genpuin,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.17.0",
+    .fingerprint = 0x8a766c460e38e2e1,
+    .dependencies = .{
+        .zlua = .{
+            .url = "git+https://github.com/natecraddock/ziglua#8b2c14e0f9f89a9407dd7dd91752c7d8fd03cb62",
+            .hash = "zlua-0.1.0-hGRpC8yYBQAtI5hy60lb1vK9Tc7s-Ouu0aMFe2Kdc3_s",
+        },
+        .zigimg = .{
+            .url = "git+https://github.com/zigimg/zigimg#bbdbb8623c38b55985f968e9652a2dc17ba56ee9",
+            .hash = "zigimg-0.1.0-8_eo2qBpGADeVlkaFseD4JHHWhAG_i2-I8ZOppCUk6rR",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "genpuin",
+        "LICENSE",
+        "README.md",
+    },
+}
