@@ -254,4 +254,5 @@ fn sweep(arena: Allocator, ctx: RunContext, hi: i64) !void {
 test {
     _ = @import("lua/util.zig");
     _ = @import("lua/marshal.zig");
+    _ = @import("lua/core.zig");
 }

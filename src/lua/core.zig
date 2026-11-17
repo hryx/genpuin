@@ -18,6 +18,7 @@ const groups = .{
     .{ "sim", @import("bind_sim.zig") },
     .{ "pathops", @import("bind_pathops.zig") },
     .{ "wfc", @import("bind_wfc.zig") },
+    .{ "algo", @import("bind_algo.zig") },
 };
 
 const top = [_]zlua.FnReg{

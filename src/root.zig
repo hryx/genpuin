@@ -9,6 +9,12 @@ pub const render = @import("render.zig");
 pub const passes = @import("passes.zig");
 pub const image_io = @import("image_io.zig");
 pub const sheet = @import("sheet.zig");
+pub const noise = @import("noise.zig");
+pub const density = @import("density.zig");
+pub const sim = @import("sim.zig");
+pub const pathops = @import("pathops.zig");
+pub const wfc = @import("wfc.zig");
+pub const algo = @import("algo.zig");
 
 test {
     _ = Raster;
@@ -19,4 +25,10 @@ test {
     _ = passes;
     _ = image_io;
     _ = sheet;
+    _ = noise;
+    _ = density;
+    _ = sim;
+    _ = pathops;
+    _ = wfc;
+    _ = algo;
 }

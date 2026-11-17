@@ -173,4 +173,9 @@ gen.norm = util.norm
 gen.degrees = util.degrees
 gen.radians = util.radians
 
+-- extension modules export everything they define
+for _, name in ipairs({"texture", "sim", "pathops", "wfc"}) do
+    for k, v in pairs(require("genpuin." .. name)) do gen[k] = v end
+end
+
 return gen
