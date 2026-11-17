@@ -7,6 +7,7 @@
 //! Neighbour queries go through a grid rebuilt by counting sort each step.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -262,7 +263,7 @@ fn circle(gpa: Allocator, n: usize, r: f64) ![]Vec2 {
     const pts = try gpa.alloc(Vec2, n);
     for (pts, 0..) |*p, i| {
         const t = @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(n)) * std.math.tau;
-        p.* = .{ r * @cos(t), r * @sin(t) };
+        p.* = .{ r * libm.cos(t), r * libm.sin(t) };
     }
     return pts;
 }

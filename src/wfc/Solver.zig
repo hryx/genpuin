@@ -9,6 +9,7 @@
 //! fixed per-cell noise replaces the reference's linear scan.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -135,7 +136,7 @@ pub fn init(gpa: Allocator, opts: Options) Error!Solver {
 
     const wlw = try gpa.alloc(f64, t_count);
     errdefer gpa.free(wlw);
-    for (wlw, opts.weights) |*o, w| o.* = if (w > 0) w * @log(w) else 0;
+    for (wlw, opts.weights) |*o, w| o.* = if (w > 0) w * libm.log(w) else 0;
 
     const wave = try gpa.alloc(bool, cells * t_count);
     errdefer gpa.free(wave);
@@ -248,7 +249,7 @@ fn weight(s: *const Solver, cell: usize, t: usize) f64 {
 fn weightLogWeight(s: *const Solver, cell: usize, t: usize) f64 {
     if (s.cell_weights) |cw| {
         const w = cw[cell * s.pattern_count + t];
-        return if (w > 0) w * @log(w) else 0;
+        return if (w > 0) w * libm.log(w) else 0;
     }
     return s.weight_log_weights[t];
 }
@@ -308,7 +309,7 @@ fn clear(s: *Solver, gpa: Allocator, random: std.Random) !bool {
 
 fn push(s: *Solver, gpa: Allocator, cell: u32) !void {
     const sw = s.sums_of_weights[cell];
-    const entropy = @log(sw) - s.sums_of_weight_log_weights[cell] / sw;
+    const entropy = libm.log(sw) - s.sums_of_weight_log_weights[cell] / sw;
     try s.heap.push(gpa, .{ .key = entropy + s.noise[cell], .cell = cell, .stamp = s.stamps[cell] });
 }
 

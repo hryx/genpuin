@@ -7,7 +7,8 @@
 //! prelude/strict.lua). Setting GENPUIN_LUA_DIR to a prelude directory,
 //! such as src/lua/prelude in a checkout, loads the same files from disk
 //! instead, so prelude edits need no rebuild. Files new since the build
-//! are not picked up.
+//! are not picked up. The math table is evened out across Lua flavours
+//! by bind_libm.zig.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -16,6 +17,7 @@ const zlua = @import("zlua");
 const lua_sources = @import("lua_sources");
 
 const bind_field = @import("bind_field.zig");
+const bind_libm = @import("bind_libm.zig");
 const core = @import("core.zig");
 const util = @import("util.zig");
 const Lua = util.Lua;
@@ -58,6 +60,7 @@ pub fn create(host: *Host, opts: Options) !*Lua {
     const lua = try Lua.init(host.gpa);
     errdefer lua.deinit();
     lua.openLibs();
+    bind_libm.install(lua);
     util.setHost(lua, host);
     bind_field.registerMetatable(lua);
 

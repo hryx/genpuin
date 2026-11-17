@@ -3,6 +3,7 @@
 //! case.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -230,7 +231,7 @@ const VoidCluster = struct {
         for (0..size) |y| for (0..size) |x| {
             const dx: f32 = @floatFromInt(@min(x, size - x));
             const dy: f32 = @floatFromInt(@min(y, size - y));
-            kernel[y * size + x] = @exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
+            kernel[y * size + x] = @floatCast(libm.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma)));
         };
         return .{ .size = size, .bits = bits, .energy = energy, .kernel = kernel };
     }

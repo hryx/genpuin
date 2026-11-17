@@ -12,6 +12,10 @@ const host_mod = @import("lua/host.zig");
 const util = @import("lua/util.zig");
 const Lua = zlua.Lua;
 
+comptime {
+    _ = @import("lua/libm_exports.zig");
+}
+
 const usage =
     \\Usage: genpuin <script.lua> [options] [-- script args]
     \\

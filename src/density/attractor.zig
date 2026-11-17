@@ -2,6 +2,7 @@
 //! One long orbit is iterated and every point after warmup is splatted.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -66,15 +67,15 @@ fn startPoint(kind: Kind) [2]f64 {
 pub inline fn step(comptime kind: Kind, p: Params, x: f64, y: f64) [2]f64 {
     switch (kind) {
         .clifford => return .{
-            @sin(p.a * y) + p.c * @cos(p.a * x),
-            @sin(p.b * x) + p.d * @cos(p.b * y),
+            libm.sin(p.a * y) + p.c * libm.cos(p.a * x),
+            libm.sin(p.b * x) + p.d * libm.cos(p.b * y),
         },
-        .dejong => return .{ @sin(p.a * y) - @cos(p.b * x), @sin(p.c * x) - @cos(p.d * y) },
+        .dejong => return .{ libm.sin(p.a * y) - libm.cos(p.b * x), libm.sin(p.c * x) - libm.cos(p.d * y) },
         .svensson => return .{
-            p.d * @sin(p.a * x) - @sin(p.b * y),
-            p.c * @cos(p.a * x) + @cos(p.b * y),
+            p.d * libm.sin(p.a * x) - libm.sin(p.b * y),
+            p.c * libm.cos(p.a * x) + libm.cos(p.b * y),
         },
-        .bedhead => return .{ @sin(x * y / p.b) * y + @cos(p.a * x - y), x + @sin(y) / p.b },
+        .bedhead => return .{ libm.sin(x * y / p.b) * y + libm.cos(p.a * x - y), x + libm.sin(y) / p.b },
         .hopalong => {
             const s: f64 = if (x < 0) -1 else 1;
             return .{ y - s * @sqrt(@abs(p.b * x - p.c)), p.a - x };
@@ -89,13 +90,13 @@ pub inline fn step(comptime kind: Kind, p: Params, x: f64, y: f64) [2]f64 {
         },
         .ikeda => {
             const t = p.b - p.c / (1 + x * x + y * y);
-            const ct = @cos(t);
-            const st = @sin(t);
+            const ct = libm.cos(t);
+            const st = libm.sin(t);
             return .{ 1 + p.a * (x * ct - y * st), p.a * (x * st + y * ct) };
         },
         .fractal_dream => return .{
-            @sin(y * p.b) + p.c * @sin(x * p.b),
-            @sin(x * p.a) + p.d * @sin(y * p.a),
+            libm.sin(y * p.b) + p.c * libm.sin(x * p.b),
+            libm.sin(x * p.a) + p.d * libm.sin(y * p.a),
         },
         .symmetric_icon => {
             var zr = x;
@@ -199,8 +200,8 @@ fn renderKind(comptime kind: Kind, gpa: Allocator, o: Options) !Field {
 test "attractor: clifford step matches the formula" {
     const p = defaults(.clifford);
     const n = step(.clifford, p, 0.1, 0.2);
-    try std.testing.expectApproxEqAbs(@sin(-1.4 * 0.2) + @cos(-1.4 * 0.1), n[0], 1e-12);
-    try std.testing.expectApproxEqAbs(@sin(1.6 * 0.1) + 0.7 * @cos(1.6 * 0.2), n[1], 1e-12);
+    try std.testing.expectApproxEqAbs(libm.sin(-1.4 * 0.2) + libm.cos(-1.4 * 0.1), n[0], 1e-12);
+    try std.testing.expectApproxEqAbs(libm.sin(1.6 * 0.1) + 0.7 * libm.cos(1.6 * 0.2), n[1], 1e-12);
 }
 
 test "attractor: symmetric icon with only lambda set is a pure scale" {

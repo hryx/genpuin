@@ -3,7 +3,7 @@
 
 const std = @import("std");
 
-const libm = @import("libm.zig");
+const libm = @import("../libm.zig");
 
 pub const Vec2 = [2]f64;
 

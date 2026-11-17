@@ -1,6 +1,7 @@
 //! Rasterize a Scene into a Raster.
 
 const std = @import("std");
+const libm = @import("libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -241,7 +242,7 @@ const Context = struct {
         const n = segments(@abs(a1 - a0) * r * self.k, 8);
         for (0..n + 1) |i| {
             const t = a0 + (a1 - a0) * @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(n));
-            try self.pts.append(self.gpa, self.tx(.{ c[0] + r * @cos(t), c[1] + r * @sin(t) }));
+            try self.pts.append(self.gpa, self.tx(.{ c[0] + r * libm.cos(t), c[1] + r * libm.sin(t) }));
         }
     }
 
@@ -250,7 +251,7 @@ const Context = struct {
         const n = segments(2 * std.math.pi * @max(rx, ry) * self.k, 64);
         for (0..n) |i| {
             const t = 2 * std.math.pi * @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(n));
-            try self.pts.append(self.gpa, self.tx(.{ c[0] + rx * @cos(t), c[1] + ry * @sin(t) }));
+            try self.pts.append(self.gpa, self.tx(.{ c[0] + rx * libm.cos(t), c[1] + ry * libm.sin(t) }));
         }
     }
 
@@ -285,7 +286,7 @@ const Context = struct {
         for (corners) |cn| {
             for (0..n + 1) |i| {
                 const t = cn.a + std.math.pi / 2.0 * @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(n));
-                try self.pts.append(self.gpa, self.tx(.{ cn.c[0] + rx * @cos(t), cn.c[1] + ry * @sin(t) }));
+                try self.pts.append(self.gpa, self.tx(.{ cn.c[0] + rx * libm.cos(t), cn.c[1] + ry * libm.sin(t) }));
             }
         }
     }
@@ -374,8 +375,8 @@ fn fieldColor(f: *const scene.FieldImage, range: [2]f32, x: f64, y: f64) scene.R
     t = std.math.clamp(t, 0, 1);
     t = switch (f.tone) {
         .linear => t,
-        .log => |k| @log(1 + k * t) / @log(1 + k),
-        .gamma => |gm| std.math.pow(f32, t, gm),
+        .log => |k| @floatCast(libm.log(1 + k * t) / libm.log(1 + k)),
+        .gamma => |gm| @floatCast(libm.pow(t, gm)),
     };
     return scene.samplePalette(f.palette, t);
 }

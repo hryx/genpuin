@@ -5,7 +5,7 @@
 
 const std = @import("std");
 
-const libm = @import("libm.zig");
+const libm = @import("../libm.zig");
 
 pub const Perlin = struct {
     perm: [512]u8,

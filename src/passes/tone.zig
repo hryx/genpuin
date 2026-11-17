@@ -1,6 +1,7 @@
 //! Per-pixel tone passes: grain, levels and scanlines.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 
 const Raster = @import("../Raster.zig");
 const common = @import("common.zig");
@@ -68,7 +69,7 @@ pub fn levels(r: *Raster, p: *const Levels) void {
     const inv_gamma = 1 / @max(1e-6, p.gamma);
     for (r.pix) |*v| {
         const t = std.math.clamp((v.* - p.black) / span, 0, 1);
-        const g = if (p.gamma == 1) t else std.math.pow(f32, t, inv_gamma);
+        const g: f32 = if (p.gamma == 1) t else @floatCast(libm.pow(t, inv_gamma));
         v.* = std.math.lerp(p.out_black, p.out_white, g);
     }
 }

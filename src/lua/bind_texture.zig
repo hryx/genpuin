@@ -218,7 +218,7 @@ fn curl(lua: *Lua) i32 {
 /// curlAngle(seed, x, y, opts?) -> radians
 fn curlAngle(lua: *Lua) i32 {
     const v = curlAt(lua);
-    lua.pushNumber(std.math.atan2(v[1], v[0]));
+    lua.pushNumber(genpuin.libm.atan2(v[1], v[0]));
     return 1;
 }
 

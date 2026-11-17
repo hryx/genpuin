@@ -115,11 +115,6 @@ fn orientExact(a: Vec2, b: Vec2, c: Vec2) f64 {
     return 0;
 }
 
-// Plain f64 arithmetic only below: no fused multiply-add, f128 or libm
-// calls. Any of those links compiler-rt's math routines into the
-// executable, and the embedded LuaJIT then binds math.sin and friends to
-// them instead of the system libm, which shifts Lua results by an ulp.
-
 const splitter: f64 = 134217729; // 2^27 + 1
 
 fn split(a: f64) [2]f64 {
@@ -208,40 +203,6 @@ pub fn lineCrossing(la: [2]Vec2, lb: [2]Vec2) Vec2 {
     return .{ la[0][0] + t * r[0], la[0][1] + t * r[1] };
 }
 
-const pio2_hi: f64 = 1.57079632673412561417e+00;
-const pio2_lo: f64 = 6.07710050650619224932e-11;
-
-/// Sine and cosine of x without libm (see the note above twoProduct).
-/// Cody-Waite reduction by quarter turns, then Taylor series on
-/// [-pi/4, pi/4], good to about 1e-16 for |x| up to a few thousand turns.
-pub fn sinCos(x: f64) [2]f64 {
-    if (!(@abs(x) < 1e9)) return .{ std.math.nan(f64), std.math.nan(f64) };
-    const q = @round(x / (std.math.pi / 2.0));
-    const r = (x - q * pio2_hi) - q * pio2_lo;
-    const r2 = r * r;
-    var sn: f64 = 0;
-    var cs: f64 = 0;
-    // Horner over 1/n! from the highest term down.
-    var k: u32 = 17;
-    while (k >= 1) : (k -= 2) {
-        sn = 1 - sn * r2 / @as(f64, @floatFromInt((k + 1) * (k + 2)));
-        if (k == 1) break;
-    }
-    sn *= r;
-    k = 16;
-    while (true) : (k -= 2) {
-        cs = 1 - cs * r2 / @as(f64, @floatFromInt((k + 1) * (k + 2)));
-        if (k == 0) break;
-    }
-    const quadrant: u2 = @truncate(@as(u64, @bitCast(@as(i64, @intFromFloat(q)))));
-    return switch (quadrant) {
-        0 => .{ sn, cs },
-        1 => .{ cs, -sn },
-        2 => .{ -sn, -cs },
-        3 => .{ -cs, sn },
-    };
-}
-
 /// Snap p into the extent of the segment lo..hi given in sweep order.
 pub fn clampInto(p: Vec2, lo: Vec2, hi: Vec2) Vec2 {
     if (!lexLess(lo, p)) return lo;
@@ -282,17 +243,6 @@ test "geom: orient is exact on nearly collinear points" {
     try std.testing.expect(orient(a, b, d) > 0);
     const e: Vec2 = .{ 24, std.math.nextAfter(f64, 24, 23) };
     try std.testing.expect(orient(a, b, e) < 0);
-}
-
-test "geom: sinCos matches the builtins" {
-    var x: f64 = -40;
-    while (x < 40) : (x += 0.0137) {
-        const sc = sinCos(x);
-        try std.testing.expectApproxEqAbs(@sin(x), sc[0], 1e-15);
-        try std.testing.expectApproxEqAbs(@cos(x), sc[1], 1e-15);
-    }
-    try std.testing.expectEqual(@as(f64, 0), sinCos(0)[0]);
-    try std.testing.expectEqual(@as(f64, 1), sinCos(0)[1]);
 }
 
 test "geom: lineCrossing is accurate on long thin crossings" {

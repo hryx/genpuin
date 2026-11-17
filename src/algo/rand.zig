@@ -5,7 +5,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const libm = @import("libm.zig");
+const libm = @import("../libm.zig");
 
 pub const Vec2 = [2]f64;
 

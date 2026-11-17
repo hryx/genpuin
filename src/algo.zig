@@ -3,7 +3,6 @@
 //! rewriting and colour maps. Ported from the original Lua library with
 //! its arithmetic kept as is, so seeded scripts render the same.
 
-pub const libm = @import("algo/libm.zig");
 pub const rand = @import("algo/rand.zig");
 pub const perlin = @import("algo/perlin.zig");
 pub const voronoi = @import("algo/voronoi.zig");
@@ -19,7 +18,6 @@ pub const Perlin = perlin.Perlin;
 pub const Bounds = rand.Bounds;
 
 test {
-    _ = libm;
     _ = rand;
     _ = perlin;
     _ = voronoi;

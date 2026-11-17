@@ -8,6 +8,7 @@
 //! agent loop has no trig.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -70,7 +71,7 @@ const Rotation = struct {
     s: f32,
 
     fn init(angle: f32) Rotation {
-        return .{ .c = @cos(angle), .s = @sin(angle) };
+        return .{ .c = @floatCast(libm.cos(angle)), .s = @floatCast(libm.sin(angle)) };
     }
 };
 
@@ -149,10 +150,10 @@ fn spawn(self: *Physarum, how: Spawn) void {
             .disc => {
                 const r = r_max * @sqrt(rng.float(f64));
                 const t = rng.float(f64) * std.math.tau;
-                p = .{ fw / 2 + r * @cos(t), fh / 2 + r * @sin(t) };
+                p = .{ fw / 2 + r * libm.cos(t), fh / 2 + r * libm.sin(t) };
             },
             .ring => {
-                p = .{ fw / 2 + r_max * @cos(angle), fh / 2 + r_max * @sin(angle) };
+                p = .{ fw / 2 + r_max * libm.cos(angle), fh / 2 + r_max * libm.sin(angle) };
                 heading = angle + std.math.pi;
             },
             .points => |pts| {
@@ -170,8 +171,8 @@ fn place(self: *Physarum, i: usize, p: Vec2, heading: f64) void {
     const fh: f64 = @floatFromInt(self.h);
     self.x[i] = @floatCast(std.math.clamp(p[0], 0, std.math.nextAfter(f64, fw, 0)));
     self.y[i] = @floatCast(std.math.clamp(p[1], 0, std.math.nextAfter(f64, fh, 0)));
-    self.dx[i] = @floatCast(@cos(heading));
-    self.dy[i] = @floatCast(@sin(heading));
+    self.dx[i] = @floatCast(libm.cos(heading));
+    self.dy[i] = @floatCast(libm.sin(heading));
 }
 
 /// Agent state as rows of {x, y, heading}, for handing between runs.
@@ -180,7 +181,7 @@ pub fn agentsToField(self: *const Physarum, gpa: Allocator) !Field {
     for (self.x, self.y, self.dx, self.dy, 0..) |x, y, dx, dy, i| {
         f.data[i * 3 + 0] = x;
         f.data[i * 3 + 1] = y;
-        f.data[i * 3 + 2] = std.math.atan2(dy, dx);
+        f.data[i * 3 + 2] = @floatCast(libm.atan2(dy, dx));
     }
     return f;
 }

@@ -6,6 +6,7 @@
 //! transform's color on each step.
 
 const std = @import("std");
+const libm = @import("../libm.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -112,7 +113,7 @@ const Pre = struct {
     fn init(x: f64, y: f64) Pre {
         const r2 = x * x + y * y + 1e-20;
         const r = @sqrt(r2);
-        return .{ .x = x, .y = y, .r2 = r2, .r = r, .theta = std.math.atan2(x, y), .sin_t = x / r, .cos_t = y / r };
+        return .{ .x = x, .y = y, .r2 = r2, .r = r, .theta = libm.atan2(x, y), .sin_t = x / r, .cos_t = y / r };
     }
 };
 
@@ -123,27 +124,27 @@ fn variation(v: Variation, p: *const Pre, aff: *const Affine, rng: std.Random) [
     const pi = std.math.pi;
     switch (v) {
         .linear => return .{ x, y },
-        .sinusoidal => return .{ @sin(x), @sin(y) },
+        .sinusoidal => return .{ libm.sin(x), libm.sin(y) },
         .spherical => return .{ x / p.r2, y / p.r2 },
         .swirl => {
-            const s = @sin(p.r2);
-            const c = @cos(p.r2);
+            const s = libm.sin(p.r2);
+            const c = libm.cos(p.r2);
             return .{ x * s - y * c, x * c + y * s };
         },
         .horseshoe => return .{ (x - y) * (x + y) / r, 2 * x * y / r },
         .polar => return .{ p.theta / pi, r - 1 },
-        .handkerchief => return .{ r * @sin(p.theta + r), r * @cos(p.theta - r) },
-        .heart => return .{ r * @sin(p.theta * r), -r * @cos(p.theta * r) },
+        .handkerchief => return .{ r * libm.sin(p.theta + r), r * libm.cos(p.theta - r) },
+        .heart => return .{ r * libm.sin(p.theta * r), -r * libm.cos(p.theta * r) },
         .disc => {
             const t = p.theta / pi;
-            return .{ t * @sin(pi * r), t * @cos(pi * r) };
+            return .{ t * libm.sin(pi * r), t * libm.cos(pi * r) };
         },
-        .spiral => return .{ (p.cos_t + @sin(r)) / r, (p.sin_t - @cos(r)) / r },
+        .spiral => return .{ (p.cos_t + libm.sin(r)) / r, (p.sin_t - libm.cos(r)) / r },
         .hyperbolic => return .{ p.sin_t / r, r * p.cos_t },
-        .diamond => return .{ p.sin_t * @cos(r), p.cos_t * @sin(r) },
+        .diamond => return .{ p.sin_t * libm.cos(r), p.cos_t * libm.sin(r) },
         .ex => {
-            const p0 = @sin(p.theta + r);
-            const p1 = @cos(p.theta - r);
+            const p0 = libm.sin(p.theta + r);
+            const p1 = libm.cos(p.theta - r);
             const a = p0 * p0 * p0;
             const b = p1 * p1 * p1;
             return .{ r * (a + b), r * (a - b) };
@@ -151,28 +152,28 @@ fn variation(v: Variation, p: *const Pre, aff: *const Affine, rng: std.Random) [
         .julia => {
             const omega: f64 = if (rng.boolean()) pi else 0;
             const sr = @sqrt(r);
-            return .{ sr * @cos(p.theta / 2 + omega), sr * @sin(p.theta / 2 + omega) };
+            return .{ sr * libm.cos(p.theta / 2 + omega), sr * libm.sin(p.theta / 2 + omega) };
         },
         .bent => return .{ if (x < 0) 2 * x else x, if (y < 0) y / 2 else y },
         .waves => {
             const c2 = aff[2] * aff[2] + 1e-6;
             const f2 = aff[5] * aff[5] + 1e-6;
-            return .{ x + aff[1] * @sin(y / c2), y + aff[4] * @sin(x / f2) };
+            return .{ x + aff[1] * libm.sin(y / c2), y + aff[4] * libm.sin(x / f2) };
         },
         .fisheye => {
             const k = 2 / (r + 1);
             return .{ k * y, k * x };
         },
-        .popcorn => return .{ x + aff[2] * @sin(@tan(3 * y)), y + aff[5] * @sin(@tan(3 * x)) },
+        .popcorn => return .{ x + aff[2] * libm.sin(libm.tan(3 * y)), y + aff[5] * libm.sin(libm.tan(3 * x)) },
         .exponential => {
-            const k = @exp(x - 1);
-            return .{ k * @cos(pi * y), k * @sin(pi * y) };
+            const k = libm.exp(x - 1);
+            return .{ k * libm.cos(pi * y), k * libm.sin(pi * y) };
         },
         .power => {
-            const k = std.math.pow(f64, r, p.sin_t);
+            const k = libm.pow(r, p.sin_t);
             return .{ k * p.cos_t, k * p.sin_t };
         },
-        .cosine => return .{ @cos(pi * x) * std.math.cosh(y), -@sin(pi * x) * std.math.sinh(y) },
+        .cosine => return .{ libm.cos(pi * x) * libm.cosh(y), -libm.sin(pi * x) * libm.sinh(y) },
         .rings => {
             const c2 = aff[2] * aff[2] + 1e-6;
             const k = @mod(r + c2, 2 * c2) - c2 + r * (1 - c2);
@@ -181,7 +182,7 @@ fn variation(v: Variation, p: *const Pre, aff: *const Affine, rng: std.Random) [
         .fan => {
             const t = pi * aff[2] * aff[2] + 1e-6;
             const a = if (@mod(p.theta + aff[5], t) > t / 2) p.theta - t / 2 else p.theta + t / 2;
-            return .{ r * @cos(a), r * @sin(a) };
+            return .{ r * libm.cos(a), r * libm.sin(a) };
         },
         .eyefish => {
             const k = 2 / (r + 1);
@@ -191,24 +192,24 @@ fn variation(v: Variation, p: *const Pre, aff: *const Affine, rng: std.Random) [
             const k = 4 / (p.r2 + 4);
             return .{ k * x, k * y };
         },
-        .cylinder => return .{ @sin(x), y },
+        .cylinder => return .{ libm.sin(x), y },
         .noise => {
             const a = rng.float(f64);
             const t = 2 * pi * rng.float(f64);
-            return .{ a * x * @cos(t), a * y * @sin(t) };
+            return .{ a * x * libm.cos(t), a * y * libm.sin(t) };
         },
         .blur => {
             const a = rng.float(f64);
             const t = 2 * pi * rng.float(f64);
-            return .{ a * @cos(t), a * @sin(t) };
+            return .{ a * libm.cos(t), a * libm.sin(t) };
         },
         .gaussian => {
             var s: f64 = -2;
             for (0..4) |_| s += rng.float(f64);
             const t = 2 * pi * rng.float(f64);
-            return .{ s * @cos(t), s * @sin(t) };
+            return .{ s * libm.cos(t), s * libm.sin(t) };
         },
-        .tangent => return .{ @sin(x) / @cos(y), @tan(y) },
+        .tangent => return .{ libm.sin(x) / libm.cos(y), libm.tan(y) },
         .square => return .{ rng.float(f64) - 0.5, rng.float(f64) - 0.5 },
         .cross => {
             const d = x * x - y * y;
@@ -310,8 +311,8 @@ fn withSymmetry(arena: Allocator, transforms: []const Transform, symmetry: i32) 
     if (mirror) try list.append(arena, .{ .weight = mean, .affine = .{ -1, 0, 0, 0, 1, 0 }, .color_speed = 0 });
     for (1..@max(n, 1)) |k| {
         const a = 2 * std.math.pi * @as(f64, @floatFromInt(k)) / @as(f64, @floatFromInt(n));
-        const c = @cos(a);
-        const s = @sin(a);
+        const c = libm.cos(a);
+        const s = libm.sin(a);
         try list.append(arena, .{ .weight = mean, .affine = .{ c, -s, 0, s, c, 0 }, .color_speed = 0 });
     }
     return list.items;
@@ -402,8 +403,8 @@ fn candidate(arena: Allocator, r: std.Random, count: u32) !Random {
         const sx = 0.35 + r.float(f64) * 0.6;
         const sy = 0.35 + r.float(f64) * 0.6;
         const shear = (r.float(f64) - 0.5) * 0.6;
-        const c = @cos(angle);
-        const s = @sin(angle);
+        const c = libm.cos(angle);
+        const s = libm.sin(angle);
         const nterms = 1 + r.uintLessThan(u32, 2);
         const terms = try arena.alloc(Term, nterms);
         var total: f64 = 0;
@@ -449,8 +450,8 @@ fn brightness(arena: Allocator, cand: *const Random, seed: u64) !f64 {
     if (!(peak > 0)) return 0;
     const k = 200.0;
     var sum: f64 = 0;
-    for (res.density.data) |v| sum += @log(1 + k * v / peak);
-    return sum / @log(1 + k) / @as(f64, @floatFromInt(res.density.data.len));
+    for (res.density.data) |v| sum += libm.log(1 + k * v / peak);
+    return sum / libm.log(1 + k) / @as(f64, @floatFromInt(res.density.data.len));
 }
 
 test "flame: linear identity transforms keep the point" {

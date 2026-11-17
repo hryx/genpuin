@@ -4,13 +4,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const libm = @import("libm.zig");
+const libm = @import("../libm.zig");
 
 /// Rows 0..steps of `width` cells each, flattened. Row 0 is `first`.
 pub fn elementary(gpa: Allocator, rule: f64, first: []const u1, steps: usize) ![]u1 {
     var lookup: [8]u1 = undefined;
     for (&lookup, 0..) |*l, i| {
-        const bit = libm.mod(@floor(rule / std.math.pow(f64, 2, @floatFromInt(i))), 2);
+        const bit = libm.mod(@floor(rule / libm.pow(2, @floatFromInt(i))), 2);
         l.* = @intFromBool(bit == 1);
     }
     const w = first.len;

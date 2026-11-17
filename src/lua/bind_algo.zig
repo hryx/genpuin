@@ -346,7 +346,7 @@ fn bitOp(comptime op: BitOp) fn (*Lua) i32 {
 }
 
 fn toU32(x: f64) u32 {
-    const m = algo.libm.mod(@floor(x), 4294967296.0);
+    const m = genpuin.libm.mod(@floor(x), 4294967296.0);
     return if (m >= 0 and m < 4294967296.0) @intFromFloat(m) else 0;
 }
 

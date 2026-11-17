@@ -15,6 +15,7 @@ pub const sim = @import("sim.zig");
 pub const pathops = @import("pathops.zig");
 pub const wfc = @import("wfc.zig");
 pub const algo = @import("algo.zig");
+pub const libm = @import("libm.zig");
 
 test {
     _ = Raster;
@@ -31,4 +32,5 @@ test {
     _ = pathops;
     _ = wfc;
     _ = algo;
+    _ = libm;
 }

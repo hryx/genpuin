@@ -6,7 +6,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const libm = @import("libm.zig");
+const libm = @import("../libm.zig");
 const Rng = @import("rand.zig").Rng;
 const pointInPolygon = @import("spatial.zig").pointInPolygon;
 
