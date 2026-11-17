@@ -199,9 +199,7 @@ fn isCanvas(lua: *Lua, index: i32) bool {
 
 fn exportSvg(lua: *Lua, path: []const u8) !void {
     const canvas = lua.absIndex(-1);
-    _ = lua.getGlobal("require");
-    _ = lua.pushStringZ("genpuin.svg");
-    lua.call(.{ .args = 1, .results = 1 });
+    host_mod.pushModule(lua, "svg");
     _ = lua.getField(-1, "exportSvg");
     lua.pushValue(canvas);
     _ = lua.pushString(path);

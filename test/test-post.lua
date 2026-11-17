@@ -8,7 +8,6 @@ local check = T.check
 local rgb = T.rgb
 
 local scene = [[
-local gen = require("genpuin")
 local c = gen.canvas(40, 20)
 gen.background(c, {0, 0, 0})
 gen.draw(c, gen.rect(10, 0, 10, 20), {fill = {1, 0, 0}})

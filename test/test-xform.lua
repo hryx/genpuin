@@ -2,8 +2,6 @@
 -- geometry they describe, checked against the transformed sample points.
 
 local T = require("test.testkit")
-local gen = require("genpuin")
-
 local check = T.check
 
 local function close(p, q, tol)

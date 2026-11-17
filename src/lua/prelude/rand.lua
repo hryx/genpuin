@@ -1,5 +1,6 @@
-local algo = require("genpuin.core").algo
-local native = require("genpuin.compat").native
+local import = ...
+local algo = import("core").algo
+local native = import("compat").native
 
 local M = {}
 

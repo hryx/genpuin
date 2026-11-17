@@ -1,5 +1,6 @@
-local core = require("genpuin.core")
-local rand = require("genpuin.rand")
+local import = ...
+local core = import("core")
+local rand = import("rand")
 
 local M = {}
 

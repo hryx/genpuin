@@ -1,4 +1,5 @@
-local util = require("genpuin.util")
+local import = ...
+local util = import("util")
 
 local M = {}
 

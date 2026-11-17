@@ -1,81 +1,17 @@
--- Noise and density textures backed by core.texture.
--- Scalar samplers (simplex, worley, valueNoise, curl) read the seed set by
--- textureSeed. Bulk functions return Fields to draw with gen.image.
+-- Flow tracing, density renders and Field filters backed by core.texture.
+-- The noise samplers live in noise.lua. Functions here return Fields to
+-- draw with gen.image.
 
-local core = require("genpuin.core")
-local rand = require("genpuin.rand")
+local import = ...
+local core = import("core")
+local rand = import("rand")
 
 local T = core.texture
 
 local M = {}
 
-local seed = core.vary * 1000003
-
 local function randomSeed()
     return rand.randInt(1, 2147483646)
-end
-
-local function withDefault(opts, key, value)
-    local o = {}
-    for k, v in pairs(opts or {}) do o[k] = v end
-    if o[key] == nil then o[key] = value end
-    return o
-end
-
--- Set the seed for simplex, worley, valueNoise, curl, curlFlow and for
--- noiseGrid calls without opts.seed. With --vary N, N is mixed in.
-function M.textureSeed(n)
-    seed = n + core.vary * 1000003
-end
-
--- 2D simplex noise at (x, y), or 3D when z is given. Returns about -1..1.
-function M.simplex(x, y, z)
-    return T.simplex(seed, x, y, z)
-end
-
--- Value noise at (x, y), or 3D when z is given. Returns -1..1.
-function M.valueNoise(x, y, z)
-    return T.valueNoise(seed, x, y, z)
-end
-
--- Worley (cellular) noise at (x, y). Returns F1 and F2, the distances to
--- the nearest and second nearest feature points, so F2 - F1 traces cell
--- edges. opts.metric is "euclidean" (default), "manhattan" or "chebyshev".
--- opts.jitter 0..1 is how far points stray from cell centers (default 1).
-function M.worley(x, y, opts)
-    return T.worley(seed, x, y, opts)
-end
-
--- Curl of simplex noise at (x, y): a divergence free vector dx, dy.
--- opts takes the noiseGrid noise options (kind, octaves, fractal, warp...)
--- plus scale (default 1), offset = {x, y} and z.
-function M.curl(x, y, opts)
-    return T.curl(seed, x, y, opts)
-end
-
--- A Field of noise, w x h cells.
--- opts.kind: "simplex" (default), "perlin", "value", "worley", or
---   "worleyEdge" for F2 - F1. opts.metric and opts.jitter apply to worley.
--- opts.scale: noise frequency per scene unit (default 0.01).
--- opts.offset = {x, y} shifts the noise. opts.z samples the 3D form (worley stays 2D).
--- opts.octaves (default 1), lacunarity (2), gain (0.5).
--- opts.fractal: "fbm" (default), "ridged" or "turbulence".
--- opts.warp: domain warp strength in noise units, opts.warpScale its frequency,
---   opts.warpOctaves its octaves (default octaves), opts.warpDepth 1 to 4
---   warps the warp noise again for more swirl (default 1).
--- opts.x, y, w, h: the scene rect the grid covers (default one unit per
---   cell), so a grid of any resolution samples the same scene noise.
--- opts.seed (default the textureSeed).
-function M.noiseGrid(w, h, opts)
-    return T.noiseGrid(w, h, opts or {}, seed)
-end
-
--- A flow field of curl noise for gen.trace. Its sample(x, y) returns an
--- angle. opts as for curl, with scale defaulting to 0.005, and opts.seed.
-function M.curlFlow(opts)
-    local o = withDefault(opts, "scale", 0.005)
-    local s = o.seed or seed
-    return {type = "flow", sample = function(x, y) return T.curlAngle(s, x, y, o) end}
 end
 
 -- Trace many particles at once. Returns a list of point lists, one per

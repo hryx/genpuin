@@ -2,7 +2,6 @@
 -- Exact areas from booleans and offsets, then a rendered scene of xor,
 -- inset and hatch results checked pixel by pixel.
 
-local gen = require("genpuin")
 local T = require("test.testkit")
 
 local check = T.check

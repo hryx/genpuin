@@ -3,8 +3,6 @@
 -- point lights the right pixels through gen.image.
 
 local T = require("test.testkit")
-local gen = require("genpuin")
-
 local check = T.check
 
 local function near(a, b, tol)
@@ -22,12 +20,21 @@ end
 
 print("Noise")
 
-gen.textureSeed(5)
+gen.noiseSeed(5)
 local g = gen.noiseGrid(8, 4, {scale = 0.1, x = 0, y = 0, w = 80, h = 40})
 -- Cell (3, 2) is centered at scene (35, 25), noise (3.5, 2.5).
 check("noiseGrid matches gen.simplex at a cell center",
     near(g:get(3, 2), gen.simplex(3.5, 2.5)),
     string.format("grid %f, simplex %f", g:get(3, 2), gen.simplex(3.5, 2.5)))
+
+check("noiseGrid without opts.seed uses the noise seed",
+    gen.noiseGrid(4, 4, {scale = 0.3}):get(1, 1) == gen.noiseGrid(4, 4, {scale = 0.3, seed = 5}):get(1, 1))
+local s5 = gen.simplex(1.3, 2.7)
+gen.noiseSeed(6)
+check("noiseSeed reseeds simplex", gen.simplex(1.3, 2.7) ~= s5)
+gen.noiseSeed(5)
+check("the same noiseSeed repeats simplex", gen.simplex(1.3, 2.7) == s5)
+check("there is no separate texture seed", rawget(gen, "textureSeed") == nil)
 
 local lo, hi = gen.noiseGrid(64, 64, {scale = 0.05, octaves = 4}):minMax()
 check("simplex fBm stays within -1..1", lo >= -1 and hi <= 1, string.format("%f..%f", lo, hi))
@@ -98,7 +105,6 @@ os.execute("mkdir -p out/test")
 local script = "out/test/texture-splat.lua"
 local fh = assert(io.open(script, "w"))
 fh:write([[
-local gen = require("genpuin")
 local c = gen.canvas(40, 40)
 gen.background(c, {0, 0, 0})
 local f = gen.field(4, 4, 0)

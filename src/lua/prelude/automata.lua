@@ -1,4 +1,5 @@
-local algo = require("genpuin.core").algo
+local import = ...
+local algo = import("core").algo
 
 local M = {}
 

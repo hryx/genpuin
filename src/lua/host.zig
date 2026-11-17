@@ -1,7 +1,13 @@
-//! Lua state setup for the CLI. The genpuin Lua library is embedded and
-//! served through package.preload. Setting GENPUIN_LUA_DIR to a repo
-//! checkout loads the library from disk instead, so Lua edits need no
-//! rebuild.
+//! Lua state setup for the CLI. The prelude in src/lua/prelude/ is
+//! embedded and loaded privately, out of reach of `require`. Each prelude
+//! chunk gets an `import(name)` function as its argument, which runs a
+//! sibling file once and caches its result. The native module is
+//! imported as "core". Before a script runs, the prelude's init.lua is
+//! installed as the global `gen` and global reads turn strict (see
+//! prelude/strict.lua). Setting GENPUIN_LUA_DIR to a prelude directory,
+//! such as src/lua/prelude in a checkout, loads the same files from disk
+//! instead, so prelude edits need no rebuild. Files new since the build
+//! are not picked up.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -20,10 +26,32 @@ pub const Options = struct {
     /// Directory of the script, added to package.path so scripts can
     /// require their neighbours.
     script_dir: []const u8 = ".",
+    /// Prelude directory to load instead of the embedded copy.
     lua_dir: ?[]const u8 = null,
     /// argv for the script's global `arg`: [exe, script, extra...].
     argv: []const []const u8 = &.{},
 };
+
+/// Called with the table of prelude chunks and the native module opener.
+/// Returns `import`, which the host keeps in the registry.
+const boot =
+    \\local chunks, openCore = ...
+    \\local loaded = {core = openCore()}
+    \\local function import(name)
+    \\    local m = loaded[name]
+    \\    if m == nil then
+    \\        local chunk = chunks[name] or error("prelude has no module " .. name)
+    \\        m = chunk(import)
+    \\        loaded[name] = m
+    \\    end
+    \\    return m
+    \\end
+    \\import("strict").globals()
+    \\gen = import("init")
+    \\return import
+;
+
+const import_key = "genpuin.import";
 
 /// Create a state wired to `host`. `host` must outlive the state.
 pub fn create(host: *Host, opts: Options) !*Lua {
@@ -33,31 +61,12 @@ pub fn create(host: *Host, opts: Options) !*Lua {
     util.setHost(lua, host);
     bind_field.registerMetatable(lua);
 
+    // Only the script's neighbours and the working directory, so a Lua
+    // install elsewhere on the machine cannot shadow anything.
     _ = lua.getGlobal("package");
-    _ = lua.getField(-1, "preload");
-    lua.pushFunction(zlua.wrap(core.open));
-    lua.setField(-2, "genpuin.core");
-    if (opts.lua_dir == null) {
-        for (lua_sources.modules) |m| {
-            const name = try chunkName(host.gpa, m.name);
-            defer host.gpa.free(name);
-            util.loadBuffer(lua, m.source, name) catch |err| {
-                std.log.err("embedded {s}: {s}", .{ m.name, lua.toString(-1) catch @errorName(err) });
-                return err;
-            };
-            lua.setField(-2, m.name);
-        }
-    }
-    lua.pop(1);
-
-    var path: std.ArrayList(u8) = .empty;
-    defer path.deinit(host.gpa);
-    if (opts.lua_dir) |d| try path.print(host.gpa, "{s}/?.lua;{s}/?/init.lua;", .{ d, d });
-    try path.print(host.gpa, "{s}/?.lua;./?.lua;", .{opts.script_dir});
-    _ = lua.getField(-1, "path");
-    try path.appendSlice(host.gpa, lua.toString(-1) catch "");
-    lua.pop(1);
-    _ = lua.pushString(path.items);
+    const path = try std.fmt.allocPrint(host.gpa, "{s}/?.lua;./?.lua", .{opts.script_dir});
+    defer host.gpa.free(path);
+    _ = lua.pushString(path);
     lua.setField(-2, "path");
     lua.pop(1);
 
@@ -68,16 +77,42 @@ pub fn create(host: *Host, opts: Options) !*Lua {
         lua.setIndexRaw(-2, @as(i32, @intCast(i)) - 1);
     }
     lua.setGlobal("arg");
+
+    util.loadBuffer(lua, boot, "=boot") catch |err| return logError(lua, "boot", err);
+    lua.newTable();
+    for (lua_sources.modules) |m| {
+        try loadModule(lua, host.gpa, m.file, m.source, opts.lua_dir);
+        lua.setField(-2, m.name);
+    }
+    lua.pushFunction(zlua.wrap(core.open));
+    lua.protectedCall(.{ .args = 2, .results = 1 }) catch |err| return logError(lua, "prelude", err);
+    lua.setField(zlua.registry_index, import_key);
     return lua;
 }
 
-fn chunkName(gpa: Allocator, mod: []const u8) ![:0]const u8 {
-    var name: std.ArrayList(u8) = .empty;
-    try name.appendSlice(gpa, "@");
-    for (mod) |c| try name.append(gpa, if (c == '.') '/' else c);
-    if (std.mem.eql(u8, mod, "genpuin")) try name.appendSlice(gpa, "/init");
-    try name.appendSlice(gpa, ".lua");
-    return name.toOwnedSliceSentinel(gpa, 0);
+/// Push the prelude module `name` (a file stem, such as "svg").
+pub fn pushModule(lua: *Lua, name: [:0]const u8) void {
+    _ = lua.getField(zlua.registry_index, import_key);
+    _ = lua.pushStringZ(name);
+    lua.call(.{ .args = 1, .results = 1 });
+}
+
+/// Push the loaded chunk for one prelude file, from `dir` when given.
+fn loadModule(lua: *Lua, gpa: Allocator, file: []const u8, source: [:0]const u8, dir: ?[]const u8) !void {
+    if (dir) |d| {
+        const path = try std.fmt.allocPrintSentinel(gpa, "{s}/{s}", .{ d, file }, 0);
+        defer gpa.free(path);
+        util.loadFile(lua, path) catch |err| return logError(lua, "GENPUIN_LUA_DIR", err);
+    } else {
+        const name = try std.fmt.allocPrintSentinel(gpa, "@prelude/{s}", .{file}, 0);
+        defer gpa.free(name);
+        util.loadBuffer(lua, source, name) catch |err| return logError(lua, file, err);
+    }
+}
+
+fn logError(lua: *Lua, what: []const u8, err: anyerror) anyerror {
+    std.log.err("{s}: {s}", .{ what, lua.toString(-1) catch @errorName(err) });
+    return err;
 }
 
 /// Load and run a script, leaving its first return value on the stack.

@@ -3,8 +3,6 @@
 -- grids, then renders a forced checkerboard and reads its pixels back.
 
 local T = require("test.testkit")
-local gen = require("genpuin")
-
 local check = T.check
 local rgb = T.rgb
 

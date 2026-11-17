@@ -1,22 +1,23 @@
-local geo = require("genpuin.geo")
-local color = require("genpuin.color")
-local canvas = require("genpuin.canvas")
-local svg = require("genpuin.svg")
-local Pen = require("genpuin.pen")
-local rand = require("genpuin.rand")
-local xform = require("genpuin.xform")
-local util = require("genpuin.util")
-local noise = require("genpuin.noise")
-local field = require("genpuin.field")
-local pattern = require("genpuin.pattern")
-local fx = require("genpuin.fx")
-local raster = require("genpuin.raster")
-local gradient = require("genpuin.gradient")
-local voronoi = require("genpuin.voronoi")
-local spatial = require("genpuin.spatial")
-local lsystem = require("genpuin.lsystem")
-local automata = require("genpuin.automata")
-local markov = require("genpuin.markov")
+local import = ...
+local geo = import("geo")
+local color = import("color")
+local canvas = import("canvas")
+local svg = import("svg")
+local Pen = import("pen")
+local rand = import("rand")
+local xform = import("xform")
+local util = import("util")
+local noise = import("noise")
+local field = import("field")
+local pattern = import("pattern")
+local fx = import("fx")
+local raster = import("raster")
+local gradient = import("gradient")
+local voronoi = import("voronoi")
+local spatial = import("spatial")
+local lsystem = import("lsystem")
+local automata = import("automata")
+local markov = import("markov")
 
 local gen = {}
 
@@ -115,9 +116,15 @@ gen.reflectY = xform.reflectY
 gen.reflect = xform.reflect
 
 -- noise
+gen.noiseSeed = noise.seed
 gen.perlin = noise.perlin
 gen.fbm = noise.fbm
-gen.noiseSeed = noise.seed
+gen.simplex = noise.simplex
+gen.valueNoise = noise.valueNoise
+gen.worley = noise.worley
+gen.curl = noise.curl
+gen.curlFlow = noise.curlFlow
+gen.noiseGrid = noise.noiseGrid
 
 -- field
 gen.flowField = field.flowField
@@ -175,7 +182,7 @@ gen.radians = util.radians
 
 -- extension modules export everything they define
 for _, name in ipairs({"texture", "sim", "pathops", "wfc"}) do
-    for k, v in pairs(require("genpuin." .. name)) do gen[k] = v end
+    for k, v in pairs(import(name)) do gen[k] = v end
 end
 
-return gen
+return import("strict").api(gen, "gen")

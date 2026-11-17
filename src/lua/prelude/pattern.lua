@@ -1,7 +1,8 @@
-local geo = require("genpuin.geo")
-local rand = require("genpuin.rand")
-local xform = require("genpuin.xform")
-local algo = require("genpuin.core").algo
+local import = ...
+local geo = import("geo")
+local rand = import("rand")
+local xform = import("xform")
+local algo = import("core").algo
 
 local M = {}
 

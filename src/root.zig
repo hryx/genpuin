@@ -1,5 +1,5 @@
 //! genpuin core: scene types, rasterizer, raster passes, fields and export.
-//! The Lua API in genpuin/*.lua sits on top of this through src/lua/.
+//! The CLI binds it to Lua in src/lua/, with the script API in src/lua/prelude/.
 
 pub const Raster = @import("Raster.zig");
 pub const Field = @import("Field.zig");

@@ -48,6 +48,16 @@ pub fn build(b: *std.Build) void {
     lua_tests.has_side_effects = true;
     test_step.dependOn(&lua_tests.step);
 
+    const guard_mod = b.createModule(.{
+        .root_source_file = b.path("src/tools/libm_guard.zig"),
+        .target = b.graph.host,
+    });
+    const guard = b.addExecutable(.{ .name = "libm_guard", .root_module = guard_mod });
+    const guard_run = b.addRunArtifact(guard);
+    guard_run.addArtifactArg(exe);
+    test_step.dependOn(&guard_run.step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = guard_mod })).step);
+
     const examples_step = b.step("examples", "Render every examples/*.lua to out/");
     const ext = b.option([]const u8, "ext", "Output format for the examples step (png, ppm, svg)") orelse "png";
     b.dependOnDirectoryContents(b.path("examples"));
@@ -68,20 +78,21 @@ pub fn build(b: *std.Build) void {
     }
 }
 
-/// A module embedding every genpuin/*.lua, so the binary needs no install
-/// tree. Each entry maps a require name to its source.
+/// A module embedding every src/lua/prelude/*.lua, so the binary needs no
+/// install tree. Each entry maps an import name to its file and source.
 fn luaSources(b: *std.Build) *std.Build.Module {
+    const prelude = "src/lua/prelude";
     const files = b.addWriteFiles();
     var index: std.ArrayList(u8) = .empty;
-    index.appendSlice(b.allocator, "pub const modules = [_]struct { name: [:0]const u8, source: [:0]const u8 }{\n") catch @panic("OOM");
+    index.appendSlice(b.allocator, "pub const modules = [_]struct { name: [:0]const u8, file: [:0]const u8, source: [:0]const u8 }{\n") catch @panic("OOM");
 
-    b.dependOnDirectoryContents(b.path("genpuin"));
-    var dir = b.root.openDir(b.graph.io, "genpuin", .{ .iterate = true }) catch
-        @panic("genpuin/ missing");
+    b.dependOnDirectoryContents(b.path(prelude));
+    var dir = b.root.openDir(b.graph.io, prelude, .{ .iterate = true }) catch
+        @panic(prelude ++ " missing");
     defer dir.close(b.graph.io);
     var names: std.ArrayList([]const u8) = .empty;
     var it = dir.iterate();
-    while (it.next(b.graph.io) catch @panic("genpuin/ unreadable")) |entry| {
+    while (it.next(b.graph.io) catch @panic(prelude ++ " unreadable")) |entry| {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".lua")) continue;
         names.append(b.allocator, b.dupe(entry.name)) catch @panic("OOM");
     }
@@ -93,9 +104,8 @@ fn luaSources(b: *std.Build) *std.Build.Module {
 
     for (names.items) |name| {
         const stem = name[0 .. name.len - ".lua".len];
-        const mod_name = if (std.mem.eql(u8, stem, "init")) "genpuin" else b.fmt("genpuin.{s}", .{stem});
-        _ = files.addCopyFile(b.path(b.fmt("genpuin/{s}", .{name})), name);
-        index.appendSlice(b.allocator, b.fmt("    .{{ .name = \"{s}\", .source = @embedFile(\"{s}\") }},\n", .{ mod_name, name })) catch @panic("OOM");
+        _ = files.addCopyFile(b.path(b.fmt("{s}/{s}", .{ prelude, name })), name);
+        index.appendSlice(b.allocator, b.fmt("    .{{ .name = \"{s}\", .file = \"{s}\", .source = @embedFile(\"{s}\") }},\n", .{ stem, name, name })) catch @panic("OOM");
     }
     index.appendSlice(b.allocator, "};\n") catch @panic("OOM");
 

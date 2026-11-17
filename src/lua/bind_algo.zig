@@ -1,10 +1,10 @@
 //! core.algo: the gen.* algorithm toolbox. Each Lua state gets one
 //! random stream and one Perlin table, kept in a userdata in the
-//! registry. The genpuin/*.lua modules wrap these functions with option
-//! defaults and shape constructors.
+//! registry. The modules in src/lua/prelude/ wrap these functions with
+//! option defaults and shape constructors.
 //!
 //! On LuaJIT the hottest entry points are also exported as C function
-//! pointers (see `ffi`), so genpuin/compat.lua can call them through the
+//! pointers (see `ffi`), so prelude/compat.lua can call them through the
 //! FFI from inside compiled traces.
 
 const std = @import("std");
@@ -79,7 +79,9 @@ const State = struct {
 };
 
 // Only the address matters. It keys the State userdata in the registry.
-const state_key: u8 = 0;
+// A var, because identical constants may be merged to one address and
+// this address is the registry key.
+var state_key: u8 = 0;
 
 fn getState(lua: *Lua) *State {
     lua.pushLightUserdata(&state_key);

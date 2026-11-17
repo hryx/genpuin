@@ -1,6 +1,7 @@
-local canvas = require("genpuin.canvas")
-local geo = require("genpuin.geo")
-local xform = require("genpuin.xform")
+local import = ...
+local canvas = import("canvas")
+local geo = import("geo")
+local xform = import("xform")
 
 local Pen = {}
 Pen.__index = Pen

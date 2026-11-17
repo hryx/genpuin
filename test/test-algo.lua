@@ -2,8 +2,6 @@
 -- original pure Lua library, plus a colorMap render check.
 
 local T = require("test.testkit")
-local gen = require("genpuin")
-
 local check = T.check
 
 local function near(name, got, want)

@@ -17,7 +17,6 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "genpuin",
         "LICENSE",
         "README.md",
     },

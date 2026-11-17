@@ -1,6 +1,6 @@
 //! core.pathops: polygon booleans, signed distance fields, contours,
 //! offsets, hatching, simplification and plotter path ordering. Shapes
-//! cross as plain point lists. genpuin/pathops.lua turns them into shapes.
+//! cross as plain point lists. prelude/pathops.lua turns them into shapes.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -83,7 +83,7 @@ fn child(lua: *Lua, arena: Allocator, index: i32, i: usize, depth: usize) Alloca
     return readNode(lua, arena, -1, depth + 1);
 }
 
-/// Read an sdf node table built by genpuin/pathops.lua into the arena.
+/// Read an sdf node table built by prelude/pathops.lua into the arena.
 fn readNode(lua: *Lua, arena: Allocator, index_in: i32, depth: usize) Allocator.Error!*const sdf.Node {
     if (depth > sdf.max_depth) lua.raiseErrorStr("sdf tree is deeper than 64", .{});
     const index = lua.absIndex(index_in);

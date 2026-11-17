@@ -1,6 +1,7 @@
-local noise = require("genpuin.noise")
-local geo = require("genpuin.geo")
-local algo = require("genpuin.core").algo
+local import = ...
+local noise = import("noise")
+local geo = import("geo")
+local algo = import("core").algo
 
 local M = {}
 

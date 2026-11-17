@@ -1,6 +1,7 @@
-local color = require("genpuin.color")
-local geo = require("genpuin.geo")
-local colormap = require("genpuin.colormap")
+local import = ...
+local color = import("color")
+local geo = import("geo")
+local colormap = import("colormap")
 
 local M = {}
 
@@ -135,7 +136,7 @@ local function renderShape(sh, attrs)
             table.concat(dParts, " "), attrs)
 
     elseif sh.type == "field" then
-        local core = require("genpuin.core")
+        local core = import("core")
         return string.format(
             '  <image x="%s" y="%s" width="%s" height="%s" preserveAspectRatio="none" href="data:image/png;base64,%s"/>',
             fmt(sh.x), fmt(sh.y), fmt(sh.w), fmt(sh.h), core.field.pngBase64(sh))

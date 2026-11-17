@@ -2,8 +2,6 @@
 -- one render check that a physarum ring draws where the agents are.
 
 local T = require("test.testkit")
-local gen = require("genpuin")
-
 local check = T.check
 
 local function fieldsEqual(a, b)

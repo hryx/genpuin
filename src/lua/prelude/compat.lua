@@ -7,7 +7,8 @@
 -- On LuaJIT they are FFI calls into Zig, which compiled traces make
 -- directly. Elsewhere they are the plain core.algo functions.
 
-local algo = require("genpuin.core").algo
+local import = ...
+local algo = import("core").algo
 
 local M = {}
 
@@ -32,7 +33,7 @@ local native = {
     fbm = algo.fbm,
 }
 
-if jit then
+if rawget(_G, "jit") then
     local ok, ffi = pcall(require, "ffi")
     if ok then
         local p = algo.ffi()

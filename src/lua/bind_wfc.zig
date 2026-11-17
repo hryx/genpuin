@@ -33,7 +33,7 @@ fn raiseContradiction(lua: *Lua, tries: u32) noreturn {
     lua.raiseErrorStr("wfc: no solution, every attempt hit a contradiction (%d retries)", .{@as(c_int, @intCast(tries - 1))});
 }
 
-/// tiled(opts) -> grid of {tile, rot, flip}. See genpuin/wfc.lua.
+/// tiled(opts) -> grid of {tile, rot, flip}. See prelude/wfc.lua.
 fn tiled(lua: *Lua) !i32 {
     lua.checkType(1, .table);
     const gpa = lua.allocator();
@@ -226,7 +226,7 @@ fn readConstraints(lua: *Lua, arena: Allocator, tiles: Tiles, w: u32, h: u32) ![
     return out;
 }
 
-/// overlap(opts) -> grid of sample values. See genpuin/wfc.lua.
+/// overlap(opts) -> grid of sample values. See prelude/wfc.lua.
 fn overlap(lua: *Lua) !i32 {
     lua.checkType(1, .table);
     const gpa = lua.allocator();

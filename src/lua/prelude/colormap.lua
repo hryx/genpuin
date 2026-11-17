@@ -11,7 +11,8 @@
 -- Colors are in [0,1] space. The solver is in Zig (src/algo/colormap.zig)
 -- and the raster renderer calls it directly.
 
-local algo = require("genpuin.core").algo
+local import = ...
+local algo = import("core").algo
 
 local M = {}
 
