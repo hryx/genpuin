@@ -1,6 +1,5 @@
--- circle-bursts.lua — Recursive circle systems
--- Only circles. Clusters burst from a few origins, with sub-systems
--- packed inside larger rings. Sparse debris floats in the gaps.
+-- Clusters of circles bursting from a few origins, with smaller systems
+-- packed inside larger rings. Shows gen.gaussian and gen.scatter.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

@@ -1,6 +1,5 @@
--- pathops-boolean.lua: op-art from polygon booleans.
--- Concentric rings xor a slowly turning star, a red disc that only shows
--- where it meets the ink, and a window cut out of the whole thing.
+-- Op art from polygon booleans: rings xor a turning star, a disc showing only
+-- where it meets the ink. Shows gen.clip and gen.offset.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

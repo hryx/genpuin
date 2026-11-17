@@ -1,6 +1,5 @@
--- texture-attractor.lua: a Clifford attractor as glowing embers.
--- Twelve million orbit points splatted into a density Field, then drawn
--- through a hot palette with log tone mapping.
+-- A Clifford attractor as glowing embers, orbit points splatted into a
+-- density field. Shows gen.attractor and gen.image with log tone.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

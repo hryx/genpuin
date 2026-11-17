@@ -1,5 +1,5 @@
--- automata-split.lua — Two elementary cellular automata meeting at the diagonal
--- Demonstrates: gen.elementary with custom init, triangle clipping, dual palettes
+-- Two elementary cellular automata, rule 110 and rule 30, meeting at the
+-- diagonal. Shows gen.elementary with a custom first row.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
@@ -9,7 +9,7 @@ local cellW = 200
 local steps = 200
 local cellSize = W / cellW
 
--- === Top automaton: Rule 110, spine along right edge, growing down-left ===
+-- Top automaton: Rule 110, spine along right edge, growing down-left
 local initTop = {}
 for i = 1, cellW do initTop[i] = 0 end
 initTop[cellW] = 1
@@ -32,7 +32,7 @@ for row = 1, #rowsTop do
     end
 end
 
--- === Bottom automaton: Rule 30, spine along left edge, growing up-right ===
+-- Bottom automaton: Rule 30, spine along left edge, growing up-right
 local initBot = {}
 for i = 1, cellW do initBot[i] = 0 end
 initBot[1] = 1

@@ -1,7 +1,5 @@
--- sim-physarum.lua: slime mold transport network (Jones 2010) wired up
--- between scattered food sources, like the Tokyo rail experiment.
--- Food is a field of blobs added to the trail every step, so the
--- network settles into paths joining the sources.
+-- A slime mold transport network wired up between scattered food sources.
+-- Shows gen.physarum and gen.image.
 
 local W, H = 800, 800
 gen.seed(11)

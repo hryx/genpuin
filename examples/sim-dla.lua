@@ -1,6 +1,5 @@
--- sim-dla.lua: diffusion-limited aggregation drawn as a tree. Each
--- particle is a segment back to the one it stuck to, thick where many
--- particles hang off it and fading with generation.
+-- Diffusion-limited aggregation drawn as a tree, thick where many particles
+-- hang off a branch. Shows gen.dla.
 
 local W, H = 800, 800
 gen.seed(5)

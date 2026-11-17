@@ -1,6 +1,5 @@
--- post-dither.lua: a black eclipse in a noise sky, bloomed, then crushed
--- to a four-color palette. Blue noise on the left, a coarse Bayer
--- screen in the right-hand strip.
+-- A black eclipse in a noise sky, bloomed and crushed to four colours with
+-- blue noise and Bayer screens. Shows gen.post with bloom and dither.
 
 local W, H = 800, 800
 local ink = {0.04, 0.02, 0.03, 1}

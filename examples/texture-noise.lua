@@ -1,5 +1,5 @@
--- texture-noise.lua: domain-warped fBm, like marbled paper, with curl
--- noise streamlines drifting over it.
+-- Domain-warped fBm like marbled paper, with curl noise streamlines over it.
+-- Shows gen.noiseGrid and gen.traceFlow.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

@@ -1,13 +1,11 @@
--- showcase-curves.lua — Curves, gradients, blend modes, dashes
--- Demonstrates: bezier, spline, ellipse, arc, linear/radial gradients,
--- blend modes (multiply, screen, difference), dashed lines, pen + gradient,
--- vec2 math, rounded rects
+-- A sampler of curves and paint: beziers, splines, arcs, gradients, blend
+-- modes and dashes. Shows gen.bezier, gen.spline and gen.linearGradient.
 
 local W, H = 800, 600
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f0f0f0"))
 
--- === Row 1: Curve primitives ===
+-- Row 1: Curve primitives
 
 -- Ellipse with radial gradient fill
 local eg = gen.radialGradient(100, 80, 70, {
@@ -46,7 +44,7 @@ local wing2 = gen.vec2Add(tip, gen.vec2Scale(gen.vec2Sub(gen.vec2Scale(dir, -1),
 gen.draw(c, gen.line(base, tip), {stroke = gen.hex("#333333"), strokeWidth = 2})
 gen.draw(c, gen.polygon({tip, wing1, wing2}), {fill = gen.hex("#333333")})
 
--- === Row 2: Splines, dashes, arc ===
+-- Row 2: Splines, dashes, arc
 
 -- Catmull-Rom spline
 gen.draw(c, gen.spline({{30, 200}, {130, 160}, {230, 220}, {330, 170}, {430, 210}}), {
@@ -78,7 +76,7 @@ dp:moveTo({480, 200})
 dp:forward(100):turn(math.rad(90)):forward(60)
 dp:stroke()
 
--- === Row 3: Gradients ===
+-- Row 3: Gradients
 
 -- Linear gradient fill
 local lg = gen.linearGradient(30, 380, 230, 380, {
@@ -105,7 +103,7 @@ gen.draw(c, gen.polyline({{470, 370}, {540, 340}, {630, 400}, {750, 360}}), {
     stroke = sg, strokeWidth = 4,
 })
 
--- === Row 4: Blend modes + pen with gradient ===
+-- Row 4: Blend modes + pen with gradient
 
 -- Blend mode: multiply
 gen.draw(c, gen.rect(30, 460, 100, 80), {fill = gen.hex("#ff0000")})

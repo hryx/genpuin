@@ -1,6 +1,5 @@
--- showcase-patterns.lua — Grid, radial, Poisson, randomness
--- Demonstrates: grid, radial, poissonDisk,
--- hsv, gaussian, pick, randInCircle, randOnCircle
+-- A grid of tiled motifs over a Poisson field of radial bursts. Shows
+-- gen.grid, gen.radial and gen.poissonDisk.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
@@ -8,7 +7,7 @@ gen.background(c, gen.hex("#1a1a2e"))
 gen.seed(42)
 gen.noiseSeed(42)
 
--- === Top: Grid of tiled motifs ===
+-- Top: Grid of tiled motifs
 
 local cols, rows = 8, 4
 local tileSize = W / cols
@@ -40,7 +39,7 @@ gen.grid(cols, rows, tileSize, function(x, y, col, row)
         local r = tileSize * 0.35
         gen.radial(n, {cx, cy}, r, function(pos)
             gen.draw(c, gen.line({cx, cy}, pos), {
-                stroke = color, strokeWidth = 0.8, opacity = 0.6,
+                stroke = color, strokeWidth = 1.2, opacity = 0.7,
             })
         end)
     else
@@ -51,10 +50,11 @@ gen.grid(cols, rows, tileSize, function(x, y, col, row)
     end
 end)
 
--- === Middle: Poisson disk + radial bursts ===
+-- Middle: Poisson disk + radial bursts
 
 local midY = rows * tileSize + 10
-local points = gen.poissonDisk({20, midY, W - 40, 200}, 35)
+local midH = H - midY - 20
+local points = gen.poissonDisk({20, midY, W - 40, midH}, 35)
 
 for _, pt in ipairs(points) do
     local hue = gen.perlin(pt[1] * 0.005, pt[2] * 0.005) * 0.5 + 0.5
@@ -65,24 +65,24 @@ for _, pt in ipairs(points) do
     local r = gen.randRange(8, 20)
     gen.radial(n, pt, r, function(pos)
         gen.draw(c, gen.line(pt, pos), {
-            stroke = col, strokeWidth = 0.6, opacity = 0.4,
+            stroke = col, strokeWidth = 1, opacity = 0.55,
         })
         gen.draw(c, gen.circle(pos, 1.2), {fill = col, opacity = 0.5})
     end)
 end
 
 -- Gaussian-distributed cluster overlay
-local gCenter = {W / 2, midY + 100}
+local gCenter = {W / 2, midY + midH / 2}
 for _ = 1, 60 do
     local gx = gCenter[1] + gen.gaussian(0, 60)
     local gy = gCenter[2] + gen.gaussian(0, 30)
-    gen.draw(c, gen.circle({gx, gy}, 1), {
-        fill = gen.hex("#ffffff"), opacity = 0.3,
+    gen.draw(c, gen.circle({gx, gy}, 1.5), {
+        fill = gen.hex("#ffffff"), opacity = 0.5,
     })
 end
 
 -- randInCircle + randOnCircle demo
-local rcCenter = {650, midY + 100}
+local rcCenter = {650, midY + midH / 2}
 for _ = 1, 40 do
     local pt = gen.randInCircle(rcCenter, 50)
     gen.draw(c, gen.circle(pt, 1.5), {

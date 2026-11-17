@@ -1,7 +1,5 @@
--- pathops-hatch.lua: a plotter still life in hatching.
--- Overlapping shapes occlude each other through boolean differences, each
--- is hatched its own way, the ground lines are masked around them, and
--- the whole drawing is reordered to cut pen-up travel.
+-- A plotter still life in hatching, shapes occluding each other by boolean
+-- difference. Shows gen.hatch, gen.clip and gen.orderPaths.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

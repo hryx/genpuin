@@ -1,5 +1,5 @@
--- ghost-script.lua — Handwritten script with fuzzy traces
--- Demonstrates: spline-like strokes via smooth(), jitter ghost layers, perlin variation
+-- Rows of made-up handwriting with faint retraced ghosts behind each stroke.
+-- Shows gen.smooth, gen.jitter and gen.resample.
 
 local W, H = 800, 700
 local c = gen.canvas(W, H)
@@ -103,16 +103,17 @@ end
 
 -- Draw a stroke with ghost traces behind it.
 local function drawWithGhosts(stroke)
-    -- Ghost passes: increasing jitter, decreasing opacity, wider stroke
+    -- Ghost passes jitter a coarse resample and smooth it again, so each
+    -- reads as a separate wobbly retrace rather than fuzz.
     local ghosts = {
-        {jitter = 1, opacity = 0.08, sw = 2.5},
-        {jitter = 2, opacity = 0.06, sw = 3.0},
-        {jitter = 3, opacity = 0.04, sw = 3.5},
-        {jitter = 4, opacity = 0.03, sw = 4.0},
-        {jitter = 5, opacity = 0.02, sw = 4.5},
+        {jitter = 2, opacity = 0.5, sw = 0.9},
+        {jitter = 3, opacity = 0.38, sw = 0.8},
+        {jitter = 4, opacity = 0.28, sw = 0.8},
+        {jitter = 5, opacity = 0.2, sw = 0.7},
+        {jitter = 6, opacity = 0.14, sw = 0.7},
     }
     for _, g in ipairs(ghosts) do
-        local ghostShape = gen.jitter(stroke, g.jitter)
+        local ghostShape = gen.smooth(gen.jitter(gen.resample(stroke, 8), g.jitter), 3)
         gen.draw(c, ghostShape, {
             stroke = ink,
             strokeWidth = g.sw,
@@ -124,8 +125,8 @@ local function drawWithGhosts(stroke)
     -- Main stroke
     local style = {
         stroke = ink,
-        strokeWidth = 1.2,
-        opacity = 0.85,
+        strokeWidth = 1.8,
+        opacity = 0.9,
         strokeLinecap = "round",
     }
     if stroke.type == "polygon" then

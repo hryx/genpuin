@@ -1,7 +1,5 @@
--- sim-growth.lua: differential growth of a closed loop. The loop never
--- crosses itself, so filling it splits the page into two interlocking
--- territories, like a brain coral. Each earlier stage is filled on top
--- in a lighter tone, which bands the coral like agate.
+-- Differential growth of a closed loop, each earlier stage filled in a
+-- lighter tone like agate. Shows gen.differentialGrowth.
 
 local W, H = 800, 800
 gen.seed(21)

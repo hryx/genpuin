@@ -1,6 +1,5 @@
--- cube-pencil.lua — A transparent 3D cube drawn with pencil-like sand splines
--- Each edge is rendered as many tightly packed noisy strands,
--- giving a hand-drawn charcoal/pencil feel.
+-- A wireframe cube sketched in pencil, each edge built from many noisy
+-- strands. Shows gen.gaussian and gen.perlin.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
@@ -11,7 +10,7 @@ gen.noiseSeed(11)
 local cx, cy = 400, 380
 local s = 160
 
--- Asymmetric isometric — rotated up and slightly right
+-- Asymmetric isometric, rotated up and slightly right
 local angleR = math.rad(22)
 local angleL = math.rad(42)
 local cosR, sinR = math.cos(angleR), math.sin(angleR)
@@ -64,7 +63,7 @@ local function pencilEdge(a, b, nStrands, seedBase)
     local col = {0.18, 0.15, 0.12}
 
     for si = 1, nStrands do
-        -- Offset perpendicular to the edge — gaussian centered on the line
+        -- Offset perpendicular to the edge, gaussian centered on the line
         local spread = gen.gaussian(0, 1.2)
         local ox = px * spread
         local oy = py * spread

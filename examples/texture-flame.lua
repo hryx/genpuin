@@ -1,7 +1,5 @@
--- texture-flame.lua: a random fractal flame.
--- gen.randomFlame picks transforms and variations from the seed, so
--- --vary 1..9 sweeps through different flames. The color Field is drawn
--- through a palette, then the log-toned density multiplies it as brightness.
+-- A random fractal flame, different for every --vary. Shows
+-- gen.randomFlame, gen.flame and gen.image.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

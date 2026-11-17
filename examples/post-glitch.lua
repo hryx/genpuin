@@ -1,5 +1,5 @@
--- post-glitch.lua: a red sun over black bars, melted by pixel sorting,
--- torn and channel-split. Raster passes run in draw order.
+-- A red sun over black bars, melted, torn and channel split. Shows gen.post
+-- with pixelSort, tear and channelShift.
 
 local W, H = 800, 800
 local yellow = {1, 0.84, 0.04, 1}

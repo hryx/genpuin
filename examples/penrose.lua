@@ -1,4 +1,5 @@
--- penrose.lua — Penrose P3 rhombus tiling in a circle
+-- A Penrose P3 rhombus tiling clipped to a circle, built by Robinson triangle
+-- subdivision in plain Lua.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
@@ -55,19 +56,20 @@ end
 -- Pair mirror-image triangles into rhombi.
 -- Two triangles of the same type sharing the same base midpoint (A+C)/2
 -- form one rhombus: B1 → A → B2 → C (the two apex vertices + shared base).
-local eps = 0.01
 local function key(x, y)
     return string.format("%.2f,%.2f", x, y)
 end
 
--- Group triangles by (type, base midpoint)
-local buckets = {}
+-- Group triangles by (type, base midpoint). The list keeps first-seen
+-- order because pairs() order over string keys changes between runs.
+local buckets, order = {}, {}
 for _, tri in ipairs(tris) do
     local mx = (tri.a[1] + tri.c[1]) / 2
     local my = (tri.a[2] + tri.c[2]) / 2
     local k = tri.t .. ":" .. key(mx, my)
     if not buckets[k] then
         buckets[k] = {tri}
+        order[#order + 1] = buckets[k]
     else
         buckets[k][#buckets[k] + 1] = tri
     end
@@ -88,7 +90,7 @@ local function shrinkPoly(pts)
 end
 
 -- Draw rhombi
-for _, pair in pairs(buckets) do
+for _, pair in ipairs(order) do
     if #pair == 2 then
         local t1, t2 = pair[1], pair[2]
         local rhombus = {t1.b, t1.a, t2.b, t1.c}

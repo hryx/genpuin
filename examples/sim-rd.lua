@@ -1,6 +1,5 @@
--- sim-rd.lua: a Gray-Scott labyrinth that dissolves into dividing cells
--- and then into bare paper. The kill rate rises with distance from an
--- off-center focus, warped by noise, so the pattern finds its own edge.
+-- A Gray-Scott labyrinth that dissolves into dividing cells toward its edge.
+-- Shows gen.reactionDiffusion and gen.image.
 
 local W, H = 800, 800
 local N = 640

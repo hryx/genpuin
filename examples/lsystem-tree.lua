@@ -1,5 +1,5 @@
--- lsystem-tree.lua — Stochastic L-system branching tree
--- Demonstrates: gen.rewrite with stochastic rules, Pen turtle graphics
+-- A branching tree grown from a stochastic L-system. Shows gen.rewrite and
+-- turtle drawing with gen.pen.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)

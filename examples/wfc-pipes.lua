@@ -1,5 +1,5 @@
--- wfc-pipes.lua: Wave function collapse plumbing, sparse sky to heavy floor
--- Demonstrates: gen.wfc with symmetry classes, weightMap steering, gen.wfcDraw
+-- Wave function collapse plumbing, sparse at the top and heavy at the floor.
+-- Shows gen.wfc with symmetry classes and a weight map, and gen.wfcDraw.
 
 local W, H = 800, 800
 local CELL = 20

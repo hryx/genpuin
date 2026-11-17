@@ -1,5 +1,5 @@
--- markov-weave.lua — Markov chain-driven woven pattern
--- Demonstrates: gen.markov, gen.markovStep, gen.markovGenerate, grid layout
+-- A woven grid whose rows and columns change stroke style by Markov chain.
+-- Shows gen.markov and gen.markovGenerate.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
@@ -29,7 +29,7 @@ local margin = 40
 local palette = {
     thin  = {hue = 0.55, sat = 0.6, val = 0.7},
     thick = {hue = 0.08, sat = 0.7, val = 0.8},
-    dot   = {hue = 0.75, sat = 0.5, val = 0.7},
+    dot   = {hue = 0.75, sat = 0.45, val = 0.95},
     gap   = nil,
 }
 
@@ -46,19 +46,19 @@ for row = 1, rows do
                 if m == "thin" then
                     gen.draw(c, gen.line({x - cellW * 0.4, y}, {x + cellW * 0.4, y}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
-                        strokeWidth = 1,
+                        strokeWidth = 2,
                         strokeLinecap = "round",
-                        opacity = 0.8,
+                        opacity = 0.9,
                     })
                 elseif m == "thick" then
                     gen.draw(c, gen.line({x - cellW * 0.4, y}, {x + cellW * 0.4, y}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
-                        strokeWidth = 3,
+                        strokeWidth = 4.5,
                         strokeLinecap = "round",
-                        opacity = 0.7,
+                        opacity = 0.9,
                     })
                 elseif m == "dot" then
-                    gen.draw(c, gen.circle({x, y}, 2), {
+                    gen.draw(c, gen.circle({x, y}, 2.8), {
                         fill = gen.hsv(p.hue, p.sat, p.val),
                         opacity = 0.8,
                     })
@@ -81,19 +81,19 @@ for col = 1, cols do
                 if m == "thin" then
                     gen.draw(c, gen.line({x, y - cellH * 0.4}, {x, y + cellH * 0.4}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
-                        strokeWidth = 1,
+                        strokeWidth = 2,
                         strokeLinecap = "round",
-                        opacity = 0.8,
+                        opacity = 0.9,
                     })
                 elseif m == "thick" then
                     gen.draw(c, gen.line({x, y - cellH * 0.4}, {x, y + cellH * 0.4}), {
                         stroke = gen.hsv(p.hue, p.sat, p.val),
-                        strokeWidth = 3,
+                        strokeWidth = 4.5,
                         strokeLinecap = "round",
-                        opacity = 0.7,
+                        opacity = 0.9,
                     })
                 elseif m == "dot" then
-                    gen.draw(c, gen.circle({x, y}, 2), {
+                    gen.draw(c, gen.circle({x, y}, 2.8), {
                         fill = gen.hsv(p.hue, p.sat, p.val),
                         opacity = 0.8,
                     })

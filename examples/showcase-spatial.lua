@@ -1,14 +1,12 @@
--- showcase-spatial.lua — Voronoi, packing, spatial queries
--- Demonstrates: voronoi, relax (Lloyd), packCircles, separate,
--- pointInPolygon, nearest, withinRadius, radialGradient,
--- lerpColor, lighten, withAlpha
+-- Relaxed Voronoi cells, packed circles and spatial queries. Shows
+-- gen.voronoi, gen.relax, gen.packCircles and gen.nearest.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0d1117"))
 gen.seed(21)
 
--- === Top: Relaxed Voronoi with spatial queries ===
+-- Top: Relaxed Voronoi with spatial queries
 
 local palette = {
     gen.hex("#e6194b"), gen.hex("#3cb44b"), gen.hex("#ffe119"),
@@ -56,7 +54,7 @@ gen.draw(c, gen.circle(probe, 120), {
     stroke = gen.withAlpha(gen.hex("#ff8800"), 0.3), strokeWidth = 1,
 })
 
--- === Bottom-left: Circle packing with gradient highlights ===
+-- Bottom-left: Circle packing with gradient highlights
 
 local packed = gen.packCircles({
     bounds = {10, 420, 370, 360},
@@ -78,7 +76,7 @@ for _, circ in ipairs(packed) do
     gen.draw(c, circ, {fill = rg, stroke = base, strokeWidth = 1})
 end
 
--- === Bottom-right: Separation + point-in-polygon ===
+-- Bottom-right: Separation + point-in-polygon
 
 local testPoly = gen.polygon({
     {500, 440}, {420, 600}, {460, 770}, {620, 770}, {700, 620}, {660, 460},

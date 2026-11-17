@@ -1,5 +1,5 @@
--- wfc-overlap.lua: A 12x12 hand-drawn sample grown into a circuit texture
--- Demonstrates: gen.wfcOverlap (overlapping model), drawing a grid as cells
+-- A small hand-drawn sample grown into a circuit texture. Shows
+-- gen.wfcOverlap.
 
 local W, H = 800, 800
 local CELL = 5

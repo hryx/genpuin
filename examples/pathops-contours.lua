@@ -1,6 +1,5 @@
--- pathops-contours.lua: an archipelago in contour lines.
--- Islands are a smooth union of distance blobs, roughened with fbm noise
--- in a Field, and marching squares traces the height as plotter lines.
+-- An archipelago in contour lines, from smooth-unioned distance blobs
+-- roughened with fbm. Shows gen.sdfField and gen.contours.
 
 local W, H = 800, 800
 local c = gen.canvas(W, H)
