@@ -86,13 +86,38 @@ pub fn logBase(x: f64, b: f64) f64 {
     return log2(x) * (1.0 / log2(b));
 }
 
-/// Lua's float modulo, a - floor(a / b) * b, as LuaJIT evaluates it.
+/// Floored modulo, the result taking the sign of b: Lua 5.4's float `%`
+/// and gen.mod on every flavour. fmod is exact, so the only rounding is
+/// the one addition that moves a remainder of the wrong sign into b's
+/// range.
 pub fn mod(a: f64, b: f64) f64 {
+    const m = fmod(a, b);
+    const wrong_sign = if (m > 0) b < 0 else m < 0 and b > 0;
+    return if (wrong_sign) m + b else m;
+}
+
+/// LuaJIT's float `%`, a - floor(a / b) * b. Rounds in the division and
+/// again in the product, so it can miss the true remainder by a whole b
+/// (luajitMod(1, 0.1) is 0). For seeded algorithms ported from LuaJIT
+/// scripts whose output depends on that rounding, like Perlin's LCG.
+pub fn luajitMod(a: f64, b: f64) f64 {
     return a - @floor(a / b) * b;
 }
 
-test "math: Lua modulo follows the divisor's sign" {
+test "math: mod follows the divisor's sign" {
     try std.testing.expectEqual(@as(f64, 1), mod(-7, 4));
     try std.testing.expectEqual(@as(f64, 3), mod(7, 4));
+    try std.testing.expectEqual(@as(f64, -1), mod(7, -4));
     try std.testing.expectEqual(@as(f64, 0.5), mod(2.5, 1));
+    try std.testing.expectEqual(@as(f64, 0.5), mod(-2.5, 1));
+}
+
+test "math: mod is exact where luajitMod rounds" {
+    try std.testing.expectEqual(@as(u64, 0x3fb9999999999996), @as(u64, @bitCast(mod(1, 0.1))));
+    try std.testing.expectEqual(@as(f64, 0), luajitMod(1, 0.1));
+}
+
+test "math: luajitMod follows the divisor's sign" {
+    try std.testing.expectEqual(@as(f64, 1), luajitMod(-7, 4));
+    try std.testing.expectEqual(@as(f64, -1), luajitMod(7, -4));
 }

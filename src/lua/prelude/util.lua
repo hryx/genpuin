@@ -1,4 +1,15 @@
+local import = ...
+local native = import("compat").native
+
 local M = {}
+
+-- Floored modulo of a by b. Like Lua's %, the result takes the sign of
+-- b. Lua 5.4 and LuaJIT round float % differently (1 % 0.1 is 0.0999..
+-- on one and 0 on the other), while mod gives Lua 5.4's exact result on
+-- both. Use it instead of % when an operand can be a non-integer float
+-- and the output must match across Lua flavours. Integer operands agree
+-- either way. The result is always a float.
+M.mod = native.mod
 
 -- Linear interpolation between a and b by t.
 function M.lerp(a, b, t)

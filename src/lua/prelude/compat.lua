@@ -31,6 +31,7 @@ local native = {
     gaussian = algo.gaussian,
     perlin = algo.perlin,
     fbm = algo.fbm,
+    mod = algo.mod,
 }
 
 if rawget(_G, "jit") then
@@ -44,6 +45,7 @@ if rawget(_G, "jit") then
         local gaussian = ffi.cast("double (*)(void *, double, double)", p.gaussian)
         local perlin = ffi.cast("double (*)(void *, double, double)", p.perlin)
         local fbm = ffi.cast("double (*)(void *, double, double, double, double, double)", p.fbm)
+        local mod = ffi.cast("double (*)(double, double)", p.mod)
         native.rand = function() return rand(st) end
         native.randRange = function(lo, hi) return randRange(st, lo, hi) end
         native.randInt = function(lo, hi) return randInt(st, lo, hi) end
@@ -52,6 +54,7 @@ if rawget(_G, "jit") then
         native.fbm = function(x, y, octaves, lacunarity, gain)
             return fbm(st, x, y, octaves, lacunarity, gain)
         end
+        native.mod = function(a, b) return mod(a, b) end
     end
 end
 

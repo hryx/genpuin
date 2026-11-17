@@ -179,6 +179,7 @@ gen.angle = util.angle
 gen.norm = util.norm
 gen.degrees = util.degrees
 gen.radians = util.radians
+gen.mod = util.mod
 
 -- extension modules export everything they define
 for _, name in ipairs({"texture", "sim", "pathops", "wfc"}) do

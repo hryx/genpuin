@@ -36,6 +36,7 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "noiseSeed", .func = zlua.wrap(noiseSeed) },
     .{ .name = "perlin", .func = zlua.wrap(perlin) },
     .{ .name = "fbm", .func = zlua.wrap(fbm) },
+    .{ .name = "mod", .func = zlua.wrap(mod) },
     .{ .name = "ffi", .func = zlua.wrap(ffiTable) },
     .{ .name = "band", .func = zlua.wrap(bitOp(.band)) },
     .{ .name = "bxor", .func = zlua.wrap(bitOp(.bxor)) },
@@ -278,9 +279,19 @@ fn fbm(lua: *Lua) i32 {
     return 1;
 }
 
-/// C entry points for the LuaJIT FFI. Each takes the State pointer that
-/// `ffi()` hands out first. The signatures are mirrored in compat.lua.
+/// mod(a, b), the floored modulo of src/math.zig.
+fn mod(lua: *Lua) i32 {
+    lua.pushNumber(genpuin.math.mod(lua.checkNumber(1), lua.checkNumber(2)));
+    return 1;
+}
+
+/// C entry points for the LuaJIT FFI. Each one that reads the stream or
+/// the noise table takes the State pointer that `ffi()` hands out first.
+/// The signatures are mirrored in compat.lua.
 const ffi = struct {
+    fn mod(a: f64, b: f64) callconv(.c) f64 {
+        return genpuin.math.mod(a, b);
+    }
     fn rand(s: *State) callconv(.c) f64 {
         return s.rng.next();
     }
@@ -305,7 +316,7 @@ const ffi = struct {
 /// state lives as long as the Lua state, so the pointer stays valid.
 fn ffiTable(lua: *Lua) i32 {
     const s = getState(lua);
-    lua.createTable(0, 8);
+    lua.createTable(0, 9);
     lua.pushLightUserdata(s);
     lua.setField(-2, "state");
     const exports = .{
@@ -315,6 +326,7 @@ fn ffiTable(lua: *Lua) i32 {
         .{ "gaussian", &ffi.gaussian },
         .{ "perlin", &ffi.perlin },
         .{ "fbm", &ffi.fbm },
+        .{ "mod", &ffi.mod },
     };
     inline for (exports) |e| {
         lua.pushLightUserdata(@ptrCast(e[1]));

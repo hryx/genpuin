@@ -18,7 +18,7 @@ pub const Perlin = struct {
         var s = @floor(seed);
         var i: usize = 255;
         while (i >= 1) : (i -= 1) {
-            s = math.mod(s * 1103515245 + 12345, 2147483647);
+            s = math.luajitMod(s * 1103515245 + 12345, 2147483647);
             const span: f64 = @floatFromInt(i + 1);
             const jf = math.mod(s, span);
             const j: usize = if (jf >= 0 and jf < span) @intFromFloat(jf) else 0;

@@ -93,7 +93,7 @@ const unary = .{
 
 const binary = .{
     .{ "atan2", math.atan2 },     .{ "pow", math.pow }, .{ "fmod", math.fmod },
-    .{ "logBase", math.logBase }, .{ "mod", math.mod },
+    .{ "logBase", math.logBase }, .{ "mod", math.mod }, .{ "luajitMod", math.luajitMod },
 };
 
 /// bits(x) -> the IEEE bits of x as 16 lowercase hex digits.

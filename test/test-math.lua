@@ -1019,13 +1019,11 @@ check(string.format("%d golden results", #golden), #fails == 0, table.concat(fai
 -- traces and constant folding. PUC Lua takes fmod(a, b) and adds b when
 -- the signs disagree. The two differ in the low bits whenever the
 -- remainder is inexact, and on signed zeros and infinite divisors, so
--- each flavour is checked against its own formula. The golden rows are
--- inputs where both agree.
+-- each flavour is checked against its own formula in src/math.zig. The
+-- golden rows are inputs where both agree. gen.mod gives the PUC result
+-- on every flavour, see test-mod.lua.
 local function modRef(a, b)
-    if jit then return call("mod", a, b) end
-    local m = math.fmod(a, b)
-    if (m > 0 and b < 0) or (m < 0 and b > 0) then m = m + b end
-    return m
+    return call(jit and "luajitMod" or "mod", a, b)
 end
 
 local modEdges = {

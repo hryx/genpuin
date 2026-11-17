@@ -15,7 +15,7 @@ end
 
 -- Create a color from HSV. h, s, v are all in 0-1.
 function M.hsv(h, s, v)
-    h = (h % 1) * 6
+    h = util.mod(h, 1) * 6
     local i = math.floor(h)
     local f = h - i
     local p = v * (1 - s)
@@ -33,7 +33,7 @@ end
 
 -- Create a color from HSL. h, s, l are all in 0-1.
 function M.hsl(h, s, l)
-    h = h % 1
+    h = util.mod(h, 1)
     local function hue2rgb(p, q, t)
         if t < 0 then t = t + 1 end
         if t > 1 then t = t - 1 end
