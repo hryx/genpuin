@@ -1,8 +1,6 @@
 -- markov-weave.lua — Markov chain-driven woven pattern
 -- Demonstrates: gen.markov, gen.markovStep, gen.markovGenerate, grid layout
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#1a1a2e"))

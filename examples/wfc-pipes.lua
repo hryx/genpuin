@@ -1,8 +1,6 @@
 -- wfc-pipes.lua: Wave function collapse plumbing, sparse sky to heavy floor
 -- Demonstrates: gen.wfc with symmetry classes, weightMap steering, gen.wfcDraw
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local CELL = 20
 local COLS, ROWS = 38, 38
@@ -115,10 +113,8 @@ gen.wfcDraw(c, result, {
                 p.a = place({bleed(g[3]), bleed(g[4])}, x, y, half, rot, flip)
                 p.b = place({bleed(g[5]), bleed(g[6])}, x, y, half, rot, flip)
             elseif kind == "arc" then
-                p.center = place({g[3], g[4]}, x, y, half, rot, flip)
-                p.start = g[5] + rot * math.pi / 2 - 0.04
-                p.stop = g[6] + rot * math.pi / 2 + 0.04
-                p.r = half
+                local arc = gen.arc({x + g[3] * half, y + g[4] * half}, half, g[5] - 0.04, g[6] + 0.04)
+                p.arc = gen.rotateAround(arc, rot * math.pi / 2, {x, y})
             else
                 p.center = place({g[3], g[4]}, x, y, half, rot, flip)
                 p.r = g[5] * half
@@ -130,7 +126,7 @@ gen.wfcDraw(c, result, {
 
 local function shapeOf(p)
     if p.kind == "line" or p.kind == "band" then return gen.line(p.a, p.b) end
-    if p.kind == "arc" then return gen.arc(p.center, p.r, p.start, p.stop) end
+    if p.kind == "arc" then return p.arc end
     return gen.circle(p.center, p.r)
 end
 

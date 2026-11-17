@@ -1,7 +1,5 @@
 -- debug-spiral.lua — Fronds sprouting along a stem
 
-local gen = require("genpuin")
-
 local W, H = 600, 1000
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#111111"))

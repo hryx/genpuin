@@ -1,8 +1,6 @@
 -- lsystem-tree.lua — Stochastic L-system branching tree
 -- Demonstrates: gen.rewrite with stochastic rules, Pen turtle graphics
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0a0e14"))

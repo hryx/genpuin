@@ -2,8 +2,6 @@
 -- Contour lines from layered Perlin noise, colored by elevation,
 -- with stippled land regions and smooth contour paths.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0b1a2b"))

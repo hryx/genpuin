@@ -5,8 +5,6 @@
 -- (50.5, 50.5) is centered on pixel (50, 50) and its cardinal edges cut
 -- pixels in half.
 
-local gen = require("genpuin")
-
 local W, H = 200, 200
 local c = gen.canvas(W, H)
 gen.background(c, {1, 1, 1})

@@ -3,8 +3,6 @@
 -- A closed loop of nodes grows organically, steered by noise, producing
 -- coral/brain-like forms. Growth history rendered as layered snapshots.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0a0a0e"))

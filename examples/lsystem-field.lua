@@ -3,8 +3,6 @@
 -- 1600 tiny fractal glyphs tiled across the canvas. Overlapping at low opacity
 -- creates emergent density, moiré, and texture from pure repetition.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f4f1eb"))

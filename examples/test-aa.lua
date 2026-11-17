@@ -4,8 +4,6 @@
 -- Coordinates sit on half units, the centers of pixels, so a horizontal
 -- line at y=50.5 is centered on pixel row 50.
 
-local gen = require("genpuin")
-
 local W, H = 200, 200
 local c = gen.canvas(W, H)
 gen.background(c, {1, 1, 1})

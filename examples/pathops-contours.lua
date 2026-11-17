@@ -2,8 +2,6 @@
 -- Islands are a smooth union of distance blobs, roughened with fbm noise
 -- in a Field, and marching squares traces the height as plotter lines.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#efe9dc"))

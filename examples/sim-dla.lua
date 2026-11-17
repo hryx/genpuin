@@ -2,8 +2,6 @@
 -- particle is a segment back to the one it stuck to, thick where many
 -- particles hang off it and fading with generation.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 gen.seed(5)
 

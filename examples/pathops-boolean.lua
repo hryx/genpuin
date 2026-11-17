@@ -2,8 +2,6 @@
 -- Concentric rings xor a slowly turning star, a red disc that only shows
 -- where it meets the ink, and a window cut out of the whole thing.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f1ead8"))

@@ -3,8 +3,6 @@
 -- territories, like a brain coral. Each earlier stage is filled on top
 -- in a lighter tone, which bands the coral like agate.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 gen.seed(21)
 

@@ -3,8 +3,6 @@
 -- pointInPolygon, nearest, withinRadius, radialGradient,
 -- lerpColor, lighten, withAlpha
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0d1117"))

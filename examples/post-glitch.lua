@@ -1,8 +1,6 @@
 -- post-glitch.lua: a red sun over black bars, melted by pixel sorting,
 -- torn and channel-split. Raster passes run in draw order.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local yellow = {1, 0.84, 0.04, 1}
 local red = {0.86, 0.06, 0.05, 1}

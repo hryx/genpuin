@@ -3,8 +3,6 @@
 -- Food is a field of blobs added to the trail every step, so the
 -- network settles into paths joining the sources.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 gen.seed(11)
 

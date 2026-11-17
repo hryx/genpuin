@@ -1,8 +1,6 @@
 -- cloudchamber.lua — Particle tracks in a cloud chamber
 -- Demonstrates: turtle walk, jitter, compound shape mask, fbm grain
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 local bg = gen.hex("#000000")

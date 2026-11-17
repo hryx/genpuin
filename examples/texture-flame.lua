@@ -3,8 +3,6 @@
 -- --vary 1..9 sweeps through different flames. The color Field is drawn
 -- through a palette, then the log-toned density multiplies it as brightness.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, {0, 0, 0})

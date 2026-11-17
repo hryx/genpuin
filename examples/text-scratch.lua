@@ -2,8 +2,6 @@
 -- Each letter is defined with minimal control points, snapped to
 -- the nearest Poisson disk sample, then connected with jittery lines.
 
-local gen = require("genpuin")
-
 local M = {}
 
 -- Letter definitions: control points in [0,1] space + stroke index pairs

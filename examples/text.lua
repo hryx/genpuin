@@ -1,7 +1,6 @@
 -- fonts.lua — Three text rendering styles side by side
 -- Each row uses a different module: Scratch, Dot Matrix, Ants
 
-local gen = require("genpuin")
 local scratchText = require("examples.text-scratch")
 local dotmatrixText = require("examples.text-dotmatrix")
 local antsText = require("examples.text-ants")

@@ -1,13 +1,11 @@
 -- texture-noise.lua: domain-warped fBm, like marbled paper, with curl
 -- noise streamlines drifting over it.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0d1b2a"))
 gen.seed(8)
-gen.textureSeed(8)
+gen.noiseSeed(8)
 
 local marble = gen.noiseGrid(W, H, {
     scale = 0.0025,

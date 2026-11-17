@@ -2,8 +2,6 @@
 -- Twelve million orbit points splatted into a density Field, then drawn
 -- through a hot palette with log tone mapping.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#070302"))

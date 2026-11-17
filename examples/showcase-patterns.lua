@@ -2,8 +2,6 @@
 -- Demonstrates: grid, radial, poissonDisk,
 -- hsv, gaussian, pick, randInCircle, randOnCircle
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#1a1a2e"))

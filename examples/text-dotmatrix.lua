@@ -2,8 +2,6 @@
 -- Each letter is a 5-wide, 7-tall bitmap. Dots are drawn as circles
 -- with optional size variation driven by noise.
 
-local gen = require("genpuin")
-
 local M = {}
 
 -- 5x7 bitmaps, each row is a string of 5 chars ("." = off, "#" = on)

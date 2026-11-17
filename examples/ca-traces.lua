@@ -5,8 +5,6 @@
 -- Traces taper, shift hue, and fade as they travel. Bright nodes mark
 -- points where the CA forces a sharp direction reversal.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0e0e12"))

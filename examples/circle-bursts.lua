@@ -2,8 +2,6 @@
 -- Only circles. Clusters burst from a few origins, with sub-systems
 -- packed inside larger rings. Sparse debris floats in the gaps.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#ffffff"))

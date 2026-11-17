@@ -3,8 +3,6 @@
 -- blend modes (multiply, screen, difference), dashed lines, pen + gradient,
 -- vec2 math, rounded rects
 
-local gen = require("genpuin")
-
 local W, H = 800, 600
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f0f0f0"))

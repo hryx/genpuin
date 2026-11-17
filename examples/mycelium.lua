@@ -2,8 +2,6 @@
 -- Poisson-seeded spore points sprout pen walkers that branch
 -- through a noise field, with tapered strokes and junction nodes.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0c0c0f"))

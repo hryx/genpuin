@@ -1,8 +1,6 @@
 -- automata-split.lua — Two elementary cellular automata meeting at the diagonal
 -- Demonstrates: gen.elementary with custom init, triangle clipping, dual palettes
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f5f0e8"))

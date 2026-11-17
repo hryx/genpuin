@@ -2,8 +2,6 @@
 -- to a four-color palette. Blue noise on the left, a coarse Bayer
 -- screen in the right-hand strip.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local ink = {0.04, 0.02, 0.03, 1}
 local red = {0.82, 0.05, 0.06, 1}

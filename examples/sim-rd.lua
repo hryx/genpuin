@@ -2,8 +2,6 @@
 -- and then into bare paper. The kill rate rises with distance from an
 -- off-center focus, warped by noise, so the pattern finds its own edge.
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local N = 640
 gen.seed(7)

@@ -1,7 +1,5 @@
 -- voronoi-spiral.lua — Pen traces Voronoi edges in a clockwise spiral
 
-local gen = require("genpuin")
-
 local W, H = 600, 600
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#0f0f1a"))

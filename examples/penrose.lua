@@ -1,7 +1,5 @@
 -- penrose.lua — Penrose P3 rhombus tiling in a circle
 
-local gen = require("genpuin")
-
 local W, H = 800, 800
 local c = gen.canvas(W, H)
 gen.background(c, gen.hex("#f0d020"))

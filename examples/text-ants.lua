@@ -2,8 +2,6 @@
 -- Letters are defined with cubic bezier curves for a rounded, organic look.
 -- Hundreds of small circles are scattered along each curve like ants on trails.
 
-local gen = require("genpuin")
-
 local M = {}
 
 -- Sample points along a cubic bezier curve
