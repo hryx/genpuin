@@ -4,7 +4,7 @@
 //! sharp corners up to the grid resolution.
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 
 const Field = @import("../Field.zig");
@@ -157,7 +157,7 @@ test "offset: deep inward offsets of one field" {
     var circle: [256]Vec2 = undefined;
     for (&circle, 0..) |*p, i| {
         const t = @as(f64, @floatFromInt(i)) / 256 * std.math.tau;
-        p.* = .{ 20 * libm.cos(t), 20 * libm.sin(t) };
+        p.* = .{ 20 * math.cos(t), 20 * math.sin(t) };
     }
     const out = try offsets(gpa, &.{&circle}, &.{ -5, -15, -25 }, .{});
     defer freeOffsets(gpa, out);

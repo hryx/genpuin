@@ -2,7 +2,7 @@
 //! back packed in one buffer so thousands of them cost two allocations.
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -40,7 +40,7 @@ pub const Source = union(enum) {
                 const u = (p[0] - a.rect[0]) / a.rect[2] * @as(f64, @floatFromInt(a.field.w));
                 const v = (p[1] - a.rect[1]) / a.rect[3] * @as(f64, @floatFromInt(a.field.h));
                 const t: f64 = a.field.sample(u, v);
-                return .{ libm.cos(t), libm.sin(t) };
+                return .{ math.cos(t), math.sin(t) };
             },
         }
     }

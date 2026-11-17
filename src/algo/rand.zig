@@ -5,7 +5,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 
 pub const Vec2 = [2]f64;
 
@@ -17,7 +17,7 @@ pub const Rng = struct {
 
     /// Seed from any number. Only floor(|n|) mod 2^32 matters.
     pub fn init(n: f64) Rng {
-        const low = libm.mod(@floor(@abs(n)), 4294967296.0);
+        const low = math.mod(@floor(@abs(n)), 4294967296.0);
         const bits: u32 = if (low >= 0 and low < 4294967296.0) @intFromFloat(low) else 0;
         var r: Rng = .{ .state = bits ^ 0x12345678 };
         if (r.state == 0) r.state = 1;
@@ -49,7 +49,7 @@ pub const Rng = struct {
     pub fn gaussian(r: *Rng, mean: f64, stddev: f64) f64 {
         const uniform1 = r.next();
         const uniform2 = r.next();
-        const z = @sqrt(-2 * libm.log(uniform1)) * libm.cos(2 * std.math.pi * uniform2);
+        const z = @sqrt(-2 * math.log(uniform1)) * math.cos(2 * std.math.pi * uniform2);
         return mean + z * stddev;
     }
 
@@ -80,12 +80,12 @@ pub const Rng = struct {
     pub fn inCircle(r: *Rng, center: Vec2, radius: f64) Vec2 {
         const angle = r.next() * 2 * std.math.pi;
         const dist = radius * @sqrt(r.next());
-        return .{ center[0] + dist * libm.cos(angle), center[1] + dist * libm.sin(angle) };
+        return .{ center[0] + dist * math.cos(angle), center[1] + dist * math.sin(angle) };
     }
 
     pub fn onCircle(r: *Rng, center: Vec2, radius: f64) Vec2 {
         const angle = r.next() * 2 * std.math.pi;
-        return .{ center[0] + radius * libm.cos(angle), center[1] + radius * libm.sin(angle) };
+        return .{ center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle) };
     }
 
     pub fn inRect(r: *Rng, x: f64, y: f64, w: f64, h: f64) Vec2 {
@@ -131,7 +131,7 @@ pub fn poissonDisk(gpa: Allocator, r: *Rng, bounds: Bounds, min_dist: f64, max_a
         const found = while (attempt <= max_attempts) : (attempt += 1) {
             const angle = r.next() * 2 * std.math.pi;
             const dist = min_dist + r.next() * min_dist;
-            const p: Vec2 = .{ origin[0] + libm.cos(angle) * dist, origin[1] + libm.sin(angle) * dist };
+            const p: Vec2 = .{ origin[0] + math.cos(angle) * dist, origin[1] + math.sin(angle) * dist };
             if (!(p[0] >= bounds.x and p[0] < bounds.x + bounds.w and p[1] >= bounds.y and p[1] < bounds.y + bounds.h)) continue;
             if (tooClose(g, points.items, p, min_dist_sq)) continue;
             try points.append(gpa, p);

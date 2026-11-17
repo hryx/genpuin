@@ -2,7 +2,7 @@
 //! tears and datamosh-style block repeats.
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 
 const Field = @import("../Field.zig");
@@ -72,12 +72,12 @@ pub fn displace(gpa: Allocator, r: *Raster, p: *const Displace, frame: Frame) !v
     for (0..r.h) |yi| {
         const y: f64 = @floatFromInt(yi);
         const gy = y + @as(f64, @floatFromInt(frame.y0));
-        const wave_x = ax * libm.sin(gy * kx + p.phase);
+        const wave_x = ax * math.sin(gy * kx + p.phase);
         for (0..r.w) |xi| {
             const x: f64 = @floatFromInt(xi);
             const gx = x + @as(f64, @floatFromInt(frame.x0));
             var dx = wave_x;
-            var dy = ay * libm.sin(gx * ky + p.phase);
+            var dy = ay * math.sin(gx * ky + p.phase);
             if (p.field_x) |f| dx += (frame.sampleField(f, x, y) - 0.5) * amount;
             if (p.field_y) |f| dy += (frame.sampleField(f, x, y) - 0.5) * amount;
             const c = common.sampleBilinear(&src, @floatCast(x - dx), @floatCast(y - dy));

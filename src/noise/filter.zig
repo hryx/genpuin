@@ -1,7 +1,7 @@
 //! Field filters that sit next to noise: gaussian blur and gradient.
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -21,7 +21,7 @@ pub fn blur(gpa: Allocator, f: *const Field, sigma: f32) !Field {
     var total: f32 = 0;
     for (kernel, 0..) |*k, i| {
         const d = @as(f32, @floatFromInt(i)) - @as(f32, @floatFromInt(radius));
-        k.* = @floatCast(libm.exp(-d * d / (2 * sigma * sigma)));
+        k.* = @floatCast(math.exp(-d * d / (2 * sigma * sigma)));
         total += k.*;
     }
     for (kernel) |*k| k.* /= total;

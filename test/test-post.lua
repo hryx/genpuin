@@ -18,19 +18,13 @@ gen.post(c, "posterize", {levels = 2, region = {35, 0, 5, 20}})
 return c
 ]]
 
-os.execute("mkdir -p out/test")
 local f = assert(io.open("out/test/post-scene.lua", "w"))
 f:write(scene)
 f:close()
 
 local function render(scale)
     local out = string.format("out/test/test-post-%d.ppm", scale)
-    local cmd = string.format("%s out/test/post-scene.lua -s %d -o %s", arg[-1], scale, out)
-    local ok = os.execute(cmd)
-    if ok ~= true and ok ~= 0 then
-        print("ABORT: render failed: " .. cmd)
-        os.exit(1)
-    end
+    T.render("out/test/post-scene.lua", out, {scale = scale})
     return T.readPpm(out)
 end
 

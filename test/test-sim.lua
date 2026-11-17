@@ -118,7 +118,6 @@ local ring = gen.physarum{w = 60, h = 60, agents = 6000, steps = 3, spawn = "rin
 local c = gen.canvas(60, 60)
 gen.background(c, {1, 1, 1})
 gen.draw(c, gen.image(ring, 0, 0, 60, 60, {palette = {{0, 0, 0}, {1, 1, 1}}, range = {0, 1}, smooth = false}))
-os.execute("mkdir -p out/test")
 gen.exportPpm(c, "out/test/test-sim.ppm")
 local pixels = T.readPpm("out/test/test-sim.ppm")
 check("center of the ring is dark", T.gray(pixels, 30, 30) == 0, tostring(T.gray(pixels, 30, 30)))

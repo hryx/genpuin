@@ -18,7 +18,7 @@
 //! Orientation tests are exact (see geom.orient).
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -470,7 +470,7 @@ fn pickNext(edges: []const [2]Vec2, used: []const bool, v: Vec2, din: Vec2) ?usi
     while (i < edges.len and geom.eql(edges[i][0], v)) : (i += 1) {
         if (used[i]) continue;
         const dout = geom.sub(edges[i][1], v);
-        const turn = libm.atan2(geom.cross(din, dout), geom.dot(din, dout));
+        const turn = math.atan2(geom.cross(din, dout), geom.dot(din, dout));
         if (turn > best_turn) {
             best_turn = turn;
             best = i;
@@ -584,14 +584,14 @@ fn starRing(gpa: Allocator) ![3][]Vec2 {
     for (star, 0..) |*p, i| {
         const t = @as(f64, @floatFromInt(i)) / 10 * std.math.tau;
         const r: f64 = if (i % 2 == 0) 10 else 4;
-        p.* = .{ r * libm.cos(t), r * libm.sin(t) };
+        p.* = .{ r * math.cos(t), r * math.sin(t) };
     }
     const outer = try gpa.alloc(Vec2, 48);
     const inner = try gpa.alloc(Vec2, 48);
     for (outer, inner, 0..) |*o, *in, i| {
         const t = @as(f64, @floatFromInt(i)) / 48 * std.math.tau;
-        o.* = .{ 8 * libm.cos(t) + 1, 8 * libm.sin(t) };
-        in.* = .{ 5 * libm.cos(-t) + 1, 5 * libm.sin(-t) };
+        o.* = .{ 8 * math.cos(t) + 1, 8 * math.sin(t) };
+        in.* = .{ 5 * math.cos(-t) + 1, 5 * math.sin(-t) };
     }
     return .{ star, outer, inner };
 }

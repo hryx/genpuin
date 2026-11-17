@@ -1,5 +1,5 @@
 //! Makes the embedded Lua's math library, its `^` operator and the calls
-//! LuaJIT's compiled traces make run the same maths as src/libm.zig.
+//! LuaJIT's compiled traces make run the same maths as src/math.zig.
 //!
 //! Both VMs reach the maths by C symbol: lmathlib.c and lj_vmmath.c call
 //! it from C, LuaJIT's interpreter with `bl extern sin` and its JIT
@@ -14,24 +14,24 @@
 //! below references a symbol only compiler-rt has, so the object is
 //! always loaded, and a definition in a loaded object takes precedence
 //! over any shared library's. The functions compiler-rt lacks are
-//! exported here from std.math. src/tools/libm_guard.zig checks the
+//! exported here from std.math. src/tools/math_guard.zig checks the
 //! linked binary.
 
-const libm = @import("genpuin").libm;
+const math = @import("genpuin").math;
 
 /// compiler-rt's f80 sine, which no libc defines.
 const anchor = @extern(*const anyopaque, .{ .name = "__sinx" });
 
 export const genpuin_compiler_rt_anchor: *const anyopaque = anchor;
 
-/// What compiler-rt does not define, as C name and libm function.
+/// What compiler-rt does not define, as C name and the function behind it.
 const unary = .{
-    .{ "asin", libm.asin }, .{ "acos", libm.acos }, .{ "atan", libm.atan },
-    .{ "sinh", libm.sinh }, .{ "cosh", libm.cosh }, .{ "tanh", libm.tanh },
+    .{ "asin", math.asin }, .{ "acos", math.acos }, .{ "atan", math.atan },
+    .{ "sinh", math.sinh }, .{ "cosh", math.cosh }, .{ "tanh", math.tanh },
 };
 
 const binary = .{
-    .{ "atan2", libm.atan2 }, .{ "pow", libm.pow },
+    .{ "atan2", math.atan2 }, .{ "pow", math.pow },
 };
 
 fn Unary(comptime f: fn (f64) f64) type {

@@ -1,7 +1,7 @@
 //! Build-time check that every transcendental the executable can call
 //! comes from the one implementation genpuin pins: compiler-rt's sin, cos,
 //! tan, exp, log, log2, log10 and fmod, and std.math's others, exported by
-//! src/lua/libm_exports.zig.
+//! src/lua/math_exports.zig.
 //!
 //! It fails when a transcendental is imported from a shared library,
 //! which means Lua or Zig code calls the platform libm, when sin or pow is
@@ -157,7 +157,7 @@ pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
     if (args.len != 2) {
-        std.debug.print("usage: libm_guard <executable>\n", .{});
+        std.debug.print("usage: math_guard <executable>\n", .{});
         std.process.exit(2);
     }
     const exe = args[1];
@@ -165,21 +165,21 @@ pub fn main(init: std.process.Init) !void {
     var r: Report = .{};
     scan(bytes, &r) catch |err| switch (err) {
         error.UnknownFormat => {
-            std.debug.print("libm guard: {s} is not 64-bit little-endian Mach-O or ELF, not checked\n", .{exe});
+            std.debug.print("math guard: {s} is not 64-bit little-endian Mach-O or ELF, not checked\n", .{exe});
             return;
         },
         error.Truncated => {
-            std.debug.print("libm guard: {s} is truncated\n", .{exe});
+            std.debug.print("math guard: {s} is truncated\n", .{exe});
             std.process.exit(1);
         },
     };
     if (r.tables == 0) {
-        std.debug.print("libm guard: {s} has no symbol table, so it cannot be checked\n", .{exe});
+        std.debug.print("math guard: {s} has no symbol table, so it cannot be checked\n", .{exe});
         std.process.exit(1);
     }
     if (r.ok()) return;
 
-    std.debug.print("libm guard: {s} does not run genpuin's libm for every script maths call.\n", .{exe});
+    std.debug.print("math guard: {s} does not run genpuin's maths for every script maths call.\n", .{exe});
     for (exported, 0..) |name, i| {
         if (r.nameOk(i)) continue;
         if (r.address[i] == null) {
@@ -193,15 +193,15 @@ pub fn main(init: std.process.Init) !void {
     }
     std.debug.print(
         \\Lua's math.* and ^ and LuaJIT's traces must bind to compiler-rt and
-        \\the exports in src/lua/libm_exports.zig, whose anchor keeps
-        \\compiler-rt loaded. Zig code must call src/libm.zig instead of
+        \\the exports in src/lua/math_exports.zig, whose anchor keeps
+        \\compiler-rt loaded. Zig code must call src/math.zig instead of
         \\@sin, @exp, std.math.pow and friends.
         \\
     , .{});
     std.process.exit(1);
 }
 
-test "libm guard: matches transcendental names and their float and long forms" {
+test "math guard: matches transcendental names and their float and long forms" {
     try std.testing.expect(transcendentalIndex("sin") != null);
     try std.testing.expect(transcendentalIndex("powf") != null);
     try std.testing.expect(transcendentalIndex("__sincos_stret") != null);
@@ -212,7 +212,7 @@ test "libm guard: matches transcendental names and their float and long forms" {
     try std.testing.expect(transcendentalIndex("ldexp") == null);
 }
 
-test "libm guard: names are defined once and never imported" {
+test "math guard: names are defined once and never imported" {
     var r: Report = .{};
     inline for (exported, 0..) |name, i| r.add(name, .{ .defined = 0x1000 + i });
     try std.testing.expect(r.ok());

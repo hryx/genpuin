@@ -12,10 +12,6 @@ const host_mod = @import("lua/host.zig");
 const util = @import("lua/util.zig");
 const Lua = zlua.Lua;
 
-comptime {
-    _ = @import("lua/libm_exports.zig");
-}
-
 const usage =
     \\Usage: genpuin <script.lua> [options] [-- script args]
     \\
@@ -159,7 +155,7 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
         std.debug.print("{s}\n", .{lua.toString(-1) catch "script failed"});
         return error.ScriptFailed;
     };
-    if (!isCanvas(lua, -1)) {
+    if (!host_mod.isCanvas(lua, -1)) {
         if (target == .tile) {
             std.debug.print("vary {d}: script returned no canvas\n", .{vary});
             return error.NoCanvas;
@@ -170,14 +166,7 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
 
     switch (target) {
         .file => |path| {
-            const fmt = genpuin.image_io.Format.fromPath(path) orelse .svg;
-            if (fmt == .svg) {
-                try exportSvg(lua, path);
-            } else {
-                var r = core.renderCanvas(lua, -1, opts) catch |err| return reportRenderError(lua, err);
-                defer r.deinit(ctx.gpa);
-                try genpuin.image_io.write(ctx.gpa, ctx.io, &r, path, opts.depth);
-            }
+            try host_mod.exportCanvas(lua, path, opts);
             std.debug.print("Wrote {s}\n", .{path});
         },
         .tile => |t| {
@@ -193,25 +182,6 @@ fn reportRenderError(lua: *Lua, err: anyerror) anyerror {
     _ = lua;
     std.debug.print("render failed: {s}\n", .{@errorName(err)});
     return err;
-}
-
-fn isCanvas(lua: *Lua, index: i32) bool {
-    if (!lua.isTable(index)) return false;
-    defer lua.pop(1);
-    return lua.getField(index, "width") == .number;
-}
-
-fn exportSvg(lua: *Lua, path: []const u8) !void {
-    const canvas = lua.absIndex(-1);
-    host_mod.pushModule(lua, "svg");
-    _ = lua.getField(-1, "exportSvg");
-    lua.pushValue(canvas);
-    _ = lua.pushString(path);
-    lua.protectedCall(.{ .args = 2, .results = 0 }) catch {
-        std.debug.print("{s}\n", .{lua.toString(-1) catch "svg export failed"});
-        return error.SvgFailed;
-    };
-    lua.pop(1);
 }
 
 /// Render every variation in [lo, hi] on worker threads, then lay them
@@ -254,6 +224,9 @@ fn sweep(arena: Allocator, ctx: RunContext, hi: i64) !void {
 }
 
 test {
+    _ = @import("lua/host.zig");
+    _ = @import("lua/bind_math.zig");
+    _ = @import("lua/bind_testing.zig");
     _ = @import("lua/util.zig");
     _ = @import("lua/marshal.zig");
     _ = @import("lua/core.zig");

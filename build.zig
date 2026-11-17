@@ -28,7 +28,8 @@ pub fn build(b: *std.Build) void {
     });
     exe_mod.addImport("genpuin", core_mod);
     exe_mod.addImport("zlua", zlua_dep.module("zlua"));
-    exe_mod.addImport("lua_sources", luaSources(b));
+    const lua_sources = luaSources(b);
+    exe_mod.addImport("lua_sources", lua_sources);
 
     const exe = b.addExecutable(.{ .name = "genpuin", .root_module = exe_mod });
     b.installArtifact(exe);
@@ -37,25 +38,37 @@ pub fn build(b: *std.Build) void {
     run.addPassthruArgs();
     b.step("run", "Run genpuin with the given arguments").dependOn(&run.step);
 
-    const test_step = b.step("test", "Run Zig unit tests and the Lua render tests");
+    const test_step = b.step("test", "Run the Zig unit tests, the Lua tests and the maths guard");
     const core_tests = b.addTest(.{ .root_module = core_mod });
     test_step.dependOn(&b.addRunArtifact(core_tests).step);
     const exe_tests = b.addTest(.{ .root_module = exe_mod });
     test_step.dependOn(&b.addRunArtifact(exe_tests).step);
-    const lua_tests = b.addRunArtifact(exe);
-    lua_tests.addArg("test/run.lua");
+
+    const runner_mod = b.createModule(.{
+        .root_source_file = b.path("src/test_runner.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    runner_mod.addImport("genpuin", core_mod);
+    runner_mod.addImport("zlua", zlua_dep.module("zlua"));
+    runner_mod.addImport("lua_sources", lua_sources);
+    const runner = b.addExecutable(.{ .name = "test_runner", .root_module = runner_mod });
+    const lua_tests = b.addRunArtifact(runner);
+    lua_tests.addArg("test");
     lua_tests.setCwd(b.path("."));
     lua_tests.has_side_effects = true;
     test_step.dependOn(&lua_tests.step);
 
     const guard_mod = b.createModule(.{
-        .root_source_file = b.path("src/tools/libm_guard.zig"),
+        .root_source_file = b.path("src/tools/math_guard.zig"),
         .target = b.graph.host,
     });
-    const guard = b.addExecutable(.{ .name = "libm_guard", .root_module = guard_mod });
-    const guard_run = b.addRunArtifact(guard);
-    guard_run.addArtifactArg(exe);
-    test_step.dependOn(&guard_run.step);
+    const guard = b.addExecutable(.{ .name = "math_guard", .root_module = guard_mod });
+    for ([_]*std.Build.Step.Compile{ exe, runner }) |checked| {
+        const guard_run = b.addRunArtifact(guard);
+        guard_run.addArtifactArg(checked);
+        test_step.dependOn(&guard_run.step);
+    }
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = guard_mod })).step);
 
     const examples_step = b.step("examples", "Render every examples/*.lua to out/");

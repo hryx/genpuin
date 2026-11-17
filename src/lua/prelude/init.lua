@@ -180,11 +180,6 @@ gen.norm = util.norm
 gen.degrees = util.degrees
 gen.radians = util.radians
 
--- libm: test hooks for genpuin's maths. bits(x) gives the IEEE bits of
--- a number as 16 hex digits, num(hex) the number back, and
--- call(name, x, y) runs that libm function from Zig.
-gen.libm = import("core").libm
-
 -- extension modules export everything they define
 for _, name in ipairs({"texture", "sim", "pathops", "wfc"}) do
     for k, v in pairs(import(name)) do gen[k] = v end

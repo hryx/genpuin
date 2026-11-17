@@ -3,7 +3,7 @@
 //! (edges binned into horizontal bands).
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -275,8 +275,8 @@ test "EdgeSet: distance agrees with brute force on many edges" {
     var pts: [200]Vec2 = undefined;
     for (&pts, 0..) |*p, i| {
         const t = @as(f64, @floatFromInt(i)) / 200 * std.math.tau;
-        const r = 50 + 20 * libm.sin(7 * t);
-        p.* = .{ r * libm.cos(t), r * libm.sin(t) };
+        const r = 50 + 20 * math.sin(7 * t);
+        p.* = .{ r * math.cos(t), r * math.sin(t) };
     }
     var set: EdgeSet = try .init(gpa, &.{&pts}, true);
     defer set.deinit(gpa);

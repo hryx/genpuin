@@ -5,7 +5,7 @@
 
 const std = @import("std");
 
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 
 pub const Perlin = struct {
     perm: [512]u8,
@@ -18,9 +18,9 @@ pub const Perlin = struct {
         var s = @floor(seed);
         var i: usize = 255;
         while (i >= 1) : (i -= 1) {
-            s = libm.mod(s * 1103515245 + 12345, 2147483647);
+            s = math.mod(s * 1103515245 + 12345, 2147483647);
             const span: f64 = @floatFromInt(i + 1);
-            const jf = libm.mod(s, span);
+            const jf = math.mod(s, span);
             const j: usize = if (jf >= 0 and jf < span) @intFromFloat(jf) else 0;
             std.mem.swap(u8, &p[i], &p[j]);
         }
@@ -33,8 +33,8 @@ pub const Perlin = struct {
     pub fn noise(n: *const Perlin, x: f64, y: f64) f64 {
         const fx = @floor(x);
         const fy = @floor(y);
-        const xm = libm.mod(fx, 256);
-        const ym = libm.mod(fy, 256);
+        const xm = math.mod(fx, 256);
+        const ym = math.mod(fy, 256);
         if (!(xm >= 0 and xm < 256 and ym >= 0 and ym < 256)) return std.math.nan(f64);
         const xi: usize = @intFromFloat(xm);
         const yi: usize = @intFromFloat(ym);
@@ -81,8 +81,8 @@ pub const Perlin = struct {
         out[0] = start;
         for (out[1..]) |*p| {
             const angle = n.noise(x * scale, y * scale) * std.math.pi * 2;
-            x = x + libm.cos(angle) * step_len;
-            y = y + libm.sin(angle) * step_len;
+            x = x + math.cos(angle) * step_len;
+            y = y + math.sin(angle) * step_len;
             p.* = .{ x, y };
         }
     }

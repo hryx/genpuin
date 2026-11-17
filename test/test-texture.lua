@@ -101,7 +101,6 @@ check("randomFlame gives transforms", #rf.transforms == 2 and rf.transforms[1].a
 
 print("\nSplat render")
 
-os.execute("mkdir -p out/test")
 local script = "out/test/texture-splat.lua"
 local fh = assert(io.open(script, "w"))
 fh:write([[

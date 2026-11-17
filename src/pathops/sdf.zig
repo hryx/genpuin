@@ -10,7 +10,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 
 const Field = @import("../Field.zig");
 const geom = @import("geom.zig");
@@ -247,7 +247,7 @@ const Compiler = struct {
             },
             .translate => |n| try c.wrap(.{ .translate = n.offset }, n.child, .pop, depth),
             .rotate => |n| {
-                try c.wrap(.{ .rotate = .{ .center = n.center, .cos = libm.cos(n.angle), .sin = libm.sin(n.angle) } }, n.child, .pop, depth);
+                try c.wrap(.{ .rotate = .{ .center = n.center, .cos = math.cos(n.angle), .sin = math.sin(n.angle) } }, n.child, .pop, depth);
             },
             .scale => |n| {
                 if (n.s == 0) return error.BadNode;

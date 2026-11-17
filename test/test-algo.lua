@@ -65,7 +65,6 @@ gen.draw(c, gen.rect(10, 0, 30, 20), {fill = {0, 0, 0}, colorMap = {
     {from = {0, 0, 0}, to = {1, 1, 1}},
     {from = {1, 1, 1}, to = {0, 0, 0}},
 }})
-os.execute("mkdir -p out/test")
 gen.exportPpm(c, "out/test/test-algo.ppm")
 local px = T.readPpm("out/test/test-algo.ppm")
 local function isRgb(name, x, y, r, g, b)

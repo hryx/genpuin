@@ -3,14 +3,14 @@
 
 const std = @import("std");
 
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 
 pub const Vec2 = [2]f64;
 
 /// Point i of n on a circle and its angle.
 pub fn radial(center: Vec2, radius: f64, i: f64, n: f64) struct { Vec2, f64 } {
     const angle = (i / n) * 2 * std.math.pi;
-    return .{ .{ center[0] + radius * libm.cos(angle), center[1] + radius * libm.sin(angle) }, angle };
+    return .{ .{ center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle) }, angle };
 }
 
 pub const Growth = enum { sqrt, linear };
@@ -23,7 +23,7 @@ pub fn spiral(center: Vec2, angle_step: f64, spacing: f64, growth: Growth, i: f6
         .sqrt => spacing * @sqrt(i),
         .linear => spacing * i,
     };
-    return .{ .{ center[0] + r * libm.cos(a), center[1] + r * libm.sin(a) }, a };
+    return .{ .{ center[0] + r * math.cos(a), center[1] + r * math.sin(a) }, a };
 }
 
 const testing = std.testing;

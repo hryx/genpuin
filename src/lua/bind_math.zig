@@ -1,52 +1,30 @@
-//! Lua's `math` table on genpuin's libm, the same on every Lua flavour.
+//! Lua's `math` table on genpuin's maths, the same on every Lua flavour.
 //!
-//! The transcendental math.* functions and `^` already run genpuin's libm
-//! through the C symbols libm_exports.zig provides. `install` evens out
+//! The transcendental math.* functions and `^` already run src/math.zig
+//! through the C symbols math_exports.zig provides. `install` evens out
 //! what the flavours offer. math.atan2, math.pow, math.log10, math.sinh,
 //! math.cosh and math.tanh are added where the flavour lacks them (Lua
 //! 5.3 and later). On PUC Lua math.log(x, b) is replaced by LuaJIT's
 //! log2(x) * (1 / log2(b)), so a based log gives the same bits on both.
-//!
-//! core.libm holds test hooks: bits(x) and num(hex) convert between a
-//! number and its IEEE bit pattern as 16 hex digits, and call(name, x, y)
-//! runs one libm function from Zig.
 
 const std = @import("std");
 
 const zlua = @import("zlua");
-const libm = @import("genpuin").libm;
+const math = @import("genpuin").math;
 
+const bind_testing = @import("bind_testing.zig");
 const util = @import("util.zig");
 const Lua = util.Lua;
-
-pub const functions = [_]zlua.FnReg{
-    .{ .name = "bits", .func = zlua.wrap(bits) },
-    .{ .name = "num", .func = zlua.wrap(num) },
-    .{ .name = "call", .func = zlua.wrap(call) },
-};
-
-const unary = .{
-    .{ "sin", libm.sin },     .{ "cos", libm.cos },   .{ "tan", libm.tan },
-    .{ "asin", libm.asin },   .{ "acos", libm.acos }, .{ "atan", libm.atan },
-    .{ "sinh", libm.sinh },   .{ "cosh", libm.cosh }, .{ "tanh", libm.tanh },
-    .{ "exp", libm.exp },     .{ "log", libm.log },   .{ "log2", libm.log2 },
-    .{ "log10", libm.log10 },
-};
-
-const binary = .{
-    .{ "atan2", libm.atan2 },     .{ "pow", libm.pow }, .{ "fmod", libm.fmod },
-    .{ "logBase", libm.logBase },
-};
 
 /// Fill in the math table of a fresh state. Call after openLibs.
 pub fn install(lua: *Lua) void {
     _ = lua.getGlobal("math");
-    addMissing(lua, "atan2", zlua.wrap(Binary(libm.atan2).lua));
-    addMissing(lua, "pow", zlua.wrap(Binary(libm.pow).lua));
-    addMissing(lua, "log10", zlua.wrap(Unary(libm.log10).lua));
-    addMissing(lua, "sinh", zlua.wrap(Unary(libm.sinh).lua));
-    addMissing(lua, "cosh", zlua.wrap(Unary(libm.cosh).lua));
-    addMissing(lua, "tanh", zlua.wrap(Unary(libm.tanh).lua));
+    addMissing(lua, "atan2", zlua.wrap(Binary(math.atan2).lua));
+    addMissing(lua, "pow", zlua.wrap(Binary(math.pow).lua));
+    addMissing(lua, "log10", zlua.wrap(Unary(math.log10).lua));
+    addMissing(lua, "sinh", zlua.wrap(Unary(math.sinh).lua));
+    addMissing(lua, "cosh", zlua.wrap(Unary(math.cosh).lua));
+    addMissing(lua, "tanh", zlua.wrap(Unary(math.tanh).lua));
     if (zlua.lang != .luajit) {
         lua.pushFunction(zlua.wrap(log));
         lua.setField(-2, "log");
@@ -84,41 +62,11 @@ fn Binary(comptime f: fn (f64, f64) f64) type {
 fn log(lua: *Lua) i32 {
     const x = lua.checkNumber(1);
     if (lua.getTop() < 2) {
-        lua.pushNumber(libm.log(x));
+        lua.pushNumber(math.log(x));
     } else {
-        lua.pushNumber(libm.logBase(x, lua.checkNumber(2)));
+        lua.pushNumber(math.logBase(x, lua.checkNumber(2)));
     }
     return 1;
-}
-
-/// bits(x) -> the IEEE bits of x as 16 lowercase hex digits.
-fn bits(lua: *Lua) i32 {
-    const x: u64 = @bitCast(lua.checkNumber(1));
-    var buf: [16]u8 = undefined;
-    _ = lua.pushString(std.fmt.bufPrint(&buf, "{x:0>16}", .{x}) catch unreachable);
-    return 1;
-}
-
-/// num(hex) -> the number with those IEEE bits.
-fn num(lua: *Lua) i32 {
-    const hex = lua.checkString(1);
-    const x = std.fmt.parseInt(u64, hex, 16) catch lua.argError(1, "expected 16 hex digits");
-    lua.pushNumber(@bitCast(x));
-    return 1;
-}
-
-/// call(name, x, y?) -> libm.name(x) or libm.name(x, y), computed in Zig.
-fn call(lua: *Lua) i32 {
-    const name = lua.checkString(1);
-    inline for (unary) |e| if (std.mem.eql(u8, name, e[0])) {
-        lua.pushNumber(e[1](lua.checkNumber(2)));
-        return 1;
-    };
-    inline for (binary) |e| if (std.mem.eql(u8, name, e[0])) {
-        lua.pushNumber(e[1](lua.checkNumber(2), lua.checkNumber(3)));
-        return 1;
-    };
-    lua.argError(1, "unknown libm function");
 }
 
 /// Hard inputs as IEEE bits: zeros, subnormals, near multiples of pi/2,
@@ -420,12 +368,6 @@ const cases = [_]Case{
     .{ .name = "logBase", .lua = "return function(x, b) return math.log(x, b) end", .set = hard.logBase },
 };
 
-fn zigSide(name: []const u8, x: f64, y: f64) f64 {
-    inline for (unary) |e| if (std.mem.eql(u8, name, e[0])) return e[1](x);
-    inline for (binary) |e| if (std.mem.eql(u8, name, e[0])) return e[1](x, y);
-    unreachable;
-}
-
 fn sameBits(a: f64, b: f64) bool {
     return (std.math.isNan(a) and std.math.isNan(b)) or @as(u64, @bitCast(a)) == @as(u64, @bitCast(b));
 }
@@ -438,17 +380,17 @@ fn spread(r: std.Random, name: []const u8) [2]f64 {
     const b = r.float(f64);
     const sign: f64 = if (r.boolean()) -1 else 1;
     if (eql(u8, name, "sin") or eql(u8, name, "cos") or eql(u8, name, "tan"))
-        return .{ if (a < 0.6) b * 100 - 50 else sign * libm.pow(10, b * 19 - 3), 0 };
+        return .{ if (a < 0.6) b * 100 - 50 else sign * math.pow(10, b * 19 - 3), 0 };
     if (eql(u8, name, "asin") or eql(u8, name, "acos")) return .{ b * 2 - 1, 0 };
-    if (eql(u8, name, "atan")) return .{ sign * libm.pow(10, b * 12 - 4), 0 };
+    if (eql(u8, name, "atan")) return .{ sign * math.pow(10, b * 12 - 4), 0 };
     if (eql(u8, name, "atan2")) return .{ a * 20 - 10, b * 20 - 10 };
     if (eql(u8, name, "sinh") or eql(u8, name, "cosh") or eql(u8, name, "tanh")) return .{ a * 60 - 30, 0 };
     if (eql(u8, name, "exp")) return .{ (b - 0.5) * @as(f64, if (a < 0.5) 20 else 1450), 0 };
     if (eql(u8, name, "log") or eql(u8, name, "log2") or eql(u8, name, "log10"))
-        return .{ if (a < 0.4) 0.5 + b * 1.5 else libm.pow(10, b * 600 - 300), 0 };
-    if (eql(u8, name, "pow")) return .{ libm.pow(10, a * 6 - 3), b * 60 - 30 };
-    if (eql(u8, name, "fmod")) return .{ sign * libm.pow(10, a * 12), libm.pow(10, b * 6 - 3) };
-    if (eql(u8, name, "logBase")) return .{ libm.pow(10, a * 20 - 10), 0.1 + b * 20 };
+        return .{ if (a < 0.4) 0.5 + b * 1.5 else math.pow(10, b * 600 - 300), 0 };
+    if (eql(u8, name, "pow")) return .{ math.pow(10, a * 6 - 3), b * 60 - 30 };
+    if (eql(u8, name, "fmod")) return .{ sign * math.pow(10, a * 12), math.pow(10, b * 6 - 3) };
+    if (eql(u8, name, "logBase")) return .{ math.pow(10, a * 20 - 10), 0.1 + b * 20 };
     unreachable;
 }
 
@@ -457,7 +399,7 @@ fn runChunk(lua: *Lua, src: [:0]const u8, results: i32) !void {
     try lua.protectedCall(.{ .args = 0, .results = results });
 }
 
-test "bind_libm: Lua's math and ^ give libm.zig's bits, interpreted and compiled" {
+test "bind_math: Lua's math and ^ give math.zig's bits, interpreted and compiled" {
     const lua = try Lua.init(std.testing.allocator);
     defer lua.deinit();
     lua.openLibs();
@@ -506,7 +448,7 @@ test "bind_libm: Lua's math and ^ give libm.zig's bits, interpreted and compiled
                 _ = lua.getIndexRaw(-1, @intCast(i));
                 const got = try lua.toNumber(-1);
                 lua.pop(1);
-                const want = zigSide(case.name, x, y);
+                const want = bind_testing.byName(case.name, x, y).?;
                 if (!sameBits(got, want)) {
                     std.debug.print("{s} ({s}) x=0x{x:0>16} y=0x{x:0>16} lua=0x{x:0>16} zig=0x{x:0>16}\n", .{
                         case.lua,                mode,

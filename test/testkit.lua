@@ -129,14 +129,10 @@ function M.fmtSlice(slice)
     return table.concat(parts, " ")
 end
 
--- Render an example to PPM with the running genpuin binary. Aborts on failure.
-function M.render(example, output)
-    local cmd = string.format('%s %s -o %s', arg[-1], example, output)
-    local ok = os.execute(cmd)
-    if ok ~= true and ok ~= 0 then
-        print("ABORT: render failed: " .. cmd)
-        os.exit(1)
-    end
+-- Render a script to an image as the CLI would, in a fresh Lua state.
+-- opts are scale, ss and depth. Raises the script's error on failure.
+function M.render(script, output, opts)
+    testing.render(script, output, opts)
 end
 
 return M

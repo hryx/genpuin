@@ -1,18 +1,15 @@
--- test-math.lua: genpuin's libm, seen from Lua, against the Zig side
+-- test-math.lua: genpuin's maths, seen from Lua, against the Zig side
 -- Every math.* transcendental and the ^ operator must give the same bits
--- as src/libm.zig computed in Zig (gen.libm.call), in the interpreter and
+-- as src/math.zig computed in Zig (testing.call), in the interpreter and
 -- in compiled traces, on every Lua flavour. The golden table pins the
--- exact bits so drift on any platform fails. Its inputs include ones where
--- macOS's libm gives a different last bit, so a fall back to the platform
--- libm fails too.
+-- exact bits so drift on any platform fails.
 
 local T = require("test.testkit")
 local check = T.check
-local L = gen.libm
-local bits, num, call = L.bits, L.num, L.call
+local bits, num, call = testing.bits, testing.num, testing.call
 local jit = rawget(_G, "jit")
 
--- name -> {Lua function, libm function it must match}
+-- name -> {Lua function, src/math.zig function it must match}
 local F = {
     sin = {math.sin, "sin"}, cos = {math.cos, "cos"}, tan = {math.tan, "tan"},
     asin = {math.asin, "asin"}, acos = {math.acos, "acos"},
@@ -1014,6 +1011,105 @@ for _, g in ipairs(golden) do
     end
 end
 check(string.format("%d golden results", #golden), #fails == 0, table.concat(fails, "\n    "))
+
+------------------------------------------------------------
+-- Float %
+------------------------------------------------------------
+-- LuaJIT computes a - floor(a / b) * b on every path: interpreter,
+-- traces and constant folding. PUC Lua takes fmod(a, b) and adds b when
+-- the signs disagree. The two differ in the low bits whenever the
+-- remainder is inexact, and on signed zeros and infinite divisors, so
+-- each flavour is checked against its own formula. The golden rows are
+-- inputs where both agree.
+local function modRef(a, b)
+    if jit then return call("mod", a, b) end
+    local m = math.fmod(a, b)
+    if (m > 0 and b < 0) or (m < 0 and b > 0) then m = m + b end
+    return m
+end
+
+local modEdges = {
+    {"8000000000000000", "3ff0000000000000"}, {"8000000000000000", "bff0000000000000"},
+    {"c014000000000000", "4014000000000000"}, {"3ff0000000000000", "7ff0000000000000"},
+    {"bff0000000000000", "7ff0000000000000"}, {"3ff0000000000000", "fff0000000000000"},
+    {"3ff0000000000000", "3fb999999999999a"}, {"bff0000000000000", "3fb999999999999a"},
+    {"4376345785d8a000", "4008000000000000"}, {"4340000000000001", "4008000000000000"},
+    {"3ff0000000000000", "0000000000000001"}, {"401921fb54442d18", "3fb999999999999a"},
+    {"3ff0000000000000", "8000000000000000"}, {"7ff8000000000000", "3ff0000000000000"},
+}
+local modXs, modYs = {}, {}
+for i, p in ipairs(modEdges) do modXs[i], modYs[i] = num(p[1]), num(p[2]) end
+for i = 1, #inputs.fmod[1] do
+    modXs[#modXs + 1], modYs[#modYs + 1] = inputs.fmod[1][i], inputs.fmod[2][i]
+end
+
+-- {a, b, a % b}
+local modGolden = {
+    {"401c000000000000", "4010000000000000", "4008000000000000"},
+    {"c01c000000000000", "4010000000000000", "3ff0000000000000"},
+    {"401c000000000000", "c010000000000000", "bff0000000000000"},
+    {"c01c000000000000", "c010000000000000", "c008000000000000"},
+    {"401e000000000000", "4000000000000000", "3ff8000000000000"},
+    {"c01e000000000000", "4000000000000000", "3fe0000000000000"},
+    {"4016000000000000", "c000000000000000", "bfe0000000000000"},
+    {"4024800000000000", "3ff0000000000000", "3fd0000000000000"},
+    {"c024800000000000", "3ff0000000000000", "3fe8000000000000"},
+    {"4006000000000000", "3fe0000000000000", "3fd0000000000000"},
+    {"4077200000000000", "4076800000000000", "4024000000000000"},
+    {"c03e000000000000", "4076800000000000", "4074a00000000000"},
+    {"c086ac0000000000", "4076800000000000", "4076280000000000"},
+    {"3fd3333333333333", "3fb999999999999a", "3fb9999999999998"},
+    {"3bc79ca10c924223", "3ff0000000000000", "3bc79ca10c924223"},
+    {"bbc79ca10c924223", "3ff0000000000000", "3ff0000000000000"},
+    {"3bc79ca10c924223", "bff0000000000000", "bff0000000000000"},
+    {"0000000000000000", "3ff0000000000000", "0000000000000000"},
+    {"4014000000000000", "4014000000000000", "0000000000000000"},
+    {"4014000000000000", "c014000000000000", "0000000000000000"},
+    {"4340000000000000", "4008000000000000", "4000000000000000"},
+    {"7e37e43c8800759c", "4008000000000000", "0000000000000000"},
+    {"0000000000000001", "3ff0000000000000", "0000000000000001"},
+    {"8000000000000001", "3ff0000000000000", "3ff0000000000000"},
+    {"0000000000000001", "0000000000000002", "0000000000000001"},
+    {"3ff0000000000000", "0000000000000000", "nan"},
+    {"0000000000000000", "0000000000000000", "nan"},
+    {"7ff8000000000000", "3ff0000000000000", "nan"},
+    {"3ff0000000000000", "7ff8000000000000", "nan"},
+    {"7ff0000000000000", "3ff0000000000000", "nan"},
+    {"fff0000000000000", "3ff0000000000000", "nan"},
+    {"7ff0000000000000", "7ff0000000000000", "nan"},
+}
+
+local function modCheck(mode)
+    local out = evaluate(function(a, b) return a % b end, modXs, modYs)
+    local bad
+    for i = 1, #modXs do
+        if not same(out[i], modRef(modXs[i], modYs[i])) then bad = i break end
+    end
+    check(string.format("%s: %% follows its formula on %d inputs", mode, #modXs), bad == nil,
+        bad and string.format("x=%s y=%s got=%s want=%s", bits(modXs[bad]), bits(modYs[bad]),
+            bits(out[bad]), bits(modRef(modXs[bad], modYs[bad]))))
+    local fails = {}
+    for _, g in ipairs(modGolden) do
+        local z = num(g[1]) % num(g[2])
+        local got = z ~= z and "nan" or bits(z)
+        if got ~= g[3] then
+            fails[#fails + 1] = string.format("%s %% %s = %s, expected %s", g[1], g[2], got, g[3])
+        end
+    end
+    check(string.format("%s: %d golden %% results", mode, #modGolden), #fails == 0,
+        table.concat(fails, "\n    "))
+end
+
+print("\nFloat %")
+if jit then
+    jit.off()
+    jit.flush()
+    modCheck("interpreter")
+    jit.on()
+    modCheck("jit")
+else
+    modCheck(_VERSION)
+end
 
 ------------------------------------------------------------
 -- The same functions exist on every flavour

@@ -1,6 +1,7 @@
-//! The transcendental maths genpuin uses. Zig code calls these rather
-//! than the builtins directly, and the CLI's Lua binds to the same code
-//! (src/lua/libm_exports.zig), so a result is the same on every OS.
+//! The transcendental maths genpuin uses, in place of the platform libm.
+//! Zig code calls these rather than the builtins directly, and the CLI's
+//! Lua binds to the same code (src/lua/math_exports.zig), so a result is
+//! the same on every OS.
 //!
 //! sin, cos, tan, exp, log, log2, log10 and fmod are the builtins, which
 //! lower to calls to those C symbols. The CLI links them to compiler-rt's
@@ -8,7 +9,7 @@
 //! noinline so LLVM never sees a builtin next to another or with a
 //! constant argument: it would merge sin and cos of one value into
 //! Darwin's __sincos_stret and fold constants with the compiler's own
-//! libm. Correctly rounded operations (@sqrt, @floor, + - * /) give the
+//! maths. Correctly rounded operations (@sqrt, @floor, + - * /) give the
 //! same bits everywhere and stay builtins at the call sites.
 
 const std = @import("std");
@@ -90,7 +91,7 @@ pub fn mod(a: f64, b: f64) f64 {
     return a - @floor(a / b) * b;
 }
 
-test "libm: Lua modulo follows the divisor's sign" {
+test "math: Lua modulo follows the divisor's sign" {
     try std.testing.expectEqual(@as(f64, 1), mod(-7, 4));
     try std.testing.expectEqual(@as(f64, 3), mod(7, 4));
     try std.testing.expectEqual(@as(f64, 0.5), mod(2.5, 1));

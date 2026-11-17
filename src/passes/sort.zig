@@ -2,7 +2,7 @@
 //! line into runs of selected pixels, and each run is sorted by a key.
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -67,8 +67,8 @@ const SortKey = packed struct(u64) {
 pub fn apply(gpa: Allocator, r: *Raster, p: *const PixelSort, frame: Frame) !void {
     assert(@as(u64, r.w) * r.h < std.math.maxInt(u32));
     const rad = std.math.degreesToRadians(p.angle);
-    const dir_x = libm.cos(rad);
-    const dir_y = libm.sin(rad);
+    const dir_x = math.cos(rad);
+    const dir_y = math.sin(rad);
     const steep = @abs(dir_y) > @abs(dir_x);
     const primary = if (steep) dir_y else dir_x;
     const secondary = if (steep) dir_x else dir_y;

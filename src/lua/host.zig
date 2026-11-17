@@ -8,7 +8,7 @@
 //! such as src/lua/prelude in a checkout, loads the same files from disk
 //! instead, so prelude edits need no rebuild. Files new since the build
 //! are not picked up. The math table is evened out across Lua flavours
-//! by bind_libm.zig.
+//! by bind_math.zig.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -16,13 +16,20 @@ const Allocator = std.mem.Allocator;
 const zlua = @import("zlua");
 const lua_sources = @import("lua_sources");
 
+const genpuin = @import("genpuin");
+
 const bind_field = @import("bind_field.zig");
-const bind_libm = @import("bind_libm.zig");
+const bind_math = @import("bind_math.zig");
 const core = @import("core.zig");
 const util = @import("util.zig");
 const Lua = util.Lua;
 
 pub const Host = util.Host;
+
+// The pinned maths symbols must be in every binary that runs Lua.
+comptime {
+    _ = @import("math_exports.zig");
+}
 
 pub const Options = struct {
     /// Directory of the script, added to package.path so scripts can
@@ -60,7 +67,7 @@ pub fn create(host: *Host, opts: Options) !*Lua {
     const lua = try Lua.init(host.gpa);
     errdefer lua.deinit();
     lua.openLibs();
-    bind_libm.install(lua);
+    bind_math.install(lua);
     util.setHost(lua, host);
     bind_field.registerMetatable(lua);
 
@@ -132,4 +139,58 @@ pub fn runScript(lua: *Lua, path: [:0]const u8) error{ScriptFailed}!void {
         return error.ScriptFailed;
     };
     lua.remove(handler);
+}
+
+/// Whether the value at `index` is a canvas.
+pub fn isCanvas(lua: *Lua, index: i32) bool {
+    if (!lua.isTable(index)) return false;
+    defer lua.pop(1);
+    return lua.getField(index, "width") == .number;
+}
+
+/// Write the canvas on top of the stack to `path`, in the format its
+/// extension names, SVG when it names none. Failures are printed.
+pub fn exportCanvas(lua: *Lua, path: []const u8, opts: core.RenderOptions) !void {
+    const gpa = lua.allocator();
+    const h = util.getHost(lua);
+    const format = genpuin.image_io.Format.fromPath(path) orelse .svg;
+    if (format == .svg) return exportSvg(lua, path);
+    var r = core.renderCanvas(lua, -1, opts) catch |err| {
+        std.debug.print("render failed: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    defer r.deinit(gpa);
+    try genpuin.image_io.write(gpa, h.io, &r, path, opts.depth);
+}
+
+fn exportSvg(lua: *Lua, path: []const u8) !void {
+    const canvas = lua.absIndex(-1);
+    pushModule(lua, "svg");
+    _ = lua.getField(-1, "exportSvg");
+    lua.pushValue(canvas);
+    _ = lua.pushString(path);
+    lua.protectedCall(.{ .args = 2, .results = 0 }) catch {
+        std.debug.print("{s}\n", .{lua.toString(-1) catch "svg export failed"});
+        return error.SvgFailed;
+    };
+    lua.pop(1);
+}
+
+test "host: the CLI's state has no test hooks" {
+    var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
+    const lua = try create(&host, .{});
+    defer lua.deinit();
+    const probe =
+        \\local hooks = false
+        \\for _, v in pairs(gen) do
+        \\    if type(v) == "table" and rawget(v, "bits") then hooks = true end
+        \\end
+        \\return rawget(_G, "testing") == nil and rawget(gen, "math") == nil,
+        \\    not hooks, pcall(function() return testing end) == false
+    ;
+    try util.loadBuffer(lua, probe, "=probe");
+    try lua.protectedCall(.{ .args = 0, .results = 3 });
+    try std.testing.expect(lua.toBoolean(-3));
+    try std.testing.expect(lua.toBoolean(-2));
+    try std.testing.expect(lua.toBoolean(-1));
 }

@@ -5,7 +5,7 @@
 //! zigzags when the joining stroke stays inside, near the boundary.
 
 const std = @import("std");
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
@@ -48,7 +48,7 @@ const Frame = struct {
     s: f64,
 
     fn init(angle: f64) Frame {
-        return .{ .c = libm.cos(angle), .s = libm.sin(angle) };
+        return .{ .c = math.cos(angle), .s = math.sin(angle) };
     }
 
     /// Into the frame where hatch lines run along x.
@@ -416,7 +416,7 @@ test "hatch: connected zigzag fills a disc in one path per pass" {
     var disc: [90]Vec2 = undefined;
     for (&disc, 0..) |*p, i| {
         const t = @as(f64, @floatFromInt(i)) / 90 * std.math.tau;
-        p.* = .{ 10 * libm.cos(t), 10 * libm.sin(t) };
+        p.* = .{ 10 * math.cos(t), 10 * math.sin(t) };
     }
     const paths = try hatchConnected(testing.allocator, &.{&disc}, .{ .spacing = 1, .angle = 0.3, .cross = true });
     defer geom.freeContours(testing.allocator, paths);

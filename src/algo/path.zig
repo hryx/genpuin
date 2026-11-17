@@ -6,7 +6,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const libm = @import("../libm.zig");
+const math = @import("../math.zig");
 const Rng = @import("rand.zig").Rng;
 const pointInPolygon = @import("spatial.zig").pointInPolygon;
 
@@ -255,7 +255,7 @@ pub fn alongPath(arena: Allocator, pts: []const Vec2, n: f64) !Along {
     for (0..count) |k| {
         const prev = s[k];
         const next = s[k + 2];
-        out.angles[k] = libm.atan2(next[1] - prev[1], next[0] - prev[0]);
+        out.angles[k] = math.atan2(next[1] - prev[1], next[0] - prev[0]);
         out.ts[k] = @as(f64, @floatFromInt(k)) / @max(n - 1, 1);
     }
     return out;

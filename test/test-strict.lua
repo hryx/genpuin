@@ -1,5 +1,6 @@
 -- test-strict.lua: strict reads of globals and of the gen table, and gen
--- as the only entry point.
+-- as the only entry point. The runner adds `testing`. The CLI has no such
+-- global, which src/lua/host.zig tests.
 
 local T = require("test.testkit")
 
@@ -14,6 +15,8 @@ end
 print("gen global")
 
 check("gen is preinstalled", rawget(_G, "gen") ~= nil)
+check("testing is installed by the test runner", rawget(_G, "testing") ~= nil and testing.bits ~= nil)
+check("gen carries no test hooks", rawget(gen, "math") == nil)
 check("the prelude is not requirable", not pcall(require, "genpuin") and not pcall(require, "genpuin.core"))
 
 print("\nStrict gen")
@@ -22,7 +25,7 @@ local err = errorOf(function() return gen.cirlce end)
 check("unknown gen key raises", err ~= nil)
 check("the error names the key and suggests a fix",
     err and err:find("gen.cirlce does not exist (did you mean gen.circle?)", 1, true), err)
-check("the error points at the reading line", err and err:find("test%-strict.lua:21:"), err)
+check("the error points at the reading line", err and err:find("test%-strict.lua:24:"), err)
 err = errorOf(function() return gen.qqqzzz end)
 check("no suggestion when nothing is close", err and not err:find("did you mean", 1, true), err)
 check("rawget on gen still yields nil", rawget(gen, "cirlce") == nil)
