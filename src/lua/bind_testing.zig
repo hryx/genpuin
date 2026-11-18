@@ -138,7 +138,11 @@ fn render(lua: *Lua) i32 {
         lua.raiseErrorStr("testing config missing", .{})));
     lua.pop(1);
     renderScript(lua, config, script, path, opts, seeds) catch |err| switch (err) {
-        error.ScriptFailed, error.CanvasFailed, error.TooLarge, error.SvgNeedsPixels, error.SvgUnsupported => lua.raiseError(),
+        error.ScriptFailed, error.CanvasFailed, error.SvgNeedsPixels, error.SvgUnsupported => lua.raiseError(),
+        error.TooLarge => {
+            core.appendTooLargeHint(lua, opts.ss);
+            lua.raiseError();
+        },
         error.NoCanvas => lua.raiseErrorStr("%s made no canvas. Call gen.canvas(w, h)", .{script.ptr}),
         else => lua.raiseErrorStr("rendering %s failed: %s", .{ script.ptr, @errorName(err).ptr }),
     };

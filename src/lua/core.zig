@@ -51,37 +51,35 @@ pub const RenderOptions = struct {
 };
 
 pub fn readRenderOptions(lua: *Lua, index: i32) RenderOptions {
-    const ss = util.optInt(lua, index, "ss", 1);
-    if (ss < 1 or ss > 16) lua.raiseErrorStr("ss must be 1 to 16", .{});
     const depth = util.optInt(lua, index, "depth", 8);
     return .{
-        .width = optWidth(lua, index),
-        .ss = @intCast(ss),
+        .width = optWhole(lua, index, "width", "a whole number of pixels", genpuin.render.side_max),
+        .ss = optWhole(lua, index, "ss", "a whole number", genpuin.render.ss_max) orelse 1,
         .depth = if (depth == 16) .@"16" else .@"8",
         .vector_only = util.optBool(lua, index, "vectorOnly", false),
     };
 }
 
-/// Option `width`: absent, or a whole number of pixels from 1 to
-/// render.side_max.
-fn optWidth(lua: *Lua, index: i32) ?u32 {
+/// Option `key`: absent, or a whole number from 1 to `max`. `what` names
+/// it in the error.
+fn optWhole(lua: *Lua, index: i32, key: [:0]const u8, what: [:0]const u8, max: u32) ?u32 {
     if (!lua.isTable(index)) return null;
     defer lua.pop(1);
-    switch (lua.getField(index, "width")) {
+    switch (lua.getField(index, key)) {
         .nil, .none => return null,
         .number => {
             const n = lua.toNumber(-1) catch unreachable; // type checked by the switch
-            if (n >= 1 and n <= genpuin.render.side_max and @floor(n) == n) return @intFromFloat(n);
+            if (n >= 1 and n <= @as(f64, @floatFromInt(max)) and @floor(n) == n) return @intFromFloat(n);
         },
         else => {},
     }
-    lua.raiseErrorStr("option 'width' must be a whole number of pixels from 1 to %d", .{@as(c_int, genpuin.render.side_max)});
+    lua.raiseErrorStr("option '%s' must be %s from 1 to %d", .{ key.ptr, what.ptr, @as(c_int, @intCast(max)) });
 }
 
 /// Render the canvas at `index` with the Lua state's allocator. A Lua
-/// error while reading the canvas returns error.CanvasFailed, and an
-/// output over render.side_max error.TooLarge, each with the message
-/// pushed on top of the stack.
+/// error while reading the canvas returns error.CanvasFailed. A render
+/// over a limit in render.zig, or one that runs out of memory, returns
+/// error.TooLarge. Each pushes its message on top of the stack.
 pub fn renderCanvas(lua: *Lua, index: i32, opts: RenderOptions) !genpuin.Raster {
     const gpa = lua.allocator();
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
@@ -97,19 +95,53 @@ pub fn renderCanvas(lua: *Lua, index: i32, opts: RenderOptions) !genpuin.Raster 
     const scale = if (opts.width) |w| genpuin.render.scaleForWidth(s.w, w) else 1;
     const size = genpuin.render.outputSize(s.w, s.h, scale);
     if (opts.width) |w| assert(size.w == w);
-    if (!size.fits()) {
-        _ = lua.pushString(try tooLargeMessage(arena_state.allocator(), s, opts.width, size));
+    return genpuin.render.render(gpa, s, .{ .scale = scale, .ss = opts.ss }) catch |err| {
+        const refusal: Refusal = switch (err) {
+            error.TooLarge => switch (genpuin.render.overLimit(size, opts.ss).?) {
+                .side => .side,
+                .pixels => .pixels,
+            },
+            error.OutOfMemory => .out_of_memory,
+        };
+        const text = try tooLargeMessage(arena_state.allocator(), s, opts, size, refusal);
+        _ = lua.pushString(text);
         return error.TooLarge;
-    }
-    return genpuin.render.render(gpa, s, .{ .scale = scale, .ss = opts.ss });
+    };
 }
 
-fn tooLargeMessage(arena: std.mem.Allocator, s: *const genpuin.scene.Scene, width: ?u32, size: genpuin.render.Size) ![]const u8 {
-    const limit = genpuin.render.side_max;
-    if (width) |w| {
-        return std.fmt.allocPrint(arena, "width {d} on a {d}x{d} canvas makes a {d}x{d} image, over the {d} px limit on a side", .{ w, s.w, s.h, size.w, size.h, limit });
+const Refusal = enum { side, pixels, out_of_memory };
+
+fn tooLargeMessage(
+    arena: std.mem.Allocator,
+    s: *const genpuin.scene.Scene,
+    opts: RenderOptions,
+    size: genpuin.render.Size,
+    refusal: Refusal,
+) ![]const u8 {
+    var out: std.Io.Writer.Allocating = .init(arena);
+    const w = &out.writer;
+    if (opts.width) |width| try w.print("width {d} on ", .{width});
+    try w.print("a {d}x{d} canvas makes a {d}x{d} image", .{ s.w, s.h, size.w, size.h });
+    if (opts.ss > 1) {
+        const work = size.supersampled(opts.ss);
+        try w.print(", rendered at ss {d} as {d}x{d}", .{ opts.ss, work.w, work.h });
     }
-    return std.fmt.allocPrint(arena, "a {d}x{d} canvas makes a {d}x{d} image, over the {d} px limit on a side", .{ s.w, s.h, size.w, size.h, limit });
+    switch (refusal) {
+        .side => try w.print(", over the {d} px limit on a side", .{genpuin.render.side_max}),
+        .pixels => {
+            const side = std.math.sqrt(genpuin.render.pixels_max);
+            try w.print(", over the limit of {d} pixels in all ({d}x{d})", .{ genpuin.render.pixels_max, side, side });
+        },
+        .out_of_memory => try w.writeAll(", and ran out of memory"),
+    }
+    return out.written();
+}
+
+/// Append the way out of error.TooLarge, in option names, to the message
+/// renderCanvas pushed.
+pub fn appendTooLargeHint(lua: *Lua, ss: u32) void {
+    _ = lua.pushString(if (ss > 1) ". Use a smaller width or ss" else ". Use a smaller width");
+    lua.concat(2);
 }
 
 pub const SvgError = error{
@@ -192,7 +224,11 @@ fn exportCanvas(lua: *Lua) !i32 {
     const path = lua.toString(2) catch lua.argError(2, "expected an output path");
     const opts = readRenderOptions(lua, 3);
     var r = renderCanvas(lua, 1, opts) catch |err| switch (err) {
-        error.CanvasFailed, error.TooLarge => lua.raiseError(),
+        error.CanvasFailed => lua.raiseError(),
+        error.TooLarge => {
+            appendTooLargeHint(lua, opts.ss);
+            lua.raiseError();
+        },
         else => return err,
     };
     defer r.deinit(lua.allocator());

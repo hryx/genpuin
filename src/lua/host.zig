@@ -159,10 +159,10 @@ fn pushPreludeField(lua: *Lua, module: [:0]const u8, field: [:0]const u8) void {
 /// Write the canvas on top of the stack to `path`, in the format its
 /// extension names, PNG when it names none. Returns how many post passes
 /// an SVG left out, which only `opts.vector_only` allows. A Lua error
-/// while reading the canvas returns error.CanvasFailed, an image over
-/// render.side_max returns error.TooLarge, and a canvas SVG cannot show
-/// returns error.SvgNeedsPixels or error.SvgUnsupported, each with the
-/// message on top of the stack.
+/// while reading the canvas returns error.CanvasFailed, a render over a
+/// limit or out of memory returns error.TooLarge, and a canvas SVG cannot
+/// show returns error.SvgNeedsPixels or error.SvgUnsupported, each with
+/// the message on top of the stack.
 pub fn exportCanvas(lua: *Lua, path: []const u8, opts: core.RenderOptions) !usize {
     const gpa = lua.allocator();
     const h = util.getHost(lua);

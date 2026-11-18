@@ -20,18 +20,45 @@ pub const Options = struct {
     ss: u32 = 1,
 };
 
-/// The largest output raster side in pixels, before supersampling.
+/// The largest raster side in pixels, as rendered, so after supersampling.
 pub const side_max: u32 = 32768;
 
-/// An output raster size, wide enough to hold sizes over `side_max`.
+/// The most pixels a render may hold, after supersampling: 16384 x 16384.
+/// Each one costs 12 bytes of RGB and 4 of coverage, and up to 4 more in
+/// the touched list of a shape that covers it. A blur, bloom or glitch
+/// pass holds one or two more RGB copies while it runs. That puts a plain
+/// render near 5 GiB at this limit and a bloom near 11 GiB.
+pub const pixels_max: u64 = 1 << 28;
+
+comptime {
+    assert(pixels_max <= std.math.maxInt(u32)); // Mask indexes pixels as u32
+}
+
+/// The largest supersampling factor.
+pub const ss_max: u32 = 16;
+
+/// A raster size, wide enough to hold sizes over the limits.
 pub const Size = struct {
     w: u64,
     h: u64,
 
-    pub fn fits(size: Size) bool {
-        return size.w <= side_max and size.h <= side_max;
+    /// The size of the raster that renders this one at `ss`.
+    pub fn supersampled(size: Size, ss: u32) Size {
+        assert(ss >= 1 and ss <= ss_max);
+        return .{ .w = size.w * ss, .h = size.h * ss };
     }
 };
+
+pub const Limit = enum { side, pixels };
+
+/// The limit an output of `size` rendered at `ss` breaks, or null when its
+/// working raster fits.
+pub fn overLimit(size: Size, ss: u32) ?Limit {
+    const work = size.supersampled(ss);
+    if (work.w > side_max or work.h > side_max) return .side;
+    if (work.w * work.h > pixels_max) return .pixels;
+    return null;
+}
 
 /// The output raster of a `w` by `h` unit scene at `scale`: each side
 /// rounded to the nearest pixel, at least 1. The scale is the same on
@@ -55,15 +82,18 @@ fn roundSide(v: f64) u64 {
     return @intFromFloat(std.math.clamp(@round(v), 1, 1e15));
 }
 
+pub const Error = error{TooLarge} || Allocator.Error;
+
 /// Render at `opts.scale`, supersampling within each output pixel.
-/// error.TooLarge when a side of the output would pass `side_max`.
-pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) !Raster {
-    assert(opts.ss >= 1);
+/// error.TooLarge when the working raster would break a limit.
+pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) Error!Raster {
+    assert(opts.ss >= 1 and opts.ss <= ss_max);
     const size = outputSize(s.w, s.h, opts.scale);
-    if (!size.fits()) return error.TooLarge;
+    if (overLimit(size, opts.ss) != null) return error.TooLarge;
     const k = opts.scale * @as(f64, @floatFromInt(opts.ss));
-    const w: u32 = @intCast(size.w * opts.ss);
-    const h: u32 = @intCast(size.h * opts.ss);
+    const work = size.supersampled(opts.ss);
+    const w: u32 = @intCast(work.w);
+    const h: u32 = @intCast(work.h);
     var raster: Raster = try .init(gpa, w, h, s.bg);
     errdefer raster.deinit(gpa);
 
@@ -82,8 +112,9 @@ pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) !Raster {
     };
 
     if (opts.ss == 1) return raster;
-    defer raster.deinit(gpa);
-    return raster.downsample(gpa, opts.ss);
+    const out = try raster.downsample(gpa, opts.ss);
+    raster.deinit(gpa);
+    return out;
 }
 
 const Context = struct {
@@ -549,8 +580,55 @@ test "render: a width gives exactly that many pixels for odd canvas sizes" {
 
 test "render: a side over the limit is refused before allocating" {
     const s: scene.Scene = .{ .w = 10, .h = 40, .bg = .{ 0, 0, 0 }, .items = &.{} };
-    try std.testing.expect(!outputSize(10, 40, 1000).fits());
+    try std.testing.expectEqual(@as(?Limit, .side), overLimit(outputSize(10, 40, 1000), 1));
     try std.testing.expectError(error.TooLarge, render(std.testing.allocator, &s, .{ .scale = 1000 }));
+}
+
+test "render: the side limit counts supersampling" {
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 32768, .h = 1 }, 1));
+    try std.testing.expectEqual(@as(?Limit, .side), overLimit(.{ .w = 32769, .h = 1 }, 1));
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 2048, .h = 1 }, 16));
+    try std.testing.expectEqual(@as(?Limit, .side), overLimit(.{ .w = 2049, .h = 1 }, 16));
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 1, .h = 16384 }, 2));
+    try std.testing.expectEqual(@as(?Limit, .side), overLimit(.{ .w = 1, .h = 16385 }, 2));
+    try std.testing.expectEqual(@as(?Limit, .side), overLimit(.{ .w = 32768, .h = 32768 }, 16));
+}
+
+test "render: the pixel limit counts supersampling" {
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 3000, .h = 2000 }, 4));
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 3000, .h = 3000 }, 4));
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 4096, .h = 4096 }, 4));
+    try std.testing.expectEqual(@as(?Limit, .pixels), overLimit(.{ .w = 4096, .h = 4097 }, 4));
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 16384, .h = 16384 }, 1));
+    try std.testing.expectEqual(@as(?Limit, .pixels), overLimit(.{ .w = 16384, .h = 16385 }, 1));
+    try std.testing.expectEqual(@as(?Limit, null), overLimit(.{ .w = 32768, .h = 8192 }, 1));
+    try std.testing.expectEqual(@as(?Limit, .pixels), overLimit(.{ .w = 32768, .h = 8193 }, 1));
+    try std.testing.expectEqual(@as(?Limit, .pixels), overLimit(.{ .w = 32768, .h = 32768 }, 1));
+    try std.testing.expectEqual(@as(?Limit, .pixels), overLimit(.{ .w = 8192, .h = 8193 }, 2));
+}
+
+test "render: a supersampled raster over the limit is refused before allocating" {
+    const s: scene.Scene = .{ .w = 800, .h = 800, .bg = .{ 0, 0, 0 }, .items = &.{} };
+    try std.testing.expectError(error.TooLarge, render(std.testing.failing_allocator, &s, .{ .scale = scaleForWidth(800, 32768), .ss = 16 }));
+    try std.testing.expectError(error.TooLarge, render(std.testing.failing_allocator, &s, .{ .scale = scaleForWidth(800, 32768) }));
+    try std.testing.expectError(error.TooLarge, render(std.testing.failing_allocator, &s, .{ .scale = scaleForWidth(800, 4097), .ss = 4 }));
+}
+
+fn renderAll(gpa: Allocator, s: *const scene.Scene, opts: Options) !void {
+    var r = try render(gpa, s, opts);
+    r.deinit(gpa);
+}
+
+test "render: running out of memory at any allocation frees what came before" {
+    const invert: scene.ColorMap = .{ .m = .{ .{ -1, 0, 0, 1 }, .{ 0, -1, 0, 1 }, .{ 0, 0, -1, 1 } }, .key = 1 };
+    const blur: passes.Pass = .{ .blur = .{ .radius = 1 } };
+    const items = [_]scene.Item{
+        .{ .draw = .{ .shape = .{ .circle = .{ .c = .{ 4, 4 }, .r = 3 } }, .style = .{ .fill = .{ .solid = .{ 1, 0, 0, 1 } } } } },
+        .{ .draw = .{ .shape = .{ .rect = .{ .x = 1, .y = 1, .w = 5, .h = 5 } }, .style = .{ .fill = .{ .solid = .{ 0, 0, 0, 1 } }, .color_map = invert } } },
+        .{ .pass = .{ .pass = blur } },
+    };
+    const s: scene.Scene = .{ .w = 8, .h = 8, .bg = .{ 0, 0, 0 }, .items = &items };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, renderAll, .{ &s, Options{ .ss = 2 } });
 }
 
 test "render: supersampling a fractional size keeps the output size" {

@@ -156,7 +156,9 @@ end
 --   width = output width in pixels, a whole number from 1 to 32768. The
 --   height follows the canvas aspect, rounded to the nearest pixel.
 --   Default: the canvas width, one pixel per canvas unit.
---   ss = supersample n x n per pixel, 1 to 16 (1).
+--   ss = supersample n x n per pixel, a whole number from 1 to 16 (1).
+--   The image as rendered, width times ss, may be at most 32768 px on a
+--   side and 16384x16384 pixels in all.
 --   depth = bits per channel, 8 or 16 (8).
 function M.exportPng(filename, opts)
     canvas.rejectCanvasArg("gen.exportPng", filename, opts, "gen.exportPng(filename, opts)")

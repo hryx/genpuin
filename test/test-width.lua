@@ -137,4 +137,30 @@ check("a misspelled option suggests the right one",
 ok, err = pcall(gen.exportSvg, "out/test/never.svg", {width = 0})
 check("exportSvg checks the width", not ok and err:find(bad, 1, true), err)
 
+print("\nSupersampling counts toward the limits")
+
+ok, err = pcall(gen.exportPng, "out/test/never.png", {width = 32768, ss = 16})
+check("a side over the limit names the output, ss and working size",
+    not ok and err:find("width 32768 on a 60x40 canvas makes a 32768x21845 image, rendered at ss 16 as 524288x349520, "
+        .. "over the 32768 px limit on a side. Use a smaller width or ss", 1, true), err)
+ok, err = pcall(gen.exportPng, "out/test/never.png", {width = 16384, ss = 2})
+check("a working raster over the pixel limit is refused",
+    not ok and err:find("width 16384 on a 60x40 canvas makes a 16384x10923 image, rendered at ss 2 as 32768x21846, "
+        .. "over the limit of 268435456 pixels in all (16384x16384). Use a smaller width or ss", 1, true), err)
+ok, err = pcall(gen.exportPpm, "out/test/never.ppm", {width = 32768})
+check("an output over the pixel limit is refused without ss",
+    not ok and err:find("width 32768 on a 60x40 canvas makes a 32768x21845 image, "
+        .. "over the limit of 268435456 pixels in all (16384x16384). Use a smaller width", 1, true)
+    and not err:find("ss", 1, true), err)
+err = renderError("out/test/width-tall.lua", "out/test/width-tall.ppm", {width = 1000, ss = 16})
+check("testing.render gives the same message",
+    err and err:find("width 1000 on a 10x40 canvas makes a 1000x4000 image, rendered at ss 16 as 16000x64000, "
+        .. "over the 32768 px limit on a side. Use a smaller width or ss", 1, true), err)
+
+local badSs = "option 'ss' must be a whole number from 1 to 16"
+for _, ss in ipairs({0, 17, 2.5, -1, math.huge, "4"}) do
+    ok, err = pcall(gen.exportPng, "out/test/never.png", {ss = ss})
+    check("ss " .. tostring(ss) .. " is refused", not ok and err:find(badSs, 1, true), err)
+end
+
 T.summary()

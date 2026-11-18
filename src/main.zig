@@ -28,7 +28,9 @@ const usage =
     \\  -f <fmt>         png, ppm or svg for made-up names (default png)
     \\  -w <px>          Output width in pixels, the height following the
     \\                   canvas aspect (default: the canvas width)
-    \\  --ss <n>         Supersample n x n per pixel (default 1)
+    \\  --ss <n>         Supersample n x n per pixel, 1 to 16 (default 1).
+    \\                   The image as rendered, -w times n, may be at
+    \\                   most 32768 px on a side and 16384x16384 in all
     \\  --depth <8|16>   PNG bits per channel (default 8)
     \\  --vector-only    With SVG output: leave post passes out and write
     \\                   just the shapes
@@ -218,8 +220,10 @@ fn parseOption(a: *Args, name: []const u8, v: []const u8, diag: *Io.Writer) Usag
         if (px > limit) return usageError(diag, "-w {d} is over the {d} px limit", .{ px, limit });
         a.width = @intCast(px);
     } else if (eql(name, "--ss")) {
-        a.ss = std.fmt.parseInt(u32, v, 10) catch return usageError(diag, "--ss needs an integer", .{});
-        if (a.ss < 1 or a.ss > 16) return usageError(diag, "--ss must be 1 to 16", .{});
+        const ss_max = genpuin.render.ss_max;
+        const n = std.fmt.parseInt(u32, v, 10) catch 0;
+        if (n < 1 or n > ss_max) return usageError(diag, "--ss needs a whole number from 1 to {d}, such as --ss 4", .{ss_max});
+        a.ss = n;
     } else if (eql(name, "--depth")) {
         a.depth = if (eql(v, "16")) .@"16" else if (eql(v, "8")) .@"8" else return usageError(diag, "--depth is 8 or 16", .{});
     } else if (eql(name, "--seed")) {
@@ -561,12 +565,12 @@ const Batch = struct {
                         try printSvgRefusal(w, problem, fix);
                         return err;
                     },
-                    else => return reportRenderError(lua, w, err),
+                    else => return reportRenderError(lua, w, err, opts.ss),
                 };
                 try printWrote(w, out, left_out);
             },
             .tile => |t| {
-                var r = core.renderCanvas(lua, -1, opts) catch |err| return reportRenderError(lua, w, err);
+                var r = core.renderCanvas(lua, -1, opts) catch |err| return reportRenderError(lua, w, err, opts.ss);
                 defer r.deinit(b.gpa);
                 const h: u32 = @max(1, @as(u32, @intFromFloat(@round(@as(f64, @floatFromInt(r.h)) * @as(f64, @floatFromInt(t.width)) / @as(f64, @floatFromInt(r.w))))));
                 t.out.* = try r.resizeBox(b.gpa, t.width, h);
@@ -648,12 +652,22 @@ fn printWrote(w: *Io.Writer, path: []const u8, left_out: usize) !void {
     }
 }
 
-fn reportRenderError(lua: *Lua, w: *Io.Writer, err: anyerror) anyerror {
+fn reportRenderError(lua: *Lua, w: *Io.Writer, err: anyerror, ss: u32) anyerror {
     switch (err) {
-        error.CanvasFailed, error.TooLarge => try w.print("render failed: {s}\n", .{lua.toString(-1) catch "canvas is malformed"}),
+        error.CanvasFailed => try w.print("render failed: {s}\n", .{lua.toString(-1) catch "canvas is malformed"}),
+        error.TooLarge => try printTooLarge(w, lua.toString(-1) catch "image is too large", ss),
         else => try w.print("render failed: {t}\n", .{err}),
     }
     return err;
+}
+
+fn printTooLarge(w: *Io.Writer, problem: []const u8, ss: u32) !void {
+    try w.print("render failed: {s}\n", .{problem});
+    if (ss > 1) {
+        try w.print("  (use a smaller -w or --ss)\n", .{});
+    } else {
+        try w.print("  (use a smaller -w)\n", .{});
+    }
 }
 
 test "main: a post pass refusal with -o points at the PNG file and --vector-only" {
@@ -947,6 +961,38 @@ test "main: -w takes a whole number of pixels up to the limit" {
     try expectUsage(&.{ "a.lua", "-w", "32769" }, "-w 32769 is over the 32768 px limit");
     try expectUsage(&.{ "a.lua", "-w", "99999999999999999999" }, "-w 99999999999999999999 is over the 32768 px limit");
     try expectUsage(&.{ "a.lua", "-w" }, "-w needs a value");
+}
+
+test "main: --ss takes a whole number from 1 to 16" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    var buf: [64]u8 = undefined;
+    var diag: Io.Writer = .fixed(&buf);
+    try std.testing.expectEqual(@as(u32, 1), (try testArgs(arena_state.allocator(), &.{"a.lua"}, &diag)).ss);
+    try std.testing.expectEqual(@as(u32, 1), (try testArgs(arena_state.allocator(), &.{ "a.lua", "--ss", "1" }, &diag)).ss);
+    try std.testing.expectEqual(@as(u32, 16), (try testArgs(arena_state.allocator(), &.{ "a.lua", "--ss", "16" }, &diag)).ss);
+
+    const bad = "--ss needs a whole number from 1 to 16, such as --ss 4";
+    try expectUsage(&.{ "a.lua", "--ss", "0" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss", "17" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss", "-2" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss", "2.5" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss", "four" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss", "" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss", "99999999999999999999" }, bad);
+    try expectUsage(&.{ "a.lua", "--ss" }, "--ss needs a value");
+}
+
+test "main: a render over the limit suggests a smaller -w, and --ss when it is in use" {
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try printTooLarge(&w, "too big", 4);
+    try printTooLarge(&w, "too big", 1);
+    try std.testing.expectEqualStrings(
+        "render failed: too big\n  (use a smaller -w or --ss)\n" ++
+            "render failed: too big\n  (use a smaller -w)\n",
+        w.buffered(),
+    );
 }
 
 test "main: -s is gone" {
