@@ -34,22 +34,19 @@ $ genpuin art.lua -o art.png --ss 3  # supersample
 $ genpuin art.lua --vary 1..16       # contact sheet of 16 variations
 ```
 
-A script builds a canvas and returns it. The library is the global `gen`.
-
 ```lua
-local c = gen.canvas(800, 800)
-gen.background(c, gen.hex("#14121c"))
+gen.canvas(800, 800)
+gen.background(gen.hex("#14121c"))
 
 for i = 1, 200 do
     local p = gen.randInCircle({400, 400}, 300)
-    gen.draw(c, gen.circle(p, gen.randRange(2, 30)), {
+    gen.draw(gen.circle(p, gen.randRange(2, 30)), {
         fill = gen.hsv(0.05 + gen.perlin(p[1] * 0.01, p[2] * 0.01) * 0.1, 0.8, 1),
         opacity = 0.7,
     })
 end
 
-gen.post(c, "pixelSort", {direction = "y", lo = 0.2, hi = 1})
-return c
+gen.post.pixelSort({direction = "y", lo = 0.2, hi = 1})
 ```
 
 Coordinates work like SVG: integers sit on pixel edges and y points down.
