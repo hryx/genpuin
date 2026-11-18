@@ -15,10 +15,13 @@ const Lua = zlua.Lua;
 const usage =
     \\Usage: genpuin <script.lua> [options] [-- script args]
     \\
-    \\  -o <file>        Output file, format from extension: .svg .png .ppm
-    \\                   (default <script>.svg, <script>.png when the script
-    \\                   uses a post pass, or <script>-sheet.png for a sweep)
-    \\                   SVG cannot hold post passes and skips them
+    \\  -o <file>        Output file, format from extension: .png .ppm .svg
+    \\                   (default <script>.png, or <script>-sheet.png for a
+    \\                   sweep). An SVG shows exactly what the PNG shows, so
+    \\                   a canvas SVG cannot draw, such as one with a post
+    \\                   pass, is an error and no file is written
+    \\  --vector-only    With -o file.svg: leave post passes out and write
+    \\                   just the shapes
     \\  -s <number>      Raster scale factor (default 1)
     \\  --ss <n>         Supersample n x n per pixel (default 1)
     \\  --depth <8|16>   PNG bits per channel (default 8)
@@ -40,12 +43,22 @@ const Args = struct {
     vary_hi: ?i64 = null,
     tile: u32 = 320,
     jobs: ?u32 = null,
+    vector_only: bool = false,
     script_args: []const []const u8 = &.{},
 };
 
 fn fail(comptime fmt: []const u8, args: anytype) noreturn {
     std.debug.print("error: " ++ fmt ++ "\n", args);
     std.process.exit(1);
+}
+
+/// Why --vector-only cannot apply to these arguments, or null.
+fn vectorOnlyMisuse(a: *const Args) ?[]const u8 {
+    if (!a.vector_only) return null;
+    if (a.vary_hi != null) return "--vector-only cannot make a contact sheet";
+    const out = a.output orelse return "--vector-only needs -o file.svg";
+    if (genpuin.image_io.Format.fromPath(out) != .svg) return "--vector-only needs an .svg output";
+    return null;
 }
 
 fn parseArgs(argv: []const [:0]const u8) Args {
@@ -66,6 +79,8 @@ fn parseArgs(argv: []const [:0]const u8) Args {
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "-o")) {
             a.output = val(argv, &i, arg);
+        } else if (std.mem.eql(u8, arg, "--vector-only")) {
+            a.vector_only = true;
         } else if (std.mem.eql(u8, arg, "-s")) {
             a.scale = std.fmt.parseFloat(f64, val(argv, &i, arg)) catch fail("-s needs a number", .{});
             if (!(a.scale > 0)) fail("-s must be positive", .{});
@@ -102,6 +117,7 @@ fn parseArgs(argv: []const [:0]const u8) Args {
         std.debug.print("{s}", .{usage});
         std.process.exit(1);
     };
+    if (vectorOnlyMisuse(&a)) |why| fail("{s}", .{why});
     return a;
 }
 
@@ -137,8 +153,7 @@ const RunContext = struct {
 };
 
 const Target = union(enum) {
-    /// Null picks a name from the script's: .png when it uses post
-    /// passes, .svg otherwise.
+    /// Null means the script's name with .png.
     file: ?[]const u8,
     /// Render to a raster scaled to this width, for a contact sheet.
     tile: struct { width: u32, out: *?genpuin.Raster },
@@ -164,14 +179,30 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
         }
         return;
     }
-    const opts: core.RenderOptions = .{ .scale = ctx.args.scale, .ss = ctx.args.ss, .depth = ctx.args.depth };
+    const opts: core.RenderOptions = .{
+        .scale = ctx.args.scale,
+        .ss = ctx.args.ss,
+        .depth = ctx.args.depth,
+        .vector_only = ctx.args.vector_only,
+    };
 
     switch (target) {
         .file => |output| {
             var buf: [Io.Dir.max_path_bytes]u8 = undefined;
-            const path = output orelse defaultOutput(&buf, ctx.args.script, host_mod.passCount(lua, -1) > 0);
-            host_mod.exportCanvas(lua, path, opts) catch |err| return reportRenderError(lua, err);
-            std.debug.print("Wrote {s}\n", .{path});
+            const path = output orelse defaultOutput(&buf, ctx.args.script);
+            var msg_buf: [Io.Dir.max_path_bytes + 512]u8 = undefined;
+            var msg: Io.Writer = .fixed(&msg_buf);
+            const left_out = host_mod.exportCanvas(lua, path, opts) catch |err| switch (err) {
+                error.SvgNeedsPixels, error.SvgUnsupported => {
+                    const problem = lua.toString(-1) catch "SVG cannot show this canvas";
+                    printSvgRefusal(&msg, problem, path, err == error.SvgNeedsPixels) catch {};
+                    std.debug.print("{s}", .{msg.buffered()});
+                    return err;
+                },
+                else => return reportRenderError(lua, err),
+            };
+            printWrote(&msg, path, left_out) catch {};
+            std.debug.print("{s}", .{msg.buffered()});
         },
         .tile => |t| {
             var r = core.renderCanvas(lua, -1, opts) catch |err| return reportRenderError(lua, err);
@@ -182,10 +213,25 @@ fn runOne(ctx: RunContext, vary: i64, target: Target) !void {
     }
 }
 
-fn defaultOutput(buf: []u8, script: []const u8, has_passes: bool) []const u8 {
-    const ext = if (has_passes) "png" else "svg";
-    return std.fmt.bufPrint(buf, "{s}.{s}", .{ std.fs.path.stem(script), ext }) catch
+fn defaultOutput(buf: []u8, script: []const u8) []const u8 {
+    return std.fmt.bufPrint(buf, "{s}.png", .{std.fs.path.stem(script)}) catch
         fail("script name too long for an output name", .{});
+}
+
+/// A post pass gets a second line with both ways out.
+fn printSvgRefusal(w: *Io.Writer, problem: []const u8, path: []const u8, needs_pixels: bool) !void {
+    try w.print("{s}\n", .{problem});
+    if (!needs_pixels) return;
+    const stem = path[0 .. path.len - std.fs.path.extension(path).len];
+    try w.print("  (use -o {s}.png, or --vector-only to export just the shapes)\n", .{stem});
+}
+
+fn printWrote(w: *Io.Writer, path: []const u8, left_out: usize) !void {
+    switch (left_out) {
+        0 => try w.print("Wrote {s}\n", .{path}),
+        1 => try w.print("Wrote {s} (left out: 1 post pass)\n", .{path}),
+        else => try w.print("Wrote {s} (left out: {d} post passes)\n", .{ path, left_out }),
+    }
 }
 
 fn reportRenderError(lua: *Lua, err: anyerror) anyerror {
@@ -237,6 +283,49 @@ fn sweep(arena: Allocator, ctx: RunContext, hi: i64) !void {
     try genpuin.image_io.write(ctx.gpa, ctx.io, &sheet, out, .@"8");
     std.debug.print("Wrote {s} ({d} variations)\n", .{ out, n });
     if (failed.load(.monotonic)) std.process.exit(1);
+}
+
+test "main: a post pass refusal points at a PNG and at --vector-only" {
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try printSvgRefusal(&w, "fh.lua:45: gen.post.pixelSort needs pixels and has no vector form", "out/fh.svg", true);
+    try std.testing.expectEqualStrings(
+        "fh.lua:45: gen.post.pixelSort needs pixels and has no vector form\n" ++
+            "  (use -o out/fh.png, or --vector-only to export just the shapes)\n",
+        w.buffered(),
+    );
+}
+
+test "main: other refusals have no hint" {
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try printSvgRefusal(&w, "draw 3 (circle): blendMode 'add' has no SVG form. Write a PNG instead", "fh.svg", false);
+    try std.testing.expectEqualStrings("draw 3 (circle): blendMode 'add' has no SVG form. Write a PNG instead\n", w.buffered());
+}
+
+test "main: the Wrote line counts what was left out" {
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try printWrote(&w, "fh.svg", 0);
+    try printWrote(&w, "fh.svg", 1);
+    try printWrote(&w, "fh.svg", 3);
+    try std.testing.expectEqualStrings(
+        "Wrote fh.svg\nWrote fh.svg (left out: 1 post pass)\nWrote fh.svg (left out: 3 post passes)\n",
+        w.buffered(),
+    );
+}
+
+test "main: --vector-only needs an SVG output" {
+    const ok: Args = .{ .script = "a.lua", .output = "a.svg", .vector_only = true };
+    try std.testing.expectEqual(@as(?[]const u8, null), vectorOnlyMisuse(&ok));
+    const png: Args = .{ .script = "a.lua", .output = "a.png", .vector_only = true };
+    try std.testing.expectEqualStrings("--vector-only needs an .svg output", vectorOnlyMisuse(&png).?);
+    const none: Args = .{ .script = "a.lua", .vector_only = true };
+    try std.testing.expectEqualStrings("--vector-only needs -o file.svg", vectorOnlyMisuse(&none).?);
+    const sheet: Args = .{ .script = "a.lua", .output = "a.svg", .vector_only = true, .vary_hi = 3 };
+    try std.testing.expectEqualStrings("--vector-only cannot make a contact sheet", vectorOnlyMisuse(&sheet).?);
+    const off: Args = .{ .script = "a.lua", .output = "a.png" };
+    try std.testing.expectEqual(@as(?[]const u8, null), vectorOnlyMisuse(&off));
 }
 
 test {

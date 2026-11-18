@@ -24,15 +24,4 @@ M.solve = algo.colormapSolve
 -- Apply the matrix to a color in [0,1] space. Returns r, g, b.
 M.apply = algo.colormapApply
 
--- Convert the matrix to the SVG feColorMatrix "values" attribute string.
--- SVG uses a 4x5 row-major matrix (RGBA output x RGBA+offset input).
-function M.toSvgValues(matrix)
-    local m = matrix
-    return string.format(
-        "%g %g %g 0 %g  %g %g %g 0 %g  %g %g %g 0 %g  0 0 0 1 0",
-        m[1][1], m[1][2], m[1][3], m[1][4],
-        m[2][1], m[2][2], m[2][3], m[2][4],
-        m[3][1], m[3][2], m[3][3], m[3][4])
-end
-
 return M

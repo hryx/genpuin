@@ -39,7 +39,7 @@ pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) !Raster {
 
     for (s.items) |*item| switch (item.*) {
         .draw => |*d| try ctx.draw(d),
-        .pass => |*p| try passes.apply(gpa, &raster, p, .{ .scale = k }),
+        .pass => |*p| try passes.apply(gpa, &raster, &p.pass, .{ .scale = k }),
     };
 
     if (opts.ss == 1) return raster;
@@ -361,7 +361,9 @@ fn gradientColor(g: *const scene.Gradient, x: f64, y: f64) scene.Rgba {
     return scene.samplePalette(g.stops, @floatCast(t));
 }
 
-fn fieldColor(f: *const scene.FieldImage, range: [2]f32, x: f64, y: f64) scene.Rgba {
+/// The color of image `f` at scene point (x, y). `range` is the span of
+/// field values that maps onto the palette.
+pub fn fieldColor(f: *const scene.FieldImage, range: [2]f32, x: f64, y: f64) scene.Rgba {
     const fw: f64 = @floatFromInt(f.field.w);
     const fh: f64 = @floatFromInt(f.field.h);
     const u = (x - f.x) / f.w * fw;

@@ -71,11 +71,14 @@ pub fn writePng(gpa: Allocator, io: Io, r: *const Raster, path: []const u8, dept
     try img.writeToFilePath(gpa, io, path, &buf, .{ .png = .{} });
 }
 
-/// PNG bytes in memory, for embedding raster content in SVG.
-pub fn encodePng(gpa: Allocator, r: *const Raster) ![]u8 {
-    var img = try toImage(gpa, r, .@"8");
+/// PNG bytes in memory for a w by h image of straight-alpha RGBA pixels,
+/// row-major.
+pub fn encodePngRgba(gpa: Allocator, w: u32, h: u32, pix: []const [4]u8) ![]u8 {
+    std.debug.assert(pix.len == @as(usize, w) * h);
+    var img = try zigimg.Image.create(gpa, w, h, .rgba32);
     defer img.deinit(gpa);
-    const cap = @as(usize, r.w) * r.h * 4 + 64 * 1024;
+    for (img.pixels.rgba32, pix) |*p, c| p.* = .{ .r = c[0], .g = c[1], .b = c[2], .a = c[3] };
+    const cap = @as(usize, w) * h * 5 + 64 * 1024;
     const buf = try gpa.alloc(u8, cap);
     errdefer gpa.free(buf);
     const written = try img.writeToMemory(gpa, buf, .{ .png = .{} });

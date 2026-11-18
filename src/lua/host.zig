@@ -146,13 +146,6 @@ pub fn pushCanvas(lua: *Lua) bool {
     return false;
 }
 
-/// How many post passes the canvas at `index` holds.
-pub fn passCount(lua: *Lua, index: i32) u32 {
-    defer lua.pop(1);
-    if (lua.getField(index, "passes") != .number) return 0;
-    return std.math.cast(u32, lua.toInteger(-1) catch 0) orelse 0;
-}
-
 /// Push `field` of the prelude module `module`. The prelude's import is
 /// a plain Lua function, so a cached module comes back without raising.
 fn pushPreludeField(lua: *Lua, module: [:0]const u8, field: [:0]const u8) void {
@@ -164,24 +157,20 @@ fn pushPreludeField(lua: *Lua, module: [:0]const u8, field: [:0]const u8) void {
 }
 
 /// Write the canvas on top of the stack to `path`, in the format its
-/// extension names, SVG when it names none. A Lua error while reading the
-/// canvas returns error.CanvasFailed with the message on top of the stack.
-pub fn exportCanvas(lua: *Lua, path: []const u8, opts: core.RenderOptions) !void {
+/// extension names, PNG when it names none. Returns how many post passes
+/// an SVG left out, which only `opts.vector_only` allows. A Lua error
+/// while reading the canvas returns error.CanvasFailed, and a canvas SVG
+/// cannot show returns error.SvgNeedsPixels or error.SvgUnsupported,
+/// each with the message on top of the stack.
+pub fn exportCanvas(lua: *Lua, path: []const u8, opts: core.RenderOptions) !usize {
     const gpa = lua.allocator();
     const h = util.getHost(lua);
-    const format = genpuin.image_io.Format.fromPath(path) orelse .svg;
-    if (format == .svg) return exportSvg(lua, path);
+    const format = genpuin.image_io.Format.fromPath(path) orelse .png;
+    if (format == .svg) return core.exportSvg(lua, -1, path, opts.vector_only);
     var r = try core.renderCanvas(lua, -1, opts);
     defer r.deinit(gpa);
     try genpuin.image_io.write(gpa, h.io, &r, path, opts.depth);
-}
-
-fn exportSvg(lua: *Lua, path: []const u8) error{CanvasFailed}!void {
-    const canvas = lua.absIndex(-1);
-    pushPreludeField(lua, "svg", "write");
-    lua.pushValue(canvas);
-    _ = lua.pushString(path);
-    lua.protectedCall(.{ .args = 2, .results = 0 }) catch return error.CanvasFailed;
+    return 0;
 }
 
 test "host: the CLI's state has no test hooks" {
@@ -216,9 +205,28 @@ test "host: a canvas error at render time comes back as a message" {
     try std.testing.expect(pushCanvas(lua));
     try std.testing.expectError(error.CanvasFailed, exportCanvas(lua, "never-written.png", .{}));
     try std.testing.expectEqualStrings("unknown shape type 'blob'", try lua.toString(-1));
+    lua.pop(1);
+    try std.testing.expectError(error.CanvasFailed, exportCanvas(lua, "never-written.svg", .{}));
+    try std.testing.expectEqualStrings("unknown shape type 'blob'", try lua.toString(-1));
 }
 
-test "host: no canvas until gen.canvas, then one with its passes counted" {
+test "host: SVG export of a post pass fails at the pass's line, unless vector only" {
+    var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
+    const lua = try create(&host, .{});
+    defer lua.deinit();
+    const script =
+        \\gen.canvas(10, 10)
+        \\gen.draw(gen.circle({5, 5}, 2), {fill = {1, 1, 1}})
+        \\gen.post.invert()
+    ;
+    try util.loadBuffer(lua, script, "@script.lua");
+    try lua.protectedCall(.{ .args = 0, .results = 0 });
+    try std.testing.expect(pushCanvas(lua));
+    try std.testing.expectError(error.SvgNeedsPixels, exportCanvas(lua, "never-written.svg", .{}));
+    try std.testing.expectEqualStrings("script.lua:3: gen.post.invert needs pixels and has no vector form", try lua.toString(-1));
+}
+
+test "host: no canvas until gen.canvas, then one holding its passes" {
     var host: Host = .{ .gpa = std.testing.allocator, .io = std.testing.io };
     const lua = try create(&host, .{});
     defer lua.deinit();
@@ -232,7 +240,8 @@ test "host: no canvas until gen.canvas, then one with its passes counted" {
     try util.loadBuffer(lua, script, "=script");
     try lua.protectedCall(.{ .args = 0, .results = 0 });
     try std.testing.expect(pushCanvas(lua));
-    try std.testing.expectEqual(@as(u32, 2), passCount(lua, -1));
+    _ = lua.getField(-1, "elements");
+    try std.testing.expectEqual(@as(usize, 2), util.len(lua, -1));
 }
 
 test "host: gen.post has a function for every pass core.post knows" {

@@ -16,11 +16,29 @@ pub const Scene = struct {
     h: f64,
     bg: [3]f32,
     items: []const Item,
+    /// Named runs of items, in item order and disjoint. Rendering ignores
+    /// them. SVG export writes each as a group.
+    layers: []const Layer = &.{},
 };
 
 pub const Item = union(enum) {
     draw: Draw,
+    pass: Post,
+};
+
+pub const Post = struct {
     pass: passes.Pass,
+    /// The script's name for the pass, such as "pixelSort".
+    name: []const u8 = "",
+    /// Where the script added it, as "file:line", for error messages.
+    where: []const u8 = "",
+};
+
+/// Items [item_first, item_end) of the scene.
+pub const Layer = struct {
+    name: []const u8,
+    item_first: usize,
+    item_end: usize,
 };
 
 pub const Draw = struct {

@@ -33,7 +33,8 @@ end
 
 -- Post passes: gen.post.name(opts) adds a raster pass at this point in
 -- the draw order. It rewrites the pixels drawn so far, and later draws
--- land on top. Passes need pixels, so SVG output skips them.
+-- land on top. Passes need pixels, so SVG export refuses a canvas with
+-- one unless told to leave them out (--vector-only, opts.vectorOnly).
 -- Every pass takes region = {x, y, w, h} to run on that rectangle only.
 -- Distances are scene units, so a script looks the same at any -s.
 -- Fields given as options are stretched over the whole image, regions or

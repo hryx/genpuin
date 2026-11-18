@@ -55,7 +55,7 @@ function M.canvas(w, h)
     if type(w) ~= "number" or type(h) ~= "number" or not (w > 0 and h > 0) then
         error("gen.canvas: width and height must be positive numbers", 2)
     end
-    current = {width = w, height = h, bg = nil, elements = {}, layers = {}, passes = 0}
+    current = {width = w, height = h, bg = nil, elements = {}, layers = {}}
 end
 
 -- The canvas width and height.
@@ -75,11 +75,24 @@ function M.add(shape, style)
     table.insert(M.need("gen.draw").elements, {shape = shape, style = style or {}})
 end
 
--- Append a post pass with checked options.
+-- The "file:line" of the script code that called into the prelude.
+local function callSite()
+    local level = 2
+    while true do
+        local info = debug.getinfo(level, "Sl")
+        if not info then return "?" end
+        if info.what ~= "C" and info.source:sub(1, #preludeSource) ~= preludeSource then
+            return info.short_src .. ":" .. info.currentline
+        end
+        level = level + 1
+    end
+end
+
+-- Append a post pass with checked options. The call site is kept so SVG
+-- export can say which line added a pass it cannot write.
 function M.addPass(name, opts)
     local c = M.need("gen.post." .. name)
-    table.insert(c.elements, {pass = name, opts = opts, shape = {type = "pass"}, style = {}})
-    c.passes = c.passes + 1
+    table.insert(c.elements, {pass = name, opts = opts, where = callSite(), shape = {type = "pass"}, style = {}})
 end
 
 -- Draw a shape with the given style.
@@ -97,9 +110,13 @@ function M.style(opts)
 end
 
 -- Start a named layer. Later draws go to it until the next gen.layer.
+-- Draws made before the first layer stay below it, outside any layer.
 function M.layer(name, extra)
     M.rejectCanvasArg("gen.layer", name, extra, "gen.layer(name)")
     local c = M.need("gen.layer")
+    if #c.layers == 0 and #c.elements > 0 then
+        table.insert(c.layers, {elements = c.elements})
+    end
     local l = {name = name, elements = {}}
     table.insert(c.layers, l)
     c.elements = l.elements

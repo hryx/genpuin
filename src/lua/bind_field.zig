@@ -12,7 +12,6 @@ const Field = util.Field;
 
 pub const functions = [_]zlua.FnReg{
     .{ .name = "new", .func = zlua.wrap(new) },
-    .{ .name = "pngBase64", .func = zlua.wrap(pngBase64) },
 };
 
 pub const methods = [_]zlua.FnReg{
@@ -181,38 +180,5 @@ fn combine(lua: *Lua) i32 {
         };
     }
     lua.pushValue(1);
-    return 1;
-}
-
-/// pngBase64(image_shape) -> string. The field colored through its
-/// palette at field resolution, for SVG <image> embedding.
-fn pngBase64(lua: *Lua) !i32 {
-    const gpa = lua.allocator();
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    _ = lua.getField(1, "field");
-    const f = util.toField(lua, -1) orelse lua.raiseErrorStr("image shape has no field", .{});
-    lua.pop(1);
-    _ = lua.getField(1, "palette");
-    const stops = try util.readStops(lua, arena, -1);
-    lua.pop(1);
-    const range = f.minMax();
-
-    var r: genpuin.Raster = try .init(gpa, f.w, f.h, .{ 0, 0, 0 });
-    defer r.deinit(gpa);
-    const span = range[1] - range[0];
-    for (0..f.h) |y| for (0..f.w) |x| {
-        const v = f.get(@intCast(x), @intCast(y));
-        const t = if (span != 0) (v - range[0]) / span else 0;
-        const c = genpuin.scene.samplePalette(stops, t);
-        r.set(@intCast(x), @intCast(y), .{ c[0], c[1], c[2] });
-    };
-    const png = try genpuin.image_io.encodePng(gpa, &r);
-    defer gpa.free(png);
-    const enc = std.base64.standard.Encoder;
-    const out = try arena.alloc(u8, enc.calcSize(png.len));
-    _ = lua.pushString(enc.encode(out, png));
     return 1;
 }

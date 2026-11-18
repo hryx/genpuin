@@ -132,7 +132,7 @@ fn render(lua: *Lua) i32 {
         lua.raiseErrorStr("testing config missing", .{})));
     lua.pop(1);
     renderScript(lua, config, script, path, opts) catch |err| switch (err) {
-        error.ScriptFailed, error.CanvasFailed => lua.raiseError(),
+        error.ScriptFailed, error.CanvasFailed, error.SvgNeedsPixels, error.SvgUnsupported => lua.raiseError(),
         error.NoCanvas => lua.raiseErrorStr("%s made no canvas. Call gen.canvas(w, h)", .{script.ptr}),
         else => lua.raiseErrorStr("rendering %s failed: %s", .{ script.ptr, @errorName(err).ptr }),
     };
@@ -156,8 +156,11 @@ fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []
         return error.ScriptFailed;
     };
     if (!host_mod.pushCanvas(inner)) return error.NoCanvas;
-    host_mod.exportCanvas(inner, path, opts) catch |err| {
-        if (err == error.CanvasFailed) _ = lua.pushString(inner.toString(-1) catch "canvas is malformed");
+    _ = host_mod.exportCanvas(inner, path, opts) catch |err| {
+        switch (err) {
+            error.CanvasFailed, error.SvgNeedsPixels, error.SvgUnsupported => _ = lua.pushString(inner.toString(-1) catch "canvas is malformed"),
+            else => {},
+        }
         return err;
     };
 }

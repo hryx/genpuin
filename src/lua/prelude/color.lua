@@ -98,16 +98,4 @@ function M.withAlpha(c, a)
     return {c[1], c[2], c[3], a}
 end
 
--- Convert a color to SVG format (rgb string or url reference for gradients).
-function M.toSvg(c)
-    if type(c) == "string" then return c end
-    if type(c) == "table" and c.type and c.id then
-        return string.format("url(#%s)", c.id)
-    end
-    return string.format("rgb(%d,%d,%d)",
-        math.floor(c[1] * 255 + 0.5),
-        math.floor(c[2] * 255 + 0.5),
-        math.floor(c[3] * 255 + 0.5))
-end
-
 return M

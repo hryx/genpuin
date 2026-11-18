@@ -15,7 +15,10 @@ const Ctx = struct {
     lua: *Lua,
     arena: Allocator,
     items: std.ArrayList(scene.Item) = .empty,
+    layers: std.ArrayList(scene.Layer) = .empty,
     color_map_keys: std.StringHashMapUnmanaged(u32) = .empty,
+    /// One Gradient per Lua gradient table, so SVG export writes each once.
+    gradients: std.AutoHashMapUnmanaged(*const anyopaque, *const scene.Gradient) = .empty,
 };
 
 /// Canvas at `index` to Scene. Lua errors are raised for malformed input.
@@ -40,10 +43,15 @@ pub fn canvas(lua: *Lua, arena: Allocator, index_in: i32) !scene.Scene {
         const layers = lua.absIndex(-1);
         for (1..util.len(lua, layers) + 1) |i| {
             _ = util.rawGet(lua, layers, i);
+            const name = if (lua.getField(-1, "name") == .string) lua.toString(-1) catch unreachable else ""; // type checked by the condition
+            const first = ctx.items.items.len;
+            const name_owned = try arena.dupe(u8, name);
+            lua.pop(1);
             _ = lua.getField(-1, "elements");
             try layer_lists.append(arena, lua.toPointer(-1));
             try elements(&ctx, -1);
             lua.pop(2);
+            try ctx.layers.append(arena, .{ .name = name_owned, .item_first = first, .item_end = ctx.items.items.len });
         }
     }
     lua.pop(1);
@@ -56,7 +64,7 @@ pub fn canvas(lua: *Lua, arena: Allocator, index_in: i32) !scene.Scene {
     if (!dup) try elements(&ctx, -1);
     lua.pop(1);
 
-    return .{ .w = w, .h = h, .bg = bg, .items = ctx.items.items };
+    return .{ .w = w, .h = h, .bg = bg, .items = ctx.items.items, .layers = ctx.layers.items };
 }
 
 fn elements(ctx: *Ctx, index_in: i32) !void {
@@ -73,7 +81,10 @@ fn elements(ctx: *Ctx, index_in: i32) !void {
             _ = lua.getField(el, "opts");
             const pass = try bind_passes.parse(lua, ctx.arena, name, lua.absIndex(-1));
             lua.pop(1);
-            try ctx.items.append(ctx.arena, .{ .pass = pass });
+            const where = if (lua.getField(el, "where") == .string) lua.toString(-1) catch unreachable else ""; // type checked by the condition
+            const post: scene.Post = .{ .pass = pass, .name = name, .where = try ctx.arena.dupe(u8, where) };
+            lua.pop(1);
+            try ctx.items.append(ctx.arena, .{ .pass = post });
             continue;
         }
         lua.pop(1);
@@ -199,6 +210,8 @@ fn readPaint(ctx: *Ctx, index: i32, key: [:0]const u8) !scene.Paint {
     defer lua.pop(1);
     if (!lua.isTable(-1)) return .none;
     if (util.readColor(lua, -1)) |c| return .{ .solid = c };
+    const table = lua.toPointer(-1).?;
+    if (ctx.gradients.get(table)) |g| return .{ .gradient = g };
     if (lua.getField(-1, "stops") != .table) {
         lua.pop(1);
         return .none;
@@ -218,6 +231,7 @@ fn readPaint(ctx: *Ctx, index: i32, key: [:0]const u8) !scene.Paint {
             .b = .{ num(ctx, t, "x2"), num(ctx, t, "y2") },
         } }, .stops = stops };
     }
+    try ctx.gradients.put(ctx.arena, table, g);
     return .{ .gradient = g };
 }
 
@@ -248,9 +262,8 @@ fn readStyle(ctx: *Ctx, index_in: i32) !scene.Style {
     return st;
 }
 
-/// colorMap tables are solved by the Zig solver behind colormap.lua, so
-/// raster and SVG output agree. Matrices that print alike at the six
-/// significant digits the SVG writer groups by share a key.
+/// colorMap tables are solved by the Zig solver behind colormap.lua.
+/// Matrices that print alike at six significant digits share a key.
 fn readColorMap(ctx: *Ctx, index_in: i32) !scene.ColorMap {
     const bind_algo = @import("bind_algo.zig");
     const m = try bind_algo.solveColorMap(ctx.lua, index_in);

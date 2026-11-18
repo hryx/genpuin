@@ -8,6 +8,7 @@ pub const scene = @import("scene.zig");
 pub const render = @import("render.zig");
 pub const passes = @import("passes.zig");
 pub const image_io = @import("image_io.zig");
+pub const svg = @import("svg.zig");
 pub const sheet = @import("sheet.zig");
 pub const noise = @import("noise.zig");
 pub const density = @import("density.zig");
@@ -25,6 +26,7 @@ test {
     _ = render;
     _ = passes;
     _ = image_io;
+    _ = svg;
     _ = sheet;
     _ = noise;
     _ = density;
