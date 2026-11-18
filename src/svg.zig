@@ -13,6 +13,7 @@ const image_io = @import("image_io.zig");
 const math = @import("math.zig");
 const render = @import("render.zig");
 const scene = @import("scene.zig");
+const Field = @import("Field.zig");
 
 const Vec2 = scene.Vec2;
 const Shape = scene.Shape;
@@ -143,12 +144,19 @@ pub fn withoutPasses(arena: Allocator, s: *const scene.Scene) !scene.Scene {
     return .{ .w = s.w, .h = s.h, .bg = s.bg, .items = items, .layers = layers };
 }
 
+pub const Options = struct {
+    /// Display width in pixels, the height following as render.outputSize
+    /// rounds it. The viewBox stays the canvas, so only the nominal size
+    /// changes. Null displays at the canvas size.
+    width: ?u32 = null,
+};
+
 /// Write `s` as an SVG document. `check(s)` must be null.
-pub fn write(gpa: Allocator, out: *Writer, s: *const scene.Scene) !void {
+pub fn write(gpa: Allocator, out: *Writer, s: *const scene.Scene, opts: Options) !void {
     assert(check(s) == null);
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
-    var x: Exporter = .{ .gpa = gpa, .arena = arena_state.allocator(), .out = out, .s = s };
+    var x: Exporter = .{ .gpa = gpa, .arena = arena_state.allocator(), .out = out, .s = s, .opts = opts };
     try x.document();
 }
 
@@ -168,6 +176,7 @@ const Exporter = struct {
     arena: Allocator,
     out: *Writer,
     s: *const scene.Scene,
+    opts: Options,
     gradient_ids: std.AutoHashMapUnmanaged(*const scene.Gradient, u32) = .empty,
     fill_d: Path = .{},
     stroke_d: Path = .{},
@@ -178,9 +187,13 @@ const Exporter = struct {
     fn document(x: *Exporter) !void {
         const s = x.s;
         const out = x.out;
+        const display: [2]f64 = if (x.opts.width) |w| display: {
+            const size = render.outputSize(s.w, s.h, render.scaleForWidth(s.w, w));
+            break :display .{ @floatFromInt(size.w), @floatFromInt(size.h) };
+        } else .{ s.w, s.h };
         try out.print(
             "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"{f}\" height=\"{f}\" viewBox=\"0 0 {f} {f}\">\n",
-            .{ num(s.w), num(s.h), num(s.w), num(s.h) },
+            .{ num(display[0]), num(display[1]), num(s.w), num(s.h) },
         );
         try x.gradientDefs();
         const runs = try x.colorMapRuns();
@@ -796,7 +809,7 @@ fn xmlText(s: []const u8) XmlText {
 fn testDoc(gpa: Allocator, s: *const scene.Scene) ![]u8 {
     var doc: Writer.Allocating = .init(gpa);
     errdefer doc.deinit();
-    try write(gpa, &doc.writer, s);
+    try write(gpa, &doc.writer, s, .{});
     return doc.toOwnedSlice();
 }
 
@@ -990,4 +1003,30 @@ test "svg: leaving passes out keeps every draw in its layer" {
     try std.testing.expectEqual(1, v.layers[0].item_end);
     try std.testing.expectEqual(1, v.layers[1].item_first);
     try std.testing.expectEqual(3, v.layers[1].item_end);
+}
+
+test "svg: a width sets the display size and leaves the viewBox and body alone" {
+    const gpa = std.testing.allocator;
+    var field: Field = try .init(gpa, 2, 2, 0.5);
+    defer field.deinit(gpa);
+    const gray = [_]scene.Stop{ .{ .offset = 0, .color = .{ 0, 0, 0, 1 } }, .{ .offset = 1, .color = .{ 1, 1, 1, 1 } } };
+    const items = [_]scene.Item{
+        .{ .draw = .{ .shape = .{ .circle = .{ .c = .{ 400, 260 }, .r = 100 } }, .style = .{ .fill = red } } },
+        .{ .draw = .{ .shape = .{ .field = .{ .field = &field, .x = 0, .y = 0, .w = 801, .h = 533, .palette = &gray } }, .style = .{} } },
+    };
+    const s: scene.Scene = .{ .w = 801, .h = 533, .bg = .{ 0, 0, 0 }, .items = &items };
+    const plain = try testDoc(gpa, &s);
+    defer gpa.free(plain);
+
+    var doc: Writer.Allocating = .init(gpa);
+    defer doc.deinit();
+    try write(gpa, &doc.writer, &s, .{ .width = 1600 });
+    const wide = doc.written();
+
+    const head = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" ";
+    try std.testing.expect(std.mem.startsWith(u8, plain, head ++ "width=\"801\" height=\"533\" viewBox=\"0 0 801 533\">\n"));
+    try std.testing.expect(std.mem.startsWith(u8, wide, head ++ "width=\"1600\" height=\"1065\" viewBox=\"0 0 801 533\">\n"));
+    const plain_body = plain[std.mem.indexOfScalar(u8, plain, '\n').?..];
+    const wide_body = wide[std.mem.indexOfScalar(u8, wide, '\n').?..];
+    try std.testing.expectEqualStrings(plain_body, wide_body);
 }

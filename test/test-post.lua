@@ -1,4 +1,4 @@
--- test-post.lua: raster post passes land where the scene says, at any scale.
+-- test-post.lua: raster post passes land where the scene says, at any width.
 -- Scene: black 40x20 canvas, red rect over x 10..20, red channel shifted
 -- right by 3 scene units, then the left 5 units inverted.
 
@@ -20,9 +20,9 @@ local f = assert(io.open("out/test/post-scene.lua", "w"))
 f:write(scene)
 f:close()
 
-local function render(scale)
-    local out = string.format("out/test/test-post-%d.ppm", scale)
-    T.render("out/test/post-scene.lua", out, {scale = scale})
+local function render(width)
+    local out = string.format("out/test/test-post-%d.ppm", width)
+    T.render("out/test/post-scene.lua", out, {width = width})
     return T.readPpm(out)
 end
 
@@ -32,9 +32,9 @@ local function isRgb(name, pixels, x, y, er, eg, eb)
     check(name, ok, string.format("(%d,%d) rgb=(%d,%d,%d), expected (%d,%d,%d)", x, y, r, g, b, er, eg, eb))
 end
 
-for _, s in ipairs({1, 2}) do
-    print(string.format("Scale %d", s))
-    local px = render(s)
+for _, s in ipairs({1, 2, 3}) do
+    print(string.format("Width %d", 40 * s))
+    local px = render(40 * s)
     local y = 10 * s
     isRgb("left of the red edge goes black", px, 12 * s, y, 0, 0, 0)
     isRgb("red lands 3 units right", px, 21 * s, y, 255, 0, 0)

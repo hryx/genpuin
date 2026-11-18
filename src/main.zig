@@ -26,7 +26,8 @@ const usage =
     \\  -d <dir>         Directory for made-up names, created if missing
     \\                   (default: the current directory)
     \\  -f <fmt>         png, ppm or svg for made-up names (default png)
-    \\  -s <number>      Raster scale factor (default 1)
+    \\  -w <px>          Output width in pixels, the height following the
+    \\                   canvas aspect (default: the canvas width)
     \\  --ss <n>         Supersample n x n per pixel (default 1)
     \\  --depth <8|16>   PNG bits per channel (default 8)
     \\  --vector-only    With SVG output: leave post passes out and write
@@ -61,6 +62,7 @@ const usage =
     \\Examples:
     \\  genpuin a.lua                         a.png
     \\  genpuin a.lua -o cover.svg            cover.svg
+    \\  genpuin a.lua -w 3000                 a.png, 3000 pixels wide
     \\  genpuin a.lua b.lua -d out            out/a.png out/b.png
     \\  genpuin a.lua --seed 1..16 -d picks   picks/a-01.png to a-16.png
     \\  genpuin a.lua --seed 1..64 --sheet    a-sheet.png
@@ -72,7 +74,7 @@ const Args = struct {
     output: ?[]const u8 = null,
     dir: ?[]const u8 = null,
     format: ?Format = null,
-    scale: f64 = 1,
+    width: ?u32 = null,
     ss: u32 = 1,
     depth: genpuin.image_io.Depth = .@"8",
     seed: ?SeedFlag = null,
@@ -191,7 +193,7 @@ fn parseArgs(arena: Allocator, argv: []const [:0]const u8, diag: *Io.Writer) Par
 }
 
 fn takesValue(name: []const u8) bool {
-    const valued = [_][]const u8{ "-o", "-d", "-f", "-s", "--ss", "--depth", "--seed", "--noise-seed", "--tile", "-j" };
+    const valued = [_][]const u8{ "-o", "-d", "-f", "-w", "--ss", "--depth", "--seed", "--noise-seed", "--tile", "-j" };
     for (valued) |v| if (eql(name, v)) return true;
     return false;
 }
@@ -206,9 +208,15 @@ fn parseOption(a: *Args, name: []const u8, v: []const u8, diag: *Io.Writer) Usag
     } else if (eql(name, "-f")) {
         a.format = std.meta.stringToEnum(Format, v) orelse
             return usageError(diag, "-f is png, ppm or svg", .{});
-    } else if (eql(name, "-s")) {
-        a.scale = std.fmt.parseFloat(f64, v) catch return usageError(diag, "-s needs a number", .{});
-        if (!(a.scale > 0)) return usageError(diag, "-s must be positive", .{});
+    } else if (eql(name, "-w")) {
+        const limit = genpuin.render.side_max;
+        const px = std.fmt.parseInt(i64, v, 10) catch |err| switch (err) {
+            error.Overflow => return usageError(diag, "-w {s} is over the {d} px limit", .{ v, limit }),
+            error.InvalidCharacter => return usageError(diag, "-w needs a whole number of pixels, such as -w 3000", .{}),
+        };
+        if (px < 1) return usageError(diag, "-w must be at least 1", .{});
+        if (px > limit) return usageError(diag, "-w {d} is over the {d} px limit", .{ px, limit });
+        a.width = @intCast(px);
     } else if (eql(name, "--ss")) {
         a.ss = std.fmt.parseInt(u32, v, 10) catch return usageError(diag, "--ss needs an integer", .{});
         if (a.ss < 1 or a.ss > 16) return usageError(diag, "--ss must be 1 to 16", .{});
@@ -260,6 +268,7 @@ fn planOutputs(arena: Allocator, a: *const Args, diag: *Io.Writer) (UsageError |
     if (isRange(a.seed) and isRange(a.noise_seed)) return usageError(diag, "--seed and --noise-seed cannot both be ranges", .{});
     if (a.sheet and a.sweep() == null) return usageError(diag, "--sheet needs a --seed or --noise-seed range such as 1..16", .{});
     if (a.tile != null and !a.sheet) return usageError(diag, "--tile sets the contact sheet tile width, so it needs --sheet", .{});
+    if (a.width != null and a.sheet) return usageError(diag, "-w does not size a contact sheet. Use --tile <px> for the tile width", .{});
     if (a.output != null and a.dir != null) return usageError(diag, "-o names one file and -d a directory for made-up names. Use one of them", .{});
 
     const per_script = if (a.sheet) 1 else a.rangeLen();
@@ -535,7 +544,7 @@ const Batch = struct {
             return;
         }
         const opts: core.RenderOptions = .{
-            .scale = b.args.scale,
+            .width = b.args.width,
             .ss = b.args.ss,
             .depth = b.args.depth,
             .vector_only = b.args.vector_only,
@@ -641,7 +650,7 @@ fn printWrote(w: *Io.Writer, path: []const u8, left_out: usize) !void {
 
 fn reportRenderError(lua: *Lua, w: *Io.Writer, err: anyerror) anyerror {
     switch (err) {
-        error.CanvasFailed => try w.print("render failed: {s}\n", .{lua.toString(-1) catch "canvas is malformed"}),
+        error.CanvasFailed, error.TooLarge => try w.print("render failed: {s}\n", .{lua.toString(-1) catch "canvas is malformed"}),
         else => try w.print("render failed: {t}\n", .{err}),
     }
     return err;
@@ -920,12 +929,40 @@ test "main: -o refuses an existing directory and suggests -d" {
     try refuseDirectoryOutput(io, try testArgs(arena, &.{ "a.lua", "-o", "missing/new.png" }, &diag), &diag);
 }
 
+test "main: -w takes a whole number of pixels up to the limit" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    var buf: [64]u8 = undefined;
+    var diag: Io.Writer = .fixed(&buf);
+    try std.testing.expectEqual(@as(?u32, null), (try testArgs(arena_state.allocator(), &.{"a.lua"}, &diag)).width);
+    try std.testing.expectEqual(@as(?u32, 3000), (try testArgs(arena_state.allocator(), &.{ "a.lua", "-w", "3000" }, &diag)).width);
+    try std.testing.expectEqual(@as(?u32, 32768), (try testArgs(arena_state.allocator(), &.{ "a.lua", "-w", "32768" }, &diag)).width);
+    try expectOutputs(&.{ "a.lua", "b.lua", "-w", "1600", "-d", "out" }, &.{ "out/a.png", "out/b.png" });
+
+    try expectUsage(&.{ "a.lua", "-w", "0" }, "-w must be at least 1");
+    try expectUsage(&.{ "a.lua", "-w", "-5" }, "-w must be at least 1");
+    try expectUsage(&.{ "a.lua", "-w", "12.5" }, "-w needs a whole number of pixels, such as -w 3000");
+    try expectUsage(&.{ "a.lua", "-w", "abc" }, "-w needs a whole number of pixels, such as -w 3000");
+    try expectUsage(&.{ "a.lua", "-w", "" }, "-w needs a whole number of pixels, such as -w 3000");
+    try expectUsage(&.{ "a.lua", "-w", "32769" }, "-w 32769 is over the 32768 px limit");
+    try expectUsage(&.{ "a.lua", "-w", "99999999999999999999" }, "-w 99999999999999999999 is over the 32768 px limit");
+    try expectUsage(&.{ "a.lua", "-w" }, "-w needs a value");
+}
+
+test "main: -s is gone" {
+    try expectUsage(&.{ "a.lua", "-s", "2" }, "unknown option: -s");
+}
+
+test "main: -w does not size a contact sheet" {
+    try expectUsage(&.{ "a.lua", "--seed", "1..4", "--sheet", "-w", "800" }, "-w does not size a contact sheet. Use --tile <px> for the tile width");
+}
+
 test "main: no script and help are not usage errors" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     var buf: [64]u8 = undefined;
     var diag: Io.Writer = .fixed(&buf);
-    try std.testing.expectError(error.NoScript, parseArgs(arena_state.allocator(), &.{ "genpuin", "-s", "2" }, &diag));
+    try std.testing.expectError(error.NoScript, parseArgs(arena_state.allocator(), &.{ "genpuin", "-w", "2" }, &diag));
     try std.testing.expectError(error.Help, parseArgs(arena_state.allocator(), &.{ "genpuin", "a.lua", "--help" }, &diag));
 }
 
@@ -1053,6 +1090,59 @@ test "main: a batch renders each script and seed byte for byte as it renders alo
         }
         const first = sweep.varied_script * values.len;
         try std.testing.expect(!std.mem.eql(u8, alone[first], alone[first + 1]));
+    }
+}
+
+/// Width and height from the header of a binary PPM.
+fn ppmSize(bytes: []const u8) ![2]u32 {
+    var it = std.mem.tokenizeAny(u8, bytes, " \n");
+    try std.testing.expectEqualStrings("P6", it.next().?);
+    const w = try std.fmt.parseInt(u32, it.next().?, 10);
+    const h = try std.fmt.parseInt(u32, it.next().?, 10);
+    return .{ w, h };
+}
+
+test "main: -w renders every canvas exactly that wide, the height rounded to the nearest pixel" {
+    const io = std.testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try std.fs.path.join(arena, &.{ std.testing.TmpDir.parent_dir_path, &tmp.sub_path });
+
+    const canvases = [_][2]u32{ .{ 40, 40 }, .{ 60, 40 }, .{ 801, 533 } };
+    var scripts: [canvases.len][:0]const u8 = undefined;
+    for (&scripts, canvases, 0..) |*s, c, i| {
+        const source = try std.fmt.allocPrint(arena,
+            \\gen.canvas({d}, {d})
+            \\gen.background({{0.1, 0.2, 0.3}})
+            \\gen.draw(gen.circle({{20, 20}}, 15), {{fill = {{1, 0.5, 0}}}})
+        , .{ c[0], c[1] });
+        const name = try std.fmt.allocPrint(arena, "c{d}.lua", .{i});
+        try tmp.dir.writeFile(io, .{ .sub_path = name, .data = source });
+        s.* = try std.fmt.allocPrintSentinel(arena, "{s}/{s}", .{ root, name }, 0);
+    }
+
+    const expected = [_]struct { width: []const u8, sizes: [canvases.len][2]u32 }{
+        .{ .width = "40", .sizes = .{ .{ 40, 40 }, .{ 40, 27 }, .{ 40, 27 } } },
+        .{ .width = "123", .sizes = .{ .{ 123, 123 }, .{ 123, 82 }, .{ 123, 82 } } },
+        .{ .width = "1600", .sizes = .{ .{ 1600, 1600 }, .{ 1600, 1067 }, .{ 1600, 1065 } } },
+    };
+    for (expected) |e| {
+        const dir = try std.fmt.allocPrint(arena, "{s}/w{s}", .{ root, e.width });
+        const outputs = try testRender(arena, &scripts, 2, &.{ "-w", e.width, "-f", "ppm", "-d", dir });
+        for (outputs, e.sizes) |bytes, size| try std.testing.expectEqual(size, try ppmSize(bytes));
+    }
+
+    const dir = try std.fmt.allocPrint(arena, "{s}/plain", .{root});
+    const plain = try testRender(arena, &scripts, 2, &.{ "-f", "ppm", "-d", dir });
+    for (scripts, canvases, plain, 0..) |s, c, p, i| {
+        try std.testing.expectEqual(c, try ppmSize(p));
+        const file = try std.fmt.allocPrint(arena, "{s}/same{d}.ppm", .{ root, i });
+        const width = try std.fmt.allocPrint(arena, "{d}", .{c[0]});
+        const same = try testRender(arena, &.{s}, 1, &.{ "-w", width, "-o", file });
+        try std.testing.expectEqualSlices(u8, p, same[0]);
     }
 }
 

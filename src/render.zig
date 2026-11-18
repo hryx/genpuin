@@ -20,11 +20,50 @@ pub const Options = struct {
     ss: u32 = 1,
 };
 
+/// The largest output raster side in pixels, before supersampling.
+pub const side_max: u32 = 32768;
+
+/// An output raster size, wide enough to hold sizes over `side_max`.
+pub const Size = struct {
+    w: u64,
+    h: u64,
+
+    pub fn fits(size: Size) bool {
+        return size.w <= side_max and size.h <= side_max;
+    }
+};
+
+/// The output raster of a `w` by `h` unit scene at `scale`: each side
+/// rounded to the nearest pixel, at least 1. The scale is the same on
+/// both axes, so the last row and column hold the fraction of the scene
+/// that reaches into them and background past its edge.
+pub fn outputSize(w: f64, h: f64, scale: f64) Size {
+    assert(scale > 0);
+    return .{ .w = roundSide(w * scale), .h = roundSide(h * scale) };
+}
+
+/// The scale that renders a canvas `canvas_w` units wide exactly `width`
+/// pixels wide. `width / canvas_w` is within an ulp of exact, so
+/// outputSize rounds the product back to `width`.
+pub fn scaleForWidth(canvas_w: f64, width: u32) f64 {
+    assert(canvas_w > 0);
+    assert(width >= 1);
+    return @as(f64, @floatFromInt(width)) / canvas_w;
+}
+
+fn roundSide(v: f64) u64 {
+    return @intFromFloat(std.math.clamp(@round(v), 1, 1e15));
+}
+
+/// Render at `opts.scale`, supersampling within each output pixel.
+/// error.TooLarge when a side of the output would pass `side_max`.
 pub fn render(gpa: Allocator, s: *const scene.Scene, opts: Options) !Raster {
     assert(opts.ss >= 1);
+    const size = outputSize(s.w, s.h, opts.scale);
+    if (!size.fits()) return error.TooLarge;
     const k = opts.scale * @as(f64, @floatFromInt(opts.ss));
-    const w: u32 = @intFromFloat(@max(1, @round(s.w * k)));
-    const h: u32 = @intFromFloat(@max(1, @round(s.h * k)));
+    const w: u32 = @intCast(size.w * opts.ss);
+    const h: u32 = @intCast(size.h * opts.ss);
     var raster: Raster = try .init(gpa, w, h, s.bg);
     errdefer raster.deinit(gpa);
 
@@ -491,4 +530,34 @@ test "render: a colorMap remaps an edge pixel by its coverage, once per matrix" 
     // remap of what is there, and the inverse of mid gray is mid gray.
     try std.testing.expectEqual(Raster.Rgb{ 0.5, 0.5, 0.5 }, r.get(1, 0));
     try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(2, 0));
+}
+
+test "render: output size rounds each side to the nearest pixel, at least 1" {
+    try std.testing.expectEqual(Size{ .w = 1600, .h = 1065 }, outputSize(801, 533, scaleForWidth(801, 1600)));
+    try std.testing.expectEqual(Size{ .w = 3000, .h = 2000 }, outputSize(900, 600, scaleForWidth(900, 3000)));
+    try std.testing.expectEqual(Size{ .w = 7, .h = 1 }, outputSize(700, 10, scaleForWidth(700, 7)));
+    try std.testing.expectEqual(Size{ .w = 3, .h = 2 }, outputSize(2.5, 1.5, 1));
+}
+
+test "render: a width gives exactly that many pixels for odd canvas sizes" {
+    const canvases = [_]f64{ 1, 3, 7, 100.5, 333, 533, 801, 999, 1234.25, 4096 };
+    var width: u32 = 1;
+    while (width <= side_max) : (width += 97) {
+        for (canvases) |cw| try std.testing.expectEqual(@as(u64, width), outputSize(cw, cw, scaleForWidth(cw, width)).w);
+    }
+}
+
+test "render: a side over the limit is refused before allocating" {
+    const s: scene.Scene = .{ .w = 10, .h = 40, .bg = .{ 0, 0, 0 }, .items = &.{} };
+    try std.testing.expect(!outputSize(10, 40, 1000).fits());
+    try std.testing.expectError(error.TooLarge, render(std.testing.allocator, &s, .{ .scale = 1000 }));
+}
+
+test "render: supersampling a fractional size keeps the output size" {
+    const gpa = std.testing.allocator;
+    const s: scene.Scene = .{ .w = 801, .h = 533, .bg = .{ 0, 0, 0 }, .items = &.{} };
+    var r = try render(gpa, &s, .{ .scale = scaleForWidth(801, 160), .ss = 4 });
+    defer r.deinit(gpa);
+    try std.testing.expectEqual(@as(u32, 160), r.w);
+    try std.testing.expectEqual(@as(u32, 106), r.h);
 }

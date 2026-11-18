@@ -30,7 +30,7 @@ LuaJIT is embedded by default. Pick another Lua with `-Dlang=lua54` (or `lua51` 
 $ genpuin art.lua                          # writes art.png
 $ genpuin art.lua -o xyz.png               # explicit output filename
 $ genpuin a.lua b.lua c.lua -d out -f ppm  # multiple PPM files in the 'out' dir
-$ genpuin art.lua -s 4 --ss 3              # 4x scale and supersample
+$ genpuin art.lua -w 3000 --ss 3           # 3000px wide and supersample
 $ genpuin art.lua --seed 1234              # override RNG seed
 $ genpuin --help                           # there are plenty more options
 ```

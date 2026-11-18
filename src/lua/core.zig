@@ -3,6 +3,7 @@
 //! subtable (core.field, core.post, ...) from its own bind_*.zig file.
 
 const std = @import("std");
+const assert = std.debug.assert;
 
 const zlua = @import("zlua");
 const genpuin = @import("genpuin");
@@ -40,7 +41,9 @@ pub fn open(lua: *Lua) i32 {
 }
 
 pub const RenderOptions = struct {
-    scale: f64 = 1,
+    /// Output width in pixels, the height following the canvas aspect.
+    /// Null renders one pixel per canvas unit.
+    width: ?u32 = null,
     ss: u32 = 1,
     depth: genpuin.image_io.Depth = .@"8",
     /// SVG only: leave post passes out instead of refusing the canvas.
@@ -52,16 +55,33 @@ pub fn readRenderOptions(lua: *Lua, index: i32) RenderOptions {
     if (ss < 1 or ss > 16) lua.raiseErrorStr("ss must be 1 to 16", .{});
     const depth = util.optInt(lua, index, "depth", 8);
     return .{
-        .scale = util.optNumber(lua, index, "scale", 1),
+        .width = optWidth(lua, index),
         .ss = @intCast(ss),
         .depth = if (depth == 16) .@"16" else .@"8",
         .vector_only = util.optBool(lua, index, "vectorOnly", false),
     };
 }
 
+/// Option `width`: absent, or a whole number of pixels from 1 to
+/// render.side_max.
+fn optWidth(lua: *Lua, index: i32) ?u32 {
+    if (!lua.isTable(index)) return null;
+    defer lua.pop(1);
+    switch (lua.getField(index, "width")) {
+        .nil, .none => return null,
+        .number => {
+            const n = lua.toNumber(-1) catch unreachable; // type checked by the switch
+            if (n >= 1 and n <= genpuin.render.side_max and @floor(n) == n) return @intFromFloat(n);
+        },
+        else => {},
+    }
+    lua.raiseErrorStr("option 'width' must be a whole number of pixels from 1 to %d", .{@as(c_int, genpuin.render.side_max)});
+}
+
 /// Render the canvas at `index` with the Lua state's allocator. A Lua
-/// error while reading the canvas returns error.CanvasFailed with the
-/// message pushed on top of the stack.
+/// error while reading the canvas returns error.CanvasFailed, and an
+/// output over render.side_max error.TooLarge, each with the message
+/// pushed on top of the stack.
 pub fn renderCanvas(lua: *Lua, index: i32, opts: RenderOptions) !genpuin.Raster {
     const gpa = lua.allocator();
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
@@ -72,7 +92,24 @@ pub fn renderCanvas(lua: *Lua, index: i32, opts: RenderOptions) !genpuin.Raster 
     lua.pushLightUserdata(&call);
     lua.pushValue(canvas);
     lua.protectedCall(.{ .args = 2, .results = 0 }) catch return error.CanvasFailed;
-    return genpuin.render.render(gpa, &call.scene, .{ .scale = opts.scale, .ss = opts.ss });
+
+    const s = &call.scene;
+    const scale = if (opts.width) |w| genpuin.render.scaleForWidth(s.w, w) else 1;
+    const size = genpuin.render.outputSize(s.w, s.h, scale);
+    if (opts.width) |w| assert(size.w == w);
+    if (!size.fits()) {
+        _ = lua.pushString(try tooLargeMessage(arena_state.allocator(), s, opts.width, size));
+        return error.TooLarge;
+    }
+    return genpuin.render.render(gpa, s, .{ .scale = scale, .ss = opts.ss });
+}
+
+fn tooLargeMessage(arena: std.mem.Allocator, s: *const genpuin.scene.Scene, width: ?u32, size: genpuin.render.Size) ![]const u8 {
+    const limit = genpuin.render.side_max;
+    if (width) |w| {
+        return std.fmt.allocPrint(arena, "width {d} on a {d}x{d} canvas makes a {d}x{d} image, over the {d} px limit on a side", .{ w, s.w, s.h, size.w, size.h, limit });
+    }
+    return std.fmt.allocPrint(arena, "a {d}x{d} canvas makes a {d}x{d} image, over the {d} px limit on a side", .{ s.w, s.h, size.w, size.h, limit });
 }
 
 pub const SvgError = error{
@@ -87,7 +124,7 @@ pub const SvgError = error{
 /// Write the canvas at `index` to `path` as SVG and return how many post
 /// passes were left out, which is zero unless `vector_only` allows it.
 /// Nothing is written when the canvas cannot be shown exactly.
-pub fn exportSvg(lua: *Lua, index: i32, path: []const u8, vector_only: bool) !usize {
+pub fn exportSvg(lua: *Lua, index: i32, path: []const u8, opts: RenderOptions) !usize {
     const gpa = lua.allocator();
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -100,8 +137,8 @@ pub fn exportSvg(lua: *Lua, index: i32, path: []const u8, vector_only: bool) !us
     lua.protectedCall(.{ .args = 2, .results = 0 }) catch return error.CanvasFailed;
 
     var s = call.scene;
-    const left_out = if (vector_only) genpuin.svg.passCount(&s) else 0;
-    if (vector_only) s = try genpuin.svg.withoutPasses(arena, &s);
+    const left_out = if (opts.vector_only) genpuin.svg.passCount(&s) else 0;
+    if (opts.vector_only) s = try genpuin.svg.withoutPasses(arena, &s);
     if (genpuin.svg.check(&s)) |problem| {
         _ = lua.pushString(try std.fmt.allocPrint(arena, "{f}", .{problem}));
         return switch (problem) {
@@ -110,18 +147,19 @@ pub fn exportSvg(lua: *Lua, index: i32, path: []const u8, vector_only: bool) !us
         };
     }
     var doc: std.Io.Writer.Allocating = .init(arena);
-    try genpuin.svg.write(gpa, &doc.writer, &s);
+    try genpuin.svg.write(gpa, &doc.writer, &s, .{ .width = opts.width });
     const io = util.getHost(lua).io;
     if (std.fs.path.dirname(path)) |dir| try std.Io.Dir.cwd().createDirPath(io, dir);
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = doc.written() });
     return left_out;
 }
 
-/// exportSvg(canvas, path, vectorOnly) -> passes left out, or nil and a
-/// message when the canvas cannot be written. A malformed canvas raises.
+/// exportSvg(canvas, path, {vectorOnly, width}) -> passes left out, or
+/// nil and a message when the canvas cannot be written. A malformed
+/// canvas raises.
 fn exportSvgLua(lua: *Lua) !i32 {
     const path = lua.toString(2) catch lua.argError(2, "expected an output path");
-    const left_out = exportSvg(lua, 1, path, lua.toBoolean(3)) catch |err| switch (err) {
+    const left_out = exportSvg(lua, 1, path, readRenderOptions(lua, 3)) catch |err| switch (err) {
         error.CanvasFailed => lua.raiseError(),
         error.SvgNeedsPixels, error.SvgUnsupported => {
             lua.pushNil();
@@ -149,12 +187,12 @@ fn marshalProtected(lua: *Lua) !i32 {
     return 0;
 }
 
-/// export(canvas, path, {scale, ss, depth}) writes PPM or PNG by extension.
+/// export(canvas, path, {width, ss, depth}) writes PPM or PNG by extension.
 fn exportCanvas(lua: *Lua) !i32 {
     const path = lua.toString(2) catch lua.argError(2, "expected an output path");
     const opts = readRenderOptions(lua, 3);
     var r = renderCanvas(lua, 1, opts) catch |err| switch (err) {
-        error.CanvasFailed => lua.raiseError(),
+        error.CanvasFailed, error.TooLarge => lua.raiseError(),
         else => return err,
     };
     defer r.deinit(lua.allocator());

@@ -4,9 +4,9 @@
 //!
 //! bits(x) and num(hex) convert between a number and its IEEE bit pattern
 //! as 16 hex digits. call(name, x, y) runs one src/math.zig function from
-//! Zig. render(script, path, {scale, ss, depth, seed, noiseSeed}) runs a
-//! script in a fresh state as the CLI would, seed and noiseSeed standing
-//! for --seed and --noise-seed, and writes the canvas it draws to path.
+//! Zig. render(script, path, {width, ss, depth, vectorOnly, seed,
+//! noiseSeed}) runs a script in a fresh state as the CLI would, each
+//! option standing for its flag, and writes the canvas it draws to path.
 
 const std = @import("std");
 
@@ -127,6 +127,7 @@ fn call(lua: *Lua) i32 {
 fn render(lua: *Lua) i32 {
     const script = lua.checkString(1);
     const path = lua.checkString(2);
+    checkOptionNames(lua, 3);
     const opts = core.readRenderOptions(lua, 3);
     const seeds: util.Seeds = .{
         .seed = optSeedFlag(lua, 3, "seed"),
@@ -137,11 +138,28 @@ fn render(lua: *Lua) i32 {
         lua.raiseErrorStr("testing config missing", .{})));
     lua.pop(1);
     renderScript(lua, config, script, path, opts, seeds) catch |err| switch (err) {
-        error.ScriptFailed, error.CanvasFailed, error.SvgNeedsPixels, error.SvgUnsupported => lua.raiseError(),
+        error.ScriptFailed, error.CanvasFailed, error.TooLarge, error.SvgNeedsPixels, error.SvgUnsupported => lua.raiseError(),
         error.NoCanvas => lua.raiseErrorStr("%s made no canvas. Call gen.canvas(w, h)", .{script.ptr}),
         else => lua.raiseErrorStr("rendering %s failed: %s", .{ script.ptr, @errorName(err).ptr }),
     };
     return 0;
+}
+
+const option_names = [_][]const u8{ "width", "ss", "depth", "vectorOnly", "seed", "noiseSeed" };
+
+/// Raise on a key of the options table at `index` that render does not
+/// read, so a misspelled option fails instead of rendering the default.
+fn checkOptionNames(lua: *Lua, index: i32) void {
+    if (!lua.isTable(index)) return;
+    lua.pushNil();
+    while (lua.next(index)) {
+        lua.pop(1);
+        if (lua.typeOf(-1) != .string) lua.raiseErrorStr("testing.render: option names must be strings", .{});
+        const key = lua.toString(-1) catch unreachable; // type checked on the line above
+        for (option_names) |name| {
+            if (std.mem.eql(u8, name, key)) break;
+        } else lua.raiseErrorStr("testing.render: unknown option '%s'", .{key.ptr});
+    }
 }
 
 /// A --seed style option: absent, or an integer 0 to 2^32 - 1.
@@ -178,7 +196,7 @@ fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []
     if (!host_mod.pushCanvas(inner)) return error.NoCanvas;
     _ = host_mod.exportCanvas(inner, path, opts) catch |err| {
         switch (err) {
-            error.CanvasFailed, error.SvgNeedsPixels, error.SvgUnsupported => _ = lua.pushString(inner.toString(-1) catch "canvas is malformed"),
+            error.CanvasFailed, error.TooLarge, error.SvgNeedsPixels, error.SvgUnsupported => _ = lua.pushString(inner.toString(-1) catch "canvas is malformed"),
             else => {},
         }
         return err;

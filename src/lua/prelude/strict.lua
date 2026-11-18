@@ -64,4 +64,20 @@ function M.api(t, prefix)
     })
 end
 
+-- Raise an error at the line that called the function `what` when opts
+-- holds a key that is not in known, a set of option names. opts must be
+-- nil or a table.
+function M.options(what, opts, known)
+    if opts == nil then return end
+    if type(opts) ~= "table" then error(what .. ": options must be a table", 3) end
+    for k in pairs(opts) do
+        if not known[k] then
+            local name = tostring(k)
+            local near = type(k) == "string" and closest(name, known) or nil
+            error(string.format("%s: unknown option '%s'%s", what, name,
+                near and string.format(" (did you mean '%s'?)", near) or ""), 3)
+        end
+    end
+end
+
 return M

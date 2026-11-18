@@ -152,16 +152,27 @@ getmetatable(post).__call = function()
     error("gen.post is a table of passes. Call gen.post.name(opts), for example gen.post.blur({radius = 2})", 2)
 end
 
--- Export the canvas to a PNG file. opts: scale, ss (supersample), depth (8 or 16).
+-- Export the canvas to a PNG file. Options:
+--   width = output width in pixels, a whole number from 1 to 32768. The
+--   height follows the canvas aspect, rounded to the nearest pixel.
+--   Default: the canvas width, one pixel per canvas unit.
+--   ss = supersample n x n per pixel, 1 to 16 (1).
+--   depth = bits per channel, 8 or 16 (8).
 function M.exportPng(filename, opts)
     canvas.rejectCanvasArg("gen.exportPng", filename, opts, "gen.exportPng(filename, opts)")
+    strict.options("gen.exportPng", opts, {width = true, ss = true, depth = true})
     core.export(canvas.need("gen.exportPng"), filename, opts)
 end
 
--- Export the canvas to a PPM (P6 binary) image file.
-function M.exportPpm(filename, scale)
-    canvas.rejectCanvasArg("gen.exportPpm", filename, scale, "gen.exportPpm(filename, scale)")
-    core.export(canvas.need("gen.exportPpm"), filename, {scale = scale})
+-- Export the canvas to a PPM (P6 binary) image file. Options: width and
+-- ss as for gen.exportPng.
+function M.exportPpm(filename, opts)
+    canvas.rejectCanvasArg("gen.exportPpm", filename, opts, "gen.exportPpm(filename, opts)")
+    if type(opts) == "number" then
+        error("gen.exportPpm: options must be a table such as {width = 1600}", 2)
+    end
+    strict.options("gen.exportPpm", opts, {width = true, ss = true})
+    core.export(canvas.need("gen.exportPpm"), filename, opts)
 end
 
 return M
