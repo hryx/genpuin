@@ -1,4 +1,5 @@
 local import = ...
+local algo = import("core").algo
 local canvas = import("canvas")
 local geo = import("geo")
 local xform = import("xform")
@@ -71,27 +72,9 @@ local function copyPoints(points)
     return pts
 end
 
--- Flatten points (including arcs) into a plain polyline
+-- Points with each arc replaced by arcResolution samples (default 16).
 local function flattenPoints(points, arcResolution)
-    arcResolution = arcResolution or 16
-    local pts = {{points[1][1], points[1][2]}}
-    for i = 2, #points do
-        local pt = points[i]
-        if pt.arc then
-            local a = pt.arc
-            for s = 1, arcResolution do
-                local t = s / arcResolution
-                local ang = a.startAngle + (a.endAngle - a.startAngle) * t
-                pts[#pts + 1] = {
-                    a.cx + a.radius * math.cos(ang),
-                    a.cy + a.radius * math.sin(ang),
-                }
-            end
-        else
-            pts[#pts + 1] = {pt[1], pt[2]}
-        end
-    end
-    return pts
+    return algo.penFlatten(points, arcResolution or 16)
 end
 
 -- Draw the accumulated path and reset. Returns the polyline shape.
@@ -189,17 +172,10 @@ function Pen:arcTo(angle, radius)
     self.y = cy + dx * sinA + dy * cosA
     self._heading = self._heading + angle
     self._hasArcs = true
+    -- An arc's end point carries the arc for flattening.
     table.insert(self._points, {
-        self.x, self.y,
-        arc = {
-            rx = radius, ry = radius,
-            large = math.abs(angle) > math.pi and 1 or 0,
-            sweep = angle > 0 and 0 or 1,
-            cx = cx, cy = cy,
-            startAngle = startAngle,
-            endAngle = math.atan2(self.y - cy, self.x - cx),
-            radius = radius,
-        }
+        self.x, self.y, cx, cy, radius,
+        startAngle, math.atan2(self.y - cy, self.x - cx),
     })
     return self
 end

@@ -94,6 +94,13 @@ local cs = gen.scale(gen.circle({1, 1}, 4), 2, 3)
 check("non-uniform scale turns a circle into an ellipse", cs.type == "ellipse" and cs.rx == 8 and cs.ry == 12)
 check("uniform scale scales a circle", gen.scale(gen.circle({1, 1}, 4), 3).r == 12)
 
+print("Errors")
+local ok, err = pcall(function() local r = gen.rotate({type = "field", x = 0, y = 0, w = 1, h = 1}, 1) return r end)
+check("an image refusing a rotation names the script line",
+    not ok and err:find("test%-xform%.lua:%d+: xform: an image only takes") ~= nil, err)
+ok, err = pcall(function() local r = gen.kaleidoscope(3, {0, 0}, {gen.arc({0, 0}, 1, 0, 1)}) return r end)
+check("kaleidoscope keeps arcs as arcs", ok and #err == 6 and err[2].type == "arc", tostring(err))
+
 print("Render")
 local W = 100
 gen.canvas(W, W)

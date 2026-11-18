@@ -14,12 +14,17 @@ M.elementary = algo.elementary
 -- rule(value, neighbors, x, y) -> new value
 --   neighbors: {NW, N, NE, W, E, SW, S, SE} (Moore neighborhood)
 -- opts: {wrap = true/false} (default true, toroidal boundary)
+-- With gen.life as the rule on a grid of numbers the step runs in Zig.
 function M.step(grid, rule, opts)
     local wrap = true
     if opts and opts.wrap == false then wrap = false end
 
     local height = #grid
     if height == 0 then return {} end
+    if rule == M.life then
+        local next = algo.lifeStep(grid, wrap)
+        if next then return next end
+    end
     local width = #grid[1]
 
     local function get(y, x)

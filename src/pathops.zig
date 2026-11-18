@@ -11,6 +11,7 @@ pub const simplify = @import("pathops/simplify.zig");
 pub const offset = @import("pathops/offset.zig");
 pub const hatch = @import("pathops/hatch.zig");
 pub const order = @import("pathops/order.zig");
+pub const flatten = @import("pathops/flatten.zig");
 
 pub const Vec2 = geom.Vec2;
 pub const FillRule = geom.FillRule;
@@ -25,4 +26,5 @@ test {
     _ = offset;
     _ = hatch;
     _ = order;
+    _ = flatten;
 }

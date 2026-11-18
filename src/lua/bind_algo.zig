@@ -50,6 +50,7 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "separate", .func = zlua.wrap(separate) },
     .{ .name = "packCircles", .func = zlua.wrap(packCircles) },
     .{ .name = "elementary", .func = zlua.wrap(elementary) },
+    .{ .name = "lifeStep", .func = zlua.wrap(lifeStep) },
     .{ .name = "markovChain", .func = zlua.wrap(markovChain) },
     .{ .name = "markovFromSequence", .func = zlua.wrap(markovFromSequence) },
     .{ .name = "markovStep", .func = zlua.wrap(markovStep) },
@@ -70,6 +71,7 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "spiral", .func = zlua.wrap(spiral) },
     .{ .name = "alongPath", .func = zlua.wrap(alongPath) },
     .{ .name = "traceNoise", .func = zlua.wrap(traceNoise) },
+    .{ .name = "penFlatten", .func = zlua.wrap(penFlatten) },
     .{ .name = "colormapSolve", .func = zlua.wrap(colormapSolve) },
     .{ .name = "colormapApply", .func = zlua.wrap(colormapApply) },
 };
@@ -584,6 +586,43 @@ fn elementary(lua: *Lua) !i32 {
     return 1;
 }
 
+/// lifeStep(grid, wrap) -> the next Game of Life generation as rows of
+/// 1 and 0, or nil when the grid is not rows of numbers at least as long
+/// as the first, so the caller can run the general rule loop instead.
+/// A cell is alive when it is not 0.
+fn lifeStep(lua: *Lua) !i32 {
+    lua.checkType(1, .table);
+    const wrap = lua.toBoolean(2);
+    const h = util.len(lua, 1);
+    if (h == 0 or util.rawGet(lua, 1, 1) != .table) return 0;
+    const w = util.len(lua, -1);
+    lua.pop(1);
+    if (w == 0) return 0;
+    const gpa = lua.allocator();
+    const cells = try gpa.alloc(u1, 2 * w * h);
+    defer gpa.free(cells);
+    for (0..h) |y| {
+        if (util.rawGet(lua, 1, y + 1) != .table) return 0;
+        defer lua.pop(1);
+        for (0..w) |x| {
+            const v = util.numberAt(lua, -1, x + 1) orelse return 0;
+            cells[y * w + x] = @intFromBool(v != 0);
+        }
+    }
+    const next = cells[w * h ..];
+    algo.automata.lifeStep(cells[0 .. w * h], next, w, h, wrap);
+    lua.createTable(@intCast(h), 0);
+    for (0..h) |y| {
+        lua.createTable(@intCast(w), 0);
+        for (next[y * w ..][0..w], 1..) |c, x| {
+            lua.pushInteger(c);
+            util.rawSet(lua, -2, x);
+        }
+        util.rawSet(lua, -2, y + 1);
+    }
+    return 1;
+}
+
 /// markovChain(transitions) -> chain. transitions maps each state to
 /// {{next, weight}, ...}. The chain maps it to {nexts, weights}.
 fn markovChain(lua: *Lua) i32 {
@@ -994,6 +1033,34 @@ fn traceNoise(lua: *Lua) !i32 {
     defer gpa.free(pts);
     getState(lua).perlin.trace(pts, start, scale, step_len);
     util.pushPoints(lua, pts);
+    return 1;
+}
+
+/// penFlatten(points, resolution) -> the points of a gen.pen path with
+/// each arc replaced by samples. A point is {x, y}, an arc's end is
+/// {x, y, cx, cy, radius, startAngle, endAngle}.
+fn penFlatten(lua: *Lua) !i32 {
+    var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    lua.checkType(1, .table);
+    const resolution = lua.checkNumber(2);
+    const n = util.len(lua, 1);
+    if (n == 0) lua.argError(1, "expected a path with a first point");
+    const steps = try arena.alloc(algo.pen.Step, n - 1);
+    _ = util.rawGet(lua, 1, 1);
+    const first = util.readVec2(lua, -1) orelse lua.raiseErrorStr("pen point 1 is not {x, y}", .{});
+    lua.pop(1);
+    for (steps, 2..) |*s, i| {
+        _ = util.rawGet(lua, 1, i);
+        defer lua.pop(1);
+        const p = util.readVec2(lua, -1) orelse lua.raiseErrorStr("pen point %d is not {x, y}", .{@as(c_int, @intCast(i))});
+        var arc: [5]f64 = undefined;
+        s.* = for (&arc, 3..) |*v, k| {
+            v.* = util.numberAt(lua, -1, k) orelse break .{ .point = p };
+        } else .{ .arc = .{ .center = .{ arc[0], arc[1] }, .radius = arc[2], .start = arc[3], .end = arc[4] } };
+    }
+    util.pushPoints(lua, try algo.pen.flatten(arena, first, steps, resolution));
     return 1;
 }
 

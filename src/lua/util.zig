@@ -196,6 +196,18 @@ pub fn readContours(lua: *Lua, arena: Allocator, index_in: i32) ![][]Vec2 {
     return out;
 }
 
+/// Push a shallow copy of the table at `index`.
+pub fn pushCopy(lua: *Lua, index_in: i32) void {
+    const index = lua.absIndex(index_in);
+    lua.createTable(0, 4);
+    lua.pushNil();
+    while (lua.next(index)) {
+        lua.pushValue(-2);
+        lua.insert(-2);
+        lua.setTableRaw(-4);
+    }
+}
+
 pub fn pushVec2(lua: *Lua, p: Vec2) void {
     lua.createTable(2, 0);
     lua.pushNumber(p[0]);

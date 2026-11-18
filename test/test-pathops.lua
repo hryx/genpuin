@@ -76,6 +76,20 @@ check("simplify keeps a square's corners", #gen.simplify(gen.polygon({{0, 0}, {5
 ------------------------------------------------------------
 -- Render: xor of two squares, a disc shrunk by an offset, and a hatch.
 ------------------------------------------------------------
+print("\nErrors")
+local function errorOf(fn)
+    local ok, err = pcall(fn)
+    if ok then return nil end
+    return err
+end
+local bez = gen.bezier({0, 0}, {1, 1}, {2, 2}, {3, 3})
+local err = errorOf(function() local r = gen.clip(gen.line({0, 0}, {1, 1})) return r end)
+check("clip names the script line", err and err:find("test%-pathops%.lua:%d+: clip: expected a closed shape, got line") ~= nil, err)
+err = errorOf(function() local r = gen.offset(bez, 1) return r end)
+check("offset names the script line", err and err:find("test%-pathops%.lua:%d+: expected line work, got bezier") ~= nil, err)
+err = errorOf(function() local r = gen.hatch(bez) return r end)
+check("hatch names the script line", err and err:find("test%-pathops%.lua:%d+: hatch: expected a closed shape, got bezier") ~= nil, err)
+
 print("\nRendering test-pathops.ppm...")
 gen.canvas(200, 200)
 gen.background({1, 1, 1})

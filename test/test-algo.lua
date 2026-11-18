@@ -57,6 +57,33 @@ check("markovFrom first-appearance order",
 local seq = gen.markovGenerate(chain, "c", 4)
 check("markovGenerate", #seq == 4 and seq[2] == "a")
 
+-- gen.life as the rule runs in Zig. Wrapping it in a function forces the
+-- Lua rule loop, which must agree cell for cell.
+local soup = {}
+for y = 1, 9 do
+    soup[y] = {}
+    for x = 1, 11 do soup[y][x] = gen.rand() < 0.4 and 1 or 0 end
+end
+local function viaLua(v, n) return gen.life(v, n) end
+local function same(a, b)
+    for y = 1, #b do
+        for x = 1, #b[y] do
+            if a[y][x] ~= b[y][x] then return false end
+        end
+    end
+    return #a == #b
+end
+for _, wrap in ipairs({true, false}) do
+    local g1, g2 = soup, soup
+    for _ = 1, 5 do
+        g1 = gen.evolve(g1, gen.life, {wrap = wrap})
+        g2 = gen.evolve(g2, viaLua, {wrap = wrap})
+    end
+    check("life in Zig matches the rule loop, wrap " .. tostring(wrap), same(g1, g2))
+end
+check("a ragged grid takes the rule loop and keeps its nil cells alive",
+    same(gen.evolve({{1, 1, 1}, {1, 0}, {0, 1, 1}}, gen.life), gen.evolve({{1, 1, 1}, {1, 0}, {0, 1, 1}}, viaLua)))
+
 print("colorMap render")
 gen.canvas(40, 20)
 gen.background({1, 1, 1})

@@ -1,5 +1,5 @@
 //! Elementary (one-dimensional, two-state, radius-one) cellular automata
-//! in Wolfram's rule numbering, on a ring.
+//! in Wolfram's rule numbering, on a ring, and Conway's Game of Life.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -35,7 +35,64 @@ pub fn centerSeed(cells: []u1) void {
     if (cells.len > 0) cells[(cells.len + 1) / 2 - 1] = 1;
 }
 
+/// One generation of Conway's Game of Life (B3/S23) on a `w` by `h` grid
+/// stored row by row. The grid is a torus when `wrap`, otherwise cells
+/// outside it are dead.
+pub fn lifeStep(cells: []const u1, next: []u1, w: usize, h: usize, wrap: bool) void {
+    std.debug.assert(cells.len == w * h);
+    std.debug.assert(next.len == w * h);
+    for (0..h) |y| {
+        for (0..w) |x| {
+            var count: u4 = 0;
+            for ([_]isize{ -1, 0, 1 }) |dy| {
+                for ([_]isize{ -1, 0, 1 }) |dx| {
+                    if (dx == 0 and dy == 0) continue;
+                    count += neighbor(cells, w, h, wrap, @as(isize, @intCast(x)) + dx, @as(isize, @intCast(y)) + dy);
+                }
+            }
+            const alive = cells[y * w + x] == 1;
+            next[y * w + x] = @intFromBool(count == 3 or (alive and count == 2));
+        }
+    }
+}
+
+fn neighbor(cells: []const u1, w: usize, h: usize, wrap: bool, x: isize, y: isize) u1 {
+    if (wrap) {
+        const wx: usize = @intCast(@mod(x, @as(isize, @intCast(w))));
+        const wy: usize = @intCast(@mod(y, @as(isize, @intCast(h))));
+        return cells[wy * w + wx];
+    }
+    if (x < 0 or y < 0 or x >= w or y >= h) return 0;
+    return cells[@as(usize, @intCast(y)) * w + @as(usize, @intCast(x))];
+}
+
 const testing = std.testing;
+
+test "automata: a blinker turns on a torus and in a box" {
+    const vertical = [_]u1{
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+    };
+    var next: [9]u1 = undefined;
+    lifeStep(&vertical, &next, 3, 3, false);
+    try testing.expectEqualSlices(u1, &.{ 0, 0, 0, 1, 1, 1, 0, 0, 0 }, &next);
+    // On a 3 by 3 torus each cell neighbors all eight others.
+    lifeStep(&vertical, &next, 3, 3, true);
+    try testing.expectEqualSlices(u1, &.{ 1, 1, 1, 1, 1, 1, 1, 1, 1 }, &next);
+}
+
+test "automata: a block is still life" {
+    const block = [_]u1{
+        0, 0, 0, 0,
+        0, 1, 1, 0,
+        0, 1, 1, 0,
+        0, 0, 0, 0,
+    };
+    var next: [16]u1 = undefined;
+    lifeStep(&block, &next, 4, 4, true);
+    try testing.expectEqualSlices(u1, &block, &next);
+}
 
 test "automata: rule 90 draws a Sierpinski triangle" {
     var first: [7]u1 = undefined;
