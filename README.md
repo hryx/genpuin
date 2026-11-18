@@ -26,12 +26,12 @@ LuaJIT is embedded by default. Pick another Lua with `-Dlang=lua54` (or `lua51` 
 ## Usage
 
 ```
-$ genpuin --help
-$ genpuin art.lua                    # writes art.svg
-$ genpuin art.lua -o art.png         # write a PNG
-$ genpuin art.lua -o art.png -s 4    # 4x the pixels
-$ genpuin art.lua -o art.png --ss 3  # supersample
-$ genpuin art.lua --vary 1..16       # contact sheet of 16 variations
+$ genpuin art.lua                          # writes art.png
+$ genpuin art.lua -o xyz.png               # explicit output filename
+$ genpuin a.lua b.lua c.lua -d out -f ppm  # multiple PPM files in the 'out' dir
+$ genpuin art.lua -s 4 --ss 3              # 4x scale and supersample
+$ genpuin art.lua --seed 1234              # override RNG seed
+$ genpuin --help                           # there are plenty more options
 ```
 
 ```lua
@@ -58,7 +58,7 @@ produce equal output on any platform.
 
 The doc comments in `src/lua/prelude/` are the reference.
 
-- **Canvas:** `canvas` `background` `draw` `style` `layer`
+- **Canvas:** `canvas` `background` `draw` `style` `layer` `size`
 - **Shapes:** `line` `polyline` `polygon` `circle` `ellipse` `arc` `rect` `bezier` `spline` `compound` `bezierPoint` `bezierTangent` `splineToBeziers` `catmullRomToBezier`
 - **Color:** `rgb` `rgba` `hsv` `hsl` `hex` `lerpColor` `darken` `lighten` `withAlpha`
 - **Gradients:** `linearGradient` `radialGradient`
@@ -81,5 +81,5 @@ The doc comments in `src/lua/prelude/` are the reference.
 - **Fields and textures:** `field` `image` `splat` `blurField` `fieldGradient` `attractor` `flame` `randomFlame`
 - **Post passes:** `post` with `invert` `pixelSort` `channelShift` `displace` `tear` `blockRepeat` `dither` `posterize` `blur` `bloom` `grain` `levels` `scanlines`
 - **Vec2:** `vec2` `vec2Add` `vec2Sub` `vec2Scale` `vec2Len` `vec2FromAngle` `vec2Dot` `vec2Lerp` `vec2Rotate`
-- **Utilities:** `lerp` `mapRange` `clamp` `dist` `angle` `norm` `degrees` `radians`
+- **Utilities:** `lerp` `mapRange` `clamp` `dist` `angle` `norm` `degrees` `radians` `mod`
 - **Export:** `exportSvg` `exportPng` `exportPpm`
