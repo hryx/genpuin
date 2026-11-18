@@ -656,6 +656,7 @@ fn reportRenderError(lua: *Lua, w: *Io.Writer, err: anyerror, ss: u32) anyerror 
     switch (err) {
         error.CanvasFailed => try w.print("render failed: {s}\n", .{lua.toString(-1) catch "canvas is malformed"}),
         error.TooLarge => try printTooLarge(w, lua.toString(-1) catch "image is too large", ss),
+        error.OutOfMemory => try printTooLarge(w, "ran out of memory", ss),
         else => try w.print("render failed: {t}\n", .{err}),
     }
     return err;
