@@ -85,7 +85,7 @@ pub fn build(b: *std.Build) void {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".lua")) continue;
         render.addArg(b.fmt("examples/{s}", .{entry.name}));
     }
-    render.addArgs(&.{ "--format", ext, "-o", b.fmt("out/{s}/", .{ext}) });
+    render.addArgs(&.{ "-d", b.fmt("out/{s}/", .{ext}), "-f", ext });
     examples_step.dependOn(&render.step);
 }
 
