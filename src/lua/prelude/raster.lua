@@ -17,6 +17,8 @@ end
 
 -- Make a drawable shape from a field, stretched over the rect x, y, w, h.
 -- opts.palette is a list of colors or of {offset, color} stops (default black to white).
+-- Palette colors may carry alpha, {r, g, b, a}, interpolated like the other
+-- channels, so a stop with a = 0 lets what is underneath show through.
 -- opts.range = {lo, hi} maps field values onto the palette (default: the field's min and max).
 -- opts.tone = "log" compresses highlights (opts.toneK sets strength), or a number for gamma.
 -- opts.smooth = false samples nearest cell instead of bilinear.

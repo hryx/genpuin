@@ -1,5 +1,7 @@
 local import = ...
-local algo = import("core").algo
+local core = import("core")
+local algo = core.algo
+local P = core.pathops
 
 local M = {}
 
@@ -130,26 +132,72 @@ function M.pathPoints(shape)
     return nil, false
 end
 
--- Sample n evenly-spaced points along a path, returning a polyline.
--- Shapes without at least two points are returned unchanged.
-function M.sampleAlong(shape, n)
-    local pts = M.pathPoints(shape)
-    if not pts or #pts < 2 then return shape end
-    return M.polyline(algo.sampleAlong(pts, n))
+-- The paths of a shape for the path functions, and whether they are
+-- closed. Polylines, polygons and lines give their own points. Circles,
+-- ellipses, rects, arcs, beziers, splines and compounds are flattened in
+-- Zig, closed outlines repeating their first point when loop is true, and
+-- a compound gives one path per contour. Nil for a polyline or polygon
+-- without points. Anything else raises an error naming what, at the
+-- script line that called the gen function.
+function M.paths(shape, what, loop)
+    local pts, closed = M.pathPoints(shape)
+    if pts then return {pts}, closed end
+    if shape.type == "polyline" or shape.type == "polygon" then return nil end
+    local paths, closedOrErr = P.outline(shape, loop)
+    if not paths then error(what .. ": " .. closedOrErr, 3) end
+    return paths, closedOrErr
 end
+
+-- The single path of paths, raising at the script line for a compound
+-- with more or fewer than one contour.
+function M.onePath(paths, shape, what)
+    if #paths ~= 1 then
+        error(string.format("%s: expected one path, got a %s of %d contours", what, shape.type, #paths), 3)
+    end
+    return paths[1]
+end
+
+-- A shape like the input from new paths: a compound for a compound,
+-- otherwise a polygon or polyline.
+function M.fromPaths(shape, paths, closed)
+    if shape.type == "compound" then return M.compound(paths) end
+    if closed then return M.polygon(paths[1]) end
+    return M.polyline(paths[1])
+end
+
+local function along(what)
+    return function(shape, n)
+        local paths = M.paths(shape, what, true)
+        if not paths then return shape end
+        local pts = M.onePath(paths, shape, what)
+        if #pts < 2 then return shape end
+        return M.polyline(algo.sampleAlong(pts, n))
+    end
+end
+
+-- Sample n evenly-spaced points along a path, returning a polyline. Takes
+-- every shape but a compound of several contours. A polygon runs from
+-- its first point to its last without the closing edge. Circles,
+-- ellipses, rects and one-contour compounds go all the way round, ending
+-- where they start. Shapes without at least two points are returned
+-- unchanged.
+M.sampleAlong = along("sampleAlong")
 
 -- Subdivide a shape by inserting midpoints between each pair of points.
+-- Circles, ellipses and rects come back as polygons, arcs, beziers and
+-- splines as polylines, and compounds as compounds with every contour
+-- subdivided. Paths with fewer than two points are left as they are.
 function M.subdivide(shape, iterations)
-    local pts, closed = M.pathPoints(shape)
-    if not pts or #pts < 2 then return shape end
-    pts = algo.subdivide(pts, closed, iterations or 1)
-    if closed then return M.polygon(pts) end
-    return M.polyline(pts)
+    local paths, closed = M.paths(shape, "subdivide")
+    if not paths then return shape end
+    if shape.type ~= "compound" and #paths[1] < 2 then return shape end
+    for i, pts in ipairs(paths) do
+        if #pts >= 2 then paths[i] = algo.subdivide(pts, closed, iterations or 1) end
+    end
+    return M.fromPaths(shape, paths, closed)
 end
 
--- Redistribute n points evenly along a path (alias for sampleAlong).
-function M.resample(shape, n)
-    return M.sampleAlong(shape, n)
-end
+-- Redistribute n points evenly along a path (sampleAlong by another name).
+M.resample = along("resample")
 
 return M

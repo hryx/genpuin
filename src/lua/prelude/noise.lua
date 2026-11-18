@@ -55,7 +55,15 @@ end
 
 -- Curl of simplex noise at (x, y): a divergence free vector dx, dy.
 -- opts takes the noiseGrid noise options (kind, octaves, fractal, warp...)
--- plus scale (default 1), offset = {x, y} and z.
+-- plus scale (default 1), offset = {x, y} and z. The noise is sampled at
+-- (x * scale + offset[1], y * scale + offset[2]) and opts.z picks a slice
+-- of its 3D form, so moving z animates the field. The vector is the noise
+-- gradient per noise unit turned a quarter turn, not a unit vector, and
+-- scale does not shrink it. For one octave of simplex its length
+-- averages about 3.3 and peaks near 7.5, for perlin about 1.2 and 3.
+-- More octaves raise the peaks. Normalize it, or take gen.curlFlow, when
+-- only the direction matters. Noise coordinates are 32-bit floats, so
+-- past about 8000 the vector turns noisy.
 function M.curl(x, y, opts)
     return T.curl(seed, x, y, opts)
 end

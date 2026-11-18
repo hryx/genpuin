@@ -61,7 +61,6 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "smooth", .func = zlua.wrap(smooth) },
     .{ .name = "jitter", .func = zlua.wrap(jitter) },
     .{ .name = "taper", .func = zlua.wrap(taper) },
-    .{ .name = "stipple", .func = zlua.wrap(stipple) },
     .{ .name = "dash", .func = zlua.wrap(dash) },
     .{ .name = "bezierPoint", .func = zlua.wrap(bezierPoint) },
     .{ .name = "bezierTangent", .func = zlua.wrap(bezierTangent) },
@@ -85,6 +84,11 @@ const State = struct {
 // A var, because identical constants may be merged to one address and
 // this address is the registry key.
 var state_key: u8 = 0;
+
+/// The random stream behind gen.rand, for bindings in other files.
+pub fn randomStream(lua: *Lua) *Rng {
+    return &getState(lua).rng;
+}
 
 fn getState(lua: *Lua) *State {
     lua.pushLightUserdata(&state_key);
@@ -899,18 +903,6 @@ fn taper(lua: *Lua) !i32 {
     util.pushPoints(lua, sampled);
     pushNumbers(lua, widths);
     return 2;
-}
-
-/// stipple(points, closed, density) -> dots
-fn stipple(lua: *Lua) !i32 {
-    var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const pts = try checkPoints(lua, arena, 1);
-    const closed = lua.toBoolean(2);
-    const density = lua.checkNumber(3);
-    util.pushPoints(lua, try algo.path.stipple(arena, &getState(lua).rng, pts, closed, density));
-    return 1;
 }
 
 /// dash(points, dashLen, gapLen) -> list of point lists

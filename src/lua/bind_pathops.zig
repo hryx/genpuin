@@ -1,8 +1,8 @@
 //! core.pathops: polygon booleans, signed distance fields, contours,
-//! offsets, hatching, simplification and plotter path ordering. These take
-//! shape tables and return shape tables. Most are the gen.* functions
-//! themselves, so an error raised here names the script line. Circles,
-//! ellipses and rects are flattened by src/pathops/flatten.zig.
+//! offsets, hatching, simplification, plotter path ordering, stippling and
+//! shape outlines. These take shape tables and return shape tables. Most
+//! are the gen.* functions themselves, so an error raised here names the
+//! script line. Curved shapes are flattened by src/pathops/flatten.zig.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -12,7 +12,9 @@ const genpuin = @import("genpuin");
 const pathops = genpuin.pathops;
 const geom = pathops.geom;
 const sdf = pathops.sdf;
+const path = genpuin.algo.path;
 
+const bind_algo = @import("bind_algo.zig");
 const util = @import("util.zig");
 const Lua = util.Lua;
 const Vec2 = util.Vec2;
@@ -30,6 +32,8 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "simplify", .func = zlua.wrap(simplify) },
     .{ .name = "orderPaths", .func = zlua.wrap(orderPaths) },
     .{ .name = "joinPaths", .func = zlua.wrap(joinPaths) },
+    .{ .name = "stipple", .func = zlua.wrap(stipple) },
+    .{ .name = "outline", .func = zlua.wrap(outline) },
 };
 
 const max_depth = 64;
@@ -77,7 +81,7 @@ fn rectPart(lua: *Lua, r: i32, i: usize, default: f64) f64 {
 // they are, a list of shapes is read element by element, and a list whose
 // first element is a point is one contour or path.
 
-const ShapeKind = enum { line, polyline, polygon, compound, rect, circle, ellipse };
+const ShapeKind = enum { line, polyline, polygon, compound, rect, circle, ellipse, arc, bezier, spline };
 
 const Tag = union(enum) {
     known: ShapeKind,
@@ -219,7 +223,7 @@ fn walkClosed(lua: *Lua, arena: Allocator, sink: anytype, index_in: i32, depth: 
         },
     };
     switch (kind) {
-        .line, .polyline => return false,
+        .line, .polyline, .arc, .bezier, .spline => return false,
         .polygon => {
             defer lua.pop(1);
             if (lua.getField(index, "points") != .nil) try sink.pointList(-1);
@@ -272,7 +276,7 @@ fn walkPaths(lua: *Lua, sink: *ZigSink, index_in: i32, depth: u32) !void {
                 if (lua.getField(index, "points") != .nil) try sink.pointList(-1);
                 return;
             },
-            .polygon, .compound, .rect, .circle, .ellipse => {},
+            .polygon, .compound, .rect, .circle, .ellipse, .arc, .bezier, .spline => {},
         },
         .none => {
             if (isBarePath(lua, index)) return sink.pointList(index);
@@ -685,7 +689,8 @@ fn simplifyMethod(lua: *Lua, index: i32) pathops.simplify.Method {
 }
 
 /// simplify(shape, tolerance, opts) -> the shape with fewer points. A
-/// line comes back as it is.
+/// line comes back as it is, and arcs, Beziers and splines come back as
+/// polylines.
 fn simplify(lua: *Lua) !i32 {
     var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
     defer arena_state.deinit();
@@ -701,6 +706,11 @@ fn simplify(lua: *Lua) !i32 {
             .polyline => {
                 _ = lua.getField(1, "points");
                 const pts = try util.readPoints(lua, arena, -1);
+                pushShape(lua, "polyline", try pathops.simplify.simplify(arena, pts, lua.checkNumber(2), false, method));
+                return 1;
+            },
+            .arc, .bezier, .spline => {
+                const pts = try openCurve(lua, arena, 1, kind);
                 pushShape(lua, "polyline", try pathops.simplify.simplify(arena, pts, lua.checkNumber(2), false, method));
                 return 1;
             },
@@ -821,4 +831,153 @@ fn joinPaths(lua: *Lua) !i32 {
         util.rawSet(lua, -2, i);
     }
     return 1;
+}
+
+fn shapeCubic(lua: *Lua, index: i32) path.Cubic {
+    return .{ shapeVec2(lua, index, "p0"), shapeVec2(lua, index, "p1"), shapeVec2(lua, index, "p2"), shapeVec2(lua, index, "p3") };
+}
+
+/// The points of a shape's `points` list, empty when it has none.
+fn shapePoints(lua: *Lua, arena: Allocator, index: i32) ![]Vec2 {
+    defer lua.pop(1);
+    if (lua.getField(index, "points") == .nil) return &.{};
+    return util.readPoints(lua, arena, -1);
+}
+
+/// The flattened points of an arc, bezier or spline at `index`.
+fn openCurve(lua: *Lua, arena: Allocator, index: i32, kind: ShapeKind) ![]Vec2 {
+    return switch (kind) {
+        .arc => pathops.flatten.arc(
+            arena,
+            shapeVec2(lua, index, "center"),
+            shapeNumber(lua, index, "r"),
+            shapeNumber(lua, index, "startAngle"),
+            shapeNumber(lua, index, "endAngle"),
+        ),
+        .bezier => pathops.flatten.cubic(arena, shapeCubic(lua, index)),
+        .spline => pathops.flatten.spline(arena, try shapePoints(lua, arena, index)),
+        .line, .polyline, .polygon, .compound, .rect, .circle, .ellipse => unreachable, // callers pass only the three open curves
+    };
+}
+
+/// The stipple region of the shape at `index`, read as marshal.zig reads
+/// it for drawing. Null for a shape that is not drawn as a path or area.
+fn readRegion(lua: *Lua, arena: Allocator, index: i32) !?path.Region {
+    const kind = switch (shapeTag(lua, index)) {
+        .known => |k| k,
+        .none, .other => return null,
+    };
+    return switch (kind) {
+        .polygon => .{ .polygon = try shapePoints(lua, arena, index) },
+        .polyline => .{ .open = path.pointsBox(try shapePoints(lua, arena, index)) },
+        .line => .{ .open = path.pointsBox(&.{ shapeVec2(lua, index, "a"), shapeVec2(lua, index, "b") }) },
+        .bezier => .{ .open = path.cubicBox(shapeCubic(lua, index)) },
+        .spline => blk: {
+            const pts = try shapePoints(lua, arena, index);
+            if (pts.len < 2) break :blk .{ .open = path.pointsBox(pts) };
+            var b = path.pointsBox(&.{});
+            for (try path.splineToBeziers(arena, pts)) |c| {
+                const cb = path.cubicBox(c);
+                b = path.growBox(path.growBox(b, cb[0]), cb[1]);
+            }
+            break :blk .{ .open = b };
+        },
+        .compound => blk: {
+            defer lua.pop(1);
+            if (lua.getField(index, "contours") == .nil) break :blk .{ .compound = &.{} };
+            break :blk .{ .compound = try util.readContours(lua, arena, -1) };
+        },
+        .circle => .{ .circle = .{ .c = shapeVec2(lua, index, "center"), .r = shapeNumber(lua, index, "r") } },
+        .ellipse => .{ .ellipse = .{
+            .c = shapeVec2(lua, index, "center"),
+            .rx = shapeNumber(lua, index, "rx"),
+            .ry = shapeNumber(lua, index, "ry"),
+        } },
+        .rect => .{ .rect = .{
+            .x = shapeNumber(lua, index, "x"),
+            .y = shapeNumber(lua, index, "y"),
+            .w = shapeNumber(lua, index, "w"),
+            .h = shapeNumber(lua, index, "h"),
+            .rx = shapeOptNumber(lua, index, "rx") orelse 0,
+            .ry = shapeOptNumber(lua, index, "ry") orelse 0,
+        } },
+        .arc => .{ .pie = .{
+            .c = shapeVec2(lua, index, "center"),
+            .r = shapeNumber(lua, index, "r"),
+            .start = shapeNumber(lua, index, "startAngle"),
+            .end = shapeNumber(lua, index, "endAngle"),
+        } },
+    };
+}
+
+/// stipple(shape, density) -> dots, or nil and a message for a shape
+/// stipple cannot read, so the prelude can raise it at the script line.
+fn stipple(lua: *Lua) !i32 {
+    var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    lua.checkType(1, .table);
+    const density = lua.checkNumber(2);
+    const region = (try readRegion(lua, arena, 1)) orelse {
+        lua.pushNil();
+        _ = lua.pushString(try std.fmt.allocPrint(arena, "unsupported shape type {s}", .{try typeName(lua, arena, 1)}));
+        return 2;
+    };
+    util.pushPoints(lua, try path.stipple(arena, bind_algo.randomStream(lua), region, density));
+    return 1;
+}
+
+/// outline(shape, loop) -> paths, closed. The shape's outline as a list
+/// of point lists: one for most shapes, one per contour for a compound.
+/// Closed outlines repeat their first point at the end when loop is
+/// true. Nil and a message for a table that is not a shape.
+fn outline(lua: *Lua) !i32 {
+    var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    lua.checkType(1, .table);
+    const loop = lua.toBoolean(2);
+    const kind = switch (shapeTag(lua, 1)) {
+        .known => |k| k,
+        .none, .other => {
+            lua.pushNil();
+            _ = lua.pushString(try std.fmt.allocPrint(arena, "unsupported shape type {s}", .{try typeName(lua, arena, 1)}));
+            return 2;
+        },
+    };
+    switch (kind) {
+        .line => {
+            util.pushContours(lua, &.{&.{ shapeVec2(lua, 1, "a"), shapeVec2(lua, 1, "b") }});
+            lua.pushBoolean(false);
+        },
+        .polyline => {
+            util.pushContours(lua, &.{try shapePoints(lua, arena, 1)});
+            lua.pushBoolean(false);
+        },
+        .arc, .bezier, .spline => {
+            util.pushContours(lua, &.{try openCurve(lua, arena, 1, kind)});
+            lua.pushBoolean(false);
+        },
+        .polygon, .compound, .rect, .circle, .ellipse => {
+            const closed = (try closedContours(lua, arena, 1)).?; // every closed kind is read by walkClosed
+            if (!loop) {
+                util.pushContours(lua, closed);
+            } else {
+                const loops = try arena.alloc([]const Vec2, closed.len);
+                for (loops, closed) |*out, c| {
+                    if (c.len == 0) {
+                        out.* = c;
+                        continue;
+                    }
+                    const pts = try arena.alloc(Vec2, c.len + 1);
+                    @memcpy(pts[0..c.len], c);
+                    pts[c.len] = c[0];
+                    out.* = pts;
+                }
+                util.pushContours(lua, loops);
+            }
+            lua.pushBoolean(true);
+        },
+    }
+    return 2;
 }
