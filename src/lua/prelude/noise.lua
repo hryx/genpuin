@@ -14,15 +14,16 @@ local M = {}
 local perlin = native.perlin
 local fbm = native.fbm
 
-local seed = core.vary * 1000003
+-- An unseeded Perlin table is noiseSeed(0), so this only picks up
+-- --noise-seed.
+local seed = algo.noiseSeed(0)
 
 -- Seed every noise kind: the Perlin table, and simplex, valueNoise, worley,
 -- curl, curlFlow and noiseGrid calls without opts.seed.
--- With --vary N on the command line, N is mixed into every seed, and a
--- script that never seeds behaves as if it called seed(0).
+-- With --noise-seed N on the command line, every call acts as seed(N), and
+-- a script that never seeds starts as if it called seed(N).
 function M.seed(n)
-    algo.noiseSeed(n)
-    seed = n + core.vary * 1000003
+    seed = algo.noiseSeed(n)
 end
 
 -- 2D Perlin noise, returns a value in approximately [-1, 1].

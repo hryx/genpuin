@@ -1,6 +1,6 @@
 //! genpuin CLI: run art scripts and export the canvas each one draws.
-//! Every render, one per script or one per variation, is a job with its
-//! own Lua state. A fixed set of workers pulls jobs from a shared
+//! Every render, one per script or one per seed of a range, is a job
+//! with its own Lua state. A fixed set of workers pulls jobs from a shared
 //! counter, so `-j` caps the total however the work is split.
 
 const std = @import("std");
@@ -30,17 +30,23 @@ const usage =
     \\  --depth <8|16>   PNG bits per channel (default 8)
     \\  --vector-only    With SVG output: leave post passes out and write
     \\                   just the shapes
-    \\  --vary <n>       Variation: gen.seed and gen.noiseSeed mix in n
-    \\  --vary <a>..<b>  One full-size file per variation, a to b
-    \\  --sheet          With a --vary range: one numbered contact sheet
-    \\                   per script instead of the files
+    \\  --seed <n>       Every gen.seed(x) acts as gen.seed(n), and a
+    \\                   script that never seeds starts as gen.seed(n)
+    \\  --noise-seed <n> The same for gen.noiseSeed
+    \\  --seed <a>..<b>  One full-size file per seed, a to b. Either
+    \\                   flag can be a range, but not both
+    \\  --sheet          With a range: one contact sheet per script,
+    \\                   each tile labeled with its seed
     \\  --tile <px>      Contact sheet tile width (default 320)
     \\  -j <n>           Renders at once, across all scripts and
-    \\                   variations (default: CPU count)
+    \\                   seeds (default: CPU count)
     \\  -h, --help       Show this help
     \\
-    \\Made-up names are <script>.<fmt>, <script>-<n>.<fmt> with --vary
-    \\(n zero-padded to the widest variation in the run), and
+    \\Seeds are integers from 0 to 4294967295. A seed given in a script
+    \\call, such as gen.post.grain{seed = 5}, is used as written.
+    \\
+    \\Made-up names are <script>.<fmt>, <script>-<n>.<fmt> for each n
+    \\of a range (n zero-padded to the widest in the run), and
     \\<script>-sheet.<fmt> with --sheet.
     \\
     \\An SVG shows exactly what the PNG shows, so a canvas SVG cannot
@@ -54,8 +60,8 @@ const usage =
     \\  genpuin a.lua                         a.png
     \\  genpuin a.lua -o cover.svg            cover.svg
     \\  genpuin a.lua b.lua -d out            out/a.png out/b.png
-    \\  genpuin a.lua --vary 1..16 -d picks   picks/a-01.png to a-16.png
-    \\  genpuin a.lua --vary 1..64 --sheet    a-sheet.png
+    \\  genpuin a.lua --seed 1..16 -d picks   picks/a-01.png to a-16.png
+    \\  genpuin a.lua --seed 1..64 --sheet    a-sheet.png
     \\
 ;
 
@@ -67,23 +73,71 @@ const Args = struct {
     scale: f64 = 1,
     ss: u32 = 1,
     depth: genpuin.image_io.Depth = .@"8",
-    vary: ?i64 = null,
-    vary_hi: ?i64 = null,
+    seed: ?SeedFlag = null,
+    noise_seed: ?SeedFlag = null,
     sheet: bool = false,
     tile: ?u32 = null,
     jobs: ?u32 = null,
     vector_only: bool = false,
     script_args: []const []const u8 = &.{},
 
-    /// Variations each script renders: the --vary range, or 1.
-    fn variationCount(a: *const Args) usize {
-        const hi = a.vary_hi orelse return 1;
-        return @intCast(hi - a.vary.? + 1);
+    /// The value of --seed or --noise-seed. `last` is set when the
+    /// value was written as a range, even one like 5..5.
+    const SeedFlag = struct {
+        first: u32,
+        last: ?u32 = null,
+    };
+
+    /// The range a run sweeps, if any. planOutputs refuses two.
+    fn sweep(a: *const Args) ?Sweep {
+        if (a.seed) |s| if (s.last) |last| return .{ .flag = .seed, .first = s.first, .last = last };
+        if (a.noise_seed) |s| if (s.last) |last| return .{ .flag = .noise_seed, .first = s.first, .last = last };
+        return null;
     }
 
-    /// The variation job `index` of a script renders.
-    fn variation(a: *const Args, index: usize) i64 {
-        return (a.vary orelse 0) + @as(i64, @intCast(index));
+    /// Renders per script: the length of the range, or 1.
+    fn rangeLen(a: *const Args) usize {
+        const s = a.sweep() orelse return 1;
+        return s.count();
+    }
+
+    /// The seeds job `index` of a script runs with.
+    fn seedsAt(a: *const Args, index: usize) util.Seeds {
+        var seeds: util.Seeds = .{
+            .seed = if (a.seed) |s| s.first else null,
+            .noise_seed = if (a.noise_seed) |s| s.first else null,
+        };
+        if (a.sweep()) |s| switch (s.flag) {
+            .seed => seeds.seed = s.at(index),
+            .noise_seed => seeds.noise_seed = s.at(index),
+        };
+        return seeds;
+    }
+};
+
+/// An inclusive range of --seed or --noise-seed values.
+const Sweep = struct {
+    flag: Flag,
+    first: u32,
+    last: u32,
+
+    const Flag = enum { seed, noise_seed };
+
+    fn count(s: Sweep) usize {
+        return @as(usize, s.last - s.first) + 1;
+    }
+
+    fn at(s: Sweep, index: usize) u32 {
+        assert(index < s.count());
+        return s.first + @as(u32, @intCast(index));
+    }
+
+    /// How reports name a value of the range.
+    fn noun(s: Sweep) []const u8 {
+        return switch (s.flag) {
+            .seed => "seed",
+            .noise_seed => "noise seed",
+        };
     }
 };
 
@@ -135,7 +189,7 @@ fn parseArgs(arena: Allocator, argv: []const [:0]const u8, diag: *Io.Writer) Par
 }
 
 fn takesValue(name: []const u8) bool {
-    const valued = [_][]const u8{ "-o", "-d", "-f", "-s", "--ss", "--depth", "--vary", "--tile", "-j" };
+    const valued = [_][]const u8{ "-o", "-d", "-f", "-s", "--ss", "--depth", "--seed", "--noise-seed", "--tile", "-j" };
     for (valued) |v| if (eql(name, v)) return true;
     return false;
 }
@@ -158,15 +212,10 @@ fn parseOption(a: *Args, name: []const u8, v: []const u8, diag: *Io.Writer) Usag
         if (a.ss < 1 or a.ss > 16) return usageError(diag, "--ss must be 1 to 16", .{});
     } else if (eql(name, "--depth")) {
         a.depth = if (eql(v, "16")) .@"16" else if (eql(v, "8")) .@"8" else return usageError(diag, "--depth is 8 or 16", .{});
-    } else if (eql(name, "--vary")) {
-        if (std.mem.indexOf(u8, v, "..")) |dots| {
-            a.vary = std.fmt.parseInt(i64, v[0..dots], 10) catch return usageError(diag, "bad --vary range", .{});
-            a.vary_hi = std.fmt.parseInt(i64, v[dots + 2 ..], 10) catch return usageError(diag, "bad --vary range", .{});
-            if (a.vary_hi.? < a.vary.?) return usageError(diag, "--vary range is backwards", .{});
-        } else {
-            a.vary = std.fmt.parseInt(i64, v, 10) catch return usageError(diag, "--vary needs an integer", .{});
-            a.vary_hi = null;
-        }
+    } else if (eql(name, "--seed")) {
+        a.seed = try parseSeedFlag(name, v, diag);
+    } else if (eql(name, "--noise-seed")) {
+        a.noise_seed = try parseSeedFlag(name, v, diag);
     } else if (eql(name, "--tile")) {
         a.tile = std.fmt.parseInt(u32, v, 10) catch return usageError(diag, "--tile needs an integer", .{});
         if (a.tile.? < 1) return usageError(diag, "--tile must be at least 1", .{});
@@ -176,6 +225,23 @@ fn parseOption(a: *Args, name: []const u8, v: []const u8, diag: *Io.Writer) Usag
     } else {
         unreachable; // takesValue lists every option handled here
     }
+}
+
+/// `n` or `a..b`, each an integer that gen.seed reads exactly. Rng.init
+/// keeps only floor(|n|) mod 2^32, so negatives and values from 2^32 up
+/// are refused rather than aliasing another seed.
+fn parseSeedFlag(name: []const u8, v: []const u8, diag: *Io.Writer) UsageError!Args.SeedFlag {
+    const dots = std.mem.indexOf(u8, v, "..") orelse {
+        const n = std.fmt.parseInt(u32, v, 10) catch
+            return usageError(diag, "{s} needs an integer from 0 to 4294967295 or a range a..b", .{name});
+        return .{ .first = n };
+    };
+    const first = std.fmt.parseInt(u32, v[0..dots], 10) catch
+        return usageError(diag, "{s} range needs integers from 0 to 4294967295", .{name});
+    const last = std.fmt.parseInt(u32, v[dots + 2 ..], 10) catch
+        return usageError(diag, "{s} range needs integers from 0 to 4294967295", .{name});
+    if (last < first) return usageError(diag, "{s} range is backwards", .{name});
+    return .{ .first = first, .last = last };
 }
 
 /// Where every render goes, decided before anything renders.
@@ -189,11 +255,12 @@ const Plan = struct {
 
 fn planOutputs(arena: Allocator, a: *const Args, diag: *Io.Writer) (UsageError || Allocator.Error)!Plan {
     assert(a.scripts.len > 0);
-    if (a.sheet and a.vary_hi == null) return usageError(diag, "--sheet needs a --vary range such as 1..16", .{});
+    if (isRange(a.seed) and isRange(a.noise_seed)) return usageError(diag, "--seed and --noise-seed cannot both be ranges", .{});
+    if (a.sheet and a.sweep() == null) return usageError(diag, "--sheet needs a --seed or --noise-seed range such as 1..16", .{});
     if (a.tile != null and !a.sheet) return usageError(diag, "--tile sets the contact sheet tile width, so it needs --sheet", .{});
     if (a.output != null and a.dir != null) return usageError(diag, "-o names one file and -d a directory for made-up names. Use one of them", .{});
 
-    const per_script = if (a.sheet) 1 else a.variationCount();
+    const per_script = if (a.sheet) 1 else a.rangeLen();
     const count = a.scripts.len * per_script;
     const format = if (a.output) |file| try outputFormat(a, file, count, diag) else a.format orelse .png;
     if (a.vector_only) {
@@ -208,7 +275,7 @@ fn planOutputs(arena: Allocator, a: *const Args, diag: *Io.Writer) (UsageError |
         outputs[0] = file;
         return .{ .outputs = outputs, .dir = null };
     }
-    const width = variationWidth(a);
+    const width = if (a.sweep()) |s| digitCount(s.last) else 0;
     for (a.scripts, 0..) |script, s| {
         for (outputs[s * per_script ..][0..per_script], 0..) |*out, v| {
             const name = try madeUpName(arena, std.fs.path.stem(script), a, width, v, format);
@@ -223,6 +290,11 @@ fn planOutputs(arena: Allocator, a: *const Args, diag: *Io.Writer) (UsageError |
         }
     };
     return .{ .outputs = outputs, .dir = a.dir };
+}
+
+fn isRange(flag: ?Args.SeedFlag) bool {
+    const f = flag orelse return false;
+    return f.last != null;
 }
 
 /// The format of the one file -o names, checked against the run.
@@ -241,29 +313,22 @@ fn outputFormat(a: *const Args, file: []const u8, count: usize, diag: *Io.Writer
     return named;
 }
 
-/// Digits in the widest variation of a run, so names sort in order.
-fn variationWidth(a: *const Args) usize {
-    const lo = a.vary orelse return 0;
-    const hi = a.vary_hi orelse lo;
-    return @max(digitCount(@abs(lo)), digitCount(@abs(hi)));
-}
-
-fn digitCount(n: u64) usize {
+fn digitCount(n: u32) usize {
     var digits: usize = 1;
     var rest = n / 10;
     while (rest > 0) : (rest /= 10) digits += 1;
     return digits;
 }
 
-/// `<stem>[-<variation>].<format>`, or `<stem>-sheet.<format>`.
+/// `<stem>.<format>`, `<stem>-<n>.<format>` for value n of a range, or
+/// `<stem>-sheet.<format>`. Names sort in order because n is padded to
+/// `width` digits.
 fn madeUpName(arena: Allocator, stem: []const u8, a: *const Args, width: usize, index: usize, format: Format) Allocator.Error![]const u8 {
     if (a.sheet) return std.fmt.allocPrint(arena, "{s}-sheet.{t}", .{ stem, format });
-    if (a.vary == null) return std.fmt.allocPrint(arena, "{s}.{t}", .{ stem, format });
-    const v = a.variation(index);
-    return std.fmt.allocPrint(arena, "{[stem]s}-{[sign]s}{[abs]d:0>[width]}.{[format]t}", .{
+    const s = a.sweep() orelse return std.fmt.allocPrint(arena, "{s}.{t}", .{ stem, format });
+    return std.fmt.allocPrint(arena, "{[stem]s}-{[n]d:0>[width]}.{[format]t}", .{
         .stem = stem,
-        .sign = if (v < 0) "-" else "",
-        .abs = @abs(v),
+        .n = s.at(index),
         .width = width,
         .format = format,
     });
@@ -316,7 +381,7 @@ pub fn main(init: std.process.Init) !void {
 }
 
 /// Every render one invocation asks for. Job `i` is script
-/// `i / variations` at variation `i % variations` of the range.
+/// `i / range_len` at value `i % range_len` of the range.
 const Batch = struct {
     gpa: Allocator,
     io: Io,
@@ -325,8 +390,8 @@ const Batch = struct {
     outputs: []const []const u8,
     /// One argv per script for its global `arg`.
     argvs: []const []const []const u8,
-    /// 1 unless --vary names a range.
-    variations: usize,
+    /// 1 unless --seed or --noise-seed names a range.
+    range_len: usize,
     /// Rendered tiles in job order for --sheet, otherwise empty.
     tiles: []?genpuin.Raster,
     /// Written only by the worker that ran the job.
@@ -346,8 +411,8 @@ const Batch = struct {
 
     fn init(arena: Allocator, opts: Options) !Batch {
         const a = opts.args;
-        const variations = a.variationCount();
-        const job_count = a.scripts.len * variations;
+        const range_len = a.rangeLen();
+        const job_count = a.scripts.len * range_len;
         assert(opts.outputs.len == if (a.sheet) a.scripts.len else job_count);
 
         const argvs = try arena.alloc([]const []const u8, a.scripts.len);
@@ -370,7 +435,7 @@ const Batch = struct {
             .lua_dir = opts.lua_dir,
             .outputs = opts.outputs,
             .argvs = argvs,
-            .variations = variations,
+            .range_len = range_len,
             .tiles = tiles,
             .failed = failed,
         };
@@ -401,8 +466,8 @@ const Batch = struct {
 
     /// Render job `i` and print its report in one piece.
     fn runJob(b: *Batch, i: usize) bool {
-        const script = i / b.variations;
-        const vary = b.args.variation(i % b.variations);
+        const script = i / b.range_len;
+        const index = i % b.range_len;
         var report: Io.Writer.Allocating = .init(b.gpa);
         defer report.deinit();
         const w = &report.writer;
@@ -412,9 +477,9 @@ const Batch = struct {
         else
             .{ .file = b.outputs[i] };
         var ok = true;
-        b.runOne(script, vary, target, w) catch |err| {
+        b.runOne(script, index, target, w) catch |err| {
             ok = false;
-            if (b.args.vary_hi != null) w.print("vary {d} failed: {t}\n", .{ vary, err }) catch {};
+            if (b.args.sweep()) |s| w.print("{s} {d} failed: {t}\n", .{ s.noun(), s.at(index), err }) catch {};
         };
         b.emit(script, ok, report.written());
         return ok;
@@ -431,9 +496,9 @@ const Batch = struct {
         }
     }
 
-    fn runOne(b: *Batch, script: usize, vary: i64, target: Target, w: *Io.Writer) !void {
+    fn runOne(b: *Batch, script: usize, index: usize, target: Target, w: *Io.Writer) !void {
         const path = b.args.scripts[script];
-        var host: util.Host = .{ .gpa = b.gpa, .io = b.io, .vary = vary };
+        var host: util.Host = .{ .gpa = b.gpa, .io = b.io, .seeds = b.args.seedsAt(index) };
         const lua = try host_mod.create(&host, .{
             .script_dir = std.fs.path.dirname(path) orelse ".",
             .lua_dir = b.lua_dir,
@@ -447,9 +512,11 @@ const Batch = struct {
         };
         if (!host_mod.pushCanvas(lua)) {
             // A missing tile would leave a hole in the sheet. A missing
-            // file is what `--vary n` alone does, so it stays silent.
+            // file is what a plain run of the script does, so it stays
+            // silent.
             if (target == .tile) {
-                try w.print("vary {d}: script made no canvas\n", .{vary});
+                const s = b.args.sweep().?;
+                try w.print("{s} {d}: script made no canvas\n", .{ s.noun(), s.at(index) });
                 return error.NoCanvas;
             }
             return;
@@ -487,11 +554,11 @@ const Batch = struct {
 
     /// Lay out each script's tiles on its sheet, then report whether
     /// every job and every sheet succeeded. A sheet is written even when
-    /// some of its variations failed.
+    /// some of its tiles failed.
     fn finish(b: *Batch) bool {
         var ok = std.mem.indexOfScalar(bool, b.failed, true) == null;
         if (!b.args.sheet) return ok;
-        const n = b.variations;
+        const n = b.range_len;
         for (b.outputs, 0..) |out, script| {
             const tiles = b.tiles[script * n ..][0..n];
             defer for (tiles) |*t| if (t.*) |*r| r.deinit(b.gpa);
@@ -503,7 +570,7 @@ const Batch = struct {
                 continue;
             };
             var buf: [Io.Dir.max_path_bytes + 64]u8 = undefined;
-            const text = std.fmt.bufPrint(&buf, "Wrote {s} ({d} variations)\n", .{ out, n }) catch "Wrote sheet\n";
+            const text = std.fmt.bufPrint(&buf, "Wrote {s} ({d} tiles)\n", .{ out, n }) catch "Wrote sheet\n";
             b.emit(script, true, text);
         }
         return ok;
@@ -512,8 +579,9 @@ const Batch = struct {
     fn writeSheet(b: *const Batch, tiles: []const ?genpuin.Raster, out: []const u8) !void {
         const sheet_tiles = try b.gpa.alloc(genpuin.sheet.Tile, tiles.len);
         defer b.gpa.free(sheet_tiles);
+        const s = b.args.sweep().?;
         for (sheet_tiles, tiles, 0..) |*st, t, i| {
-            st.* = .{ .raster = t, .label = b.args.variation(i) };
+            st.* = .{ .raster = t, .label = s.at(i) };
         }
         var sheet = try genpuin.sheet.compose(b.gpa, sheet_tiles, .{});
         defer sheet.deinit(b.gpa);
@@ -651,8 +719,8 @@ test "main: -o writes exactly the file it names" {
     try expectOutputs(&.{ "art/a.lua", "-o", "x/b.ppm" }, &.{"x/b.ppm"});
     try expectOutputs(&.{ "art/a.lua", "-o", "x/b.ppm", "-f", "ppm" }, &.{"x/b.ppm"});
     try expectOutputs(&.{ "art/a.lua", "-o", "cover.SVG" }, &.{"cover.SVG"});
-    try expectOutputs(&.{ "art/a.lua", "-o", "seven.png", "--vary", "7" }, &.{"seven.png"});
-    try expectOutputs(&.{ "art/a.lua", "-o", "s.png", "--vary", "1..4", "--sheet" }, &.{"s.png"});
+    try expectOutputs(&.{ "art/a.lua", "-o", "seven.png", "--seed", "7" }, &.{"seven.png"});
+    try expectOutputs(&.{ "art/a.lua", "-o", "s.png", "--seed", "1..4", "--sheet" }, &.{"s.png"});
 }
 
 test "main: -d holds the made-up names" {
@@ -674,26 +742,85 @@ test "main: the -d plan names the directory to create" {
     try std.testing.expect(without.dir == null);
 }
 
-test "main: --vary names every file with its variation" {
-    try expectOutputs(&.{ "a.lua", "--vary", "7" }, &.{"a-7.png"});
-    try expectOutputs(&.{ "a.lua", "--vary", "12", "-f", "svg" }, &.{"a-12.svg"});
-    try expectOutputs(&.{ "a.lua", "--vary", "2..4" }, &.{ "a-2.png", "a-3.png", "a-4.png" });
-    try expectOutputs(&.{ "a.lua", "b.lua", "--vary", "1..2", "-d", "out" }, &.{
-        "out/a-1.png", "out/a-2.png", "out/b-1.png", "out/b-2.png",
-    });
-    try expectOutputs(&.{ "a.lua", "--vary", "-2..1" }, &.{ "a--2.png", "a--1.png", "a-0.png", "a-1.png" });
+test "main: a single seed keeps the plain name" {
+    try expectOutputs(&.{ "a.lua", "--seed", "7" }, &.{"a.png"});
+    try expectOutputs(&.{ "a.lua", "--noise-seed", "12", "-f", "svg" }, &.{"a.svg"});
+    try expectOutputs(&.{ "a.lua", "--seed", "7", "--noise-seed", "3" }, &.{"a.png"});
 }
 
-test "main: variations are zero-padded to the widest in the run" {
-    try expectOutputs(&.{ "a.lua", "--vary", "8..11" }, &.{ "a-08.png", "a-09.png", "a-10.png", "a-11.png" });
-    try expectOutputs(&.{ "a.lua", "--vary", "99..100", "-f", "ppm" }, &.{ "a-099.ppm", "a-100.ppm" });
-    try expectOutputs(&.{ "a.lua", "--vary", "-12..-11" }, &.{ "a--12.png", "a--11.png" });
+test "main: a range names every file with its seed" {
+    try expectOutputs(&.{ "a.lua", "--seed", "2..4" }, &.{ "a-2.png", "a-3.png", "a-4.png" });
+    try expectOutputs(&.{ "a.lua", "--noise-seed", "2..4" }, &.{ "a-2.png", "a-3.png", "a-4.png" });
+    try expectOutputs(&.{ "a.lua", "b.lua", "--seed", "1..2", "-d", "out" }, &.{
+        "out/a-1.png", "out/a-2.png", "out/b-1.png", "out/b-2.png",
+    });
+    try expectOutputs(&.{ "a.lua", "--seed", "5..5" }, &.{"a-5.png"});
+    try expectOutputs(&.{ "a.lua", "--seed", "1..2", "--noise-seed", "9" }, &.{ "a-1.png", "a-2.png" });
+    try expectOutputs(&.{ "a.lua", "--seed", "9", "--noise-seed", "0..1" }, &.{ "a-0.png", "a-1.png" });
+    try expectOutputs(&.{ "a.lua", "--seed", "4294967294..4294967295" }, &.{ "a-4294967294.png", "a-4294967295.png" });
+}
+
+test "main: each job gets the single value and its value of the range" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    var buf: [64]u8 = undefined;
+    var diag: Io.Writer = .fixed(&buf);
+    const arena = arena_state.allocator();
+
+    const plain = try testArgs(arena, &.{"a.lua"}, &diag);
+    try std.testing.expectEqual(@as(usize, 1), plain.rangeLen());
+    try std.testing.expectEqual(util.Seeds{}, plain.seedsAt(0));
+
+    const single = try testArgs(arena, &.{ "a.lua", "--seed", "0" }, &diag);
+    try std.testing.expectEqual(@as(usize, 1), single.rangeLen());
+    try std.testing.expectEqual(util.Seeds{ .seed = 0 }, single.seedsAt(0));
+
+    const seeds = try testArgs(arena, &.{ "a.lua", "--seed", "10..13", "--noise-seed", "3" }, &diag);
+    try std.testing.expectEqual(@as(usize, 4), seeds.rangeLen());
+    try std.testing.expectEqual(util.Seeds{ .seed = 10, .noise_seed = 3 }, seeds.seedsAt(0));
+    try std.testing.expectEqual(util.Seeds{ .seed = 13, .noise_seed = 3 }, seeds.seedsAt(3));
+
+    const noise = try testArgs(arena, &.{ "a.lua", "--noise-seed", "7..8", "--seed", "1" }, &diag);
+    try std.testing.expectEqual(@as(usize, 2), noise.rangeLen());
+    try std.testing.expectEqual(util.Seeds{ .seed = 1, .noise_seed = 8 }, noise.seedsAt(1));
+
+    const later = try testArgs(arena, &.{ "a.lua", "--seed", "1..3", "--seed", "6" }, &diag);
+    try std.testing.expectEqual(@as(usize, 1), later.rangeLen());
+    try std.testing.expectEqual(util.Seeds{ .seed = 6 }, later.seedsAt(0));
+}
+
+test "main: seeds are integers gen.seed reads exactly" {
+    try expectUsage(&.{ "a.lua", "--seed", "-1" }, "--seed needs an integer from 0 to 4294967295 or a range a..b");
+    try expectUsage(&.{ "a.lua", "--seed", "4294967296" }, "--seed needs an integer from 0 to 4294967295 or a range a..b");
+    try expectUsage(&.{ "a.lua", "--seed", "1.5" }, "--seed needs an integer from 0 to 4294967295 or a range a..b");
+    try expectUsage(&.{ "a.lua", "--noise-seed", "x" }, "--noise-seed needs an integer from 0 to 4294967295 or a range a..b");
+    try expectUsage(&.{ "a.lua", "--seed", "-2..1" }, "--seed range needs integers from 0 to 4294967295");
+    try expectUsage(&.{ "a.lua", "--noise-seed", "1..4294967296" }, "--noise-seed range needs integers from 0 to 4294967295");
+    try expectUsage(&.{ "a.lua", "--seed", "1.." }, "--seed range needs integers from 0 to 4294967295");
+    try expectUsage(&.{ "a.lua", "--seed", "4..2" }, "--seed range is backwards");
+    try expectUsage(&.{ "a.lua", "--noise-seed", "4..2" }, "--noise-seed range is backwards");
+    try expectUsage(&.{ "a.lua", "--seed" }, "--seed needs a value");
+}
+
+test "main: only one of --seed and --noise-seed may be a range" {
+    try expectUsage(&.{ "a.lua", "--seed", "1..2", "--noise-seed", "3..4" }, "--seed and --noise-seed cannot both be ranges");
+    try expectUsage(&.{ "a.lua", "--seed", "1..1", "--noise-seed", "1..1", "--sheet" }, "--seed and --noise-seed cannot both be ranges");
+}
+
+test "main: --vary is gone" {
+    try expectUsage(&.{ "a.lua", "--vary", "3" }, "unknown option: --vary");
+}
+
+test "main: range values are zero-padded to the widest in the run" {
+    try expectOutputs(&.{ "a.lua", "--seed", "8..11" }, &.{ "a-08.png", "a-09.png", "a-10.png", "a-11.png" });
+    try expectOutputs(&.{ "a.lua", "--noise-seed", "99..100", "-f", "ppm" }, &.{ "a-099.ppm", "a-100.ppm" });
+    try expectOutputs(&.{ "a.lua", "--seed", "0..1" }, &.{ "a-0.png", "a-1.png" });
 
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     var buf: [64]u8 = undefined;
     var diag: Io.Writer = .fixed(&buf);
-    const plan = try testPlan(arena_state.allocator(), &.{ "a.lua", "--vary", "1..16", "-d", "picks" }, &diag);
+    const plan = try testPlan(arena_state.allocator(), &.{ "a.lua", "--seed", "1..16", "-d", "picks" }, &diag);
     try std.testing.expectEqual(@as(usize, 16), plan.outputs.len);
     try std.testing.expectEqualStrings("picks/a-01.png", plan.outputs[0]);
     try std.testing.expectEqualStrings("picks/a-09.png", plan.outputs[8]);
@@ -701,17 +828,18 @@ test "main: variations are zero-padded to the widest in the run" {
 }
 
 test "main: --sheet writes one sheet per script" {
-    try expectOutputs(&.{ "art/a.lua", "--vary", "1..4", "--sheet" }, &.{"a-sheet.png"});
-    try expectOutputs(&.{ "a.lua", "b.lua", "--vary", "0..3", "--sheet", "-d", "out", "--tile", "100" }, &.{
+    try expectOutputs(&.{ "art/a.lua", "--seed", "1..4", "--sheet" }, &.{"a-sheet.png"});
+    try expectOutputs(&.{ "a.lua", "b.lua", "--seed", "0..3", "--sheet", "-d", "out", "--tile", "100" }, &.{
         "out/a-sheet.png", "out/b-sheet.png",
     });
-    try expectOutputs(&.{ "a.lua", "--vary", "1..64", "--sheet", "-f", "ppm" }, &.{"a-sheet.ppm"});
+    try expectOutputs(&.{ "a.lua", "--seed", "1..64", "--sheet", "-f", "ppm" }, &.{"a-sheet.ppm"});
+    try expectOutputs(&.{ "a.lua", "--noise-seed", "1..4", "--sheet", "--seed", "2" }, &.{"a-sheet.png"});
 }
 
 test "main: -o refuses a run with several outputs and suggests -d" {
     try expectUsage(&.{ "a.lua", "b.lua", "-o", "out.png" }, "-o out.png names one file, but this run writes 2. Use -d <dir> for a directory");
-    try expectUsage(&.{ "a.lua", "-o", "out.png", "--vary", "1..16" }, "-o out.png names one file, but this run writes 16. Use -d <dir> for a directory");
-    try expectUsage(&.{ "a.lua", "b.lua", "-o", "s.png", "--vary", "1..4", "--sheet" }, "-o s.png names one file, but this run writes 2. Use -d <dir> for a directory");
+    try expectUsage(&.{ "a.lua", "-o", "out.png", "--seed", "1..16" }, "-o out.png names one file, but this run writes 16. Use -d <dir> for a directory");
+    try expectUsage(&.{ "a.lua", "b.lua", "-o", "s.png", "--seed", "1..4", "--sheet" }, "-o s.png names one file, but this run writes 2. Use -d <dir> for a directory");
     try expectUsage(&.{ "a.lua", "-o", "out/" }, "-o out/ is a directory. Use -d out/ for a directory");
     try expectUsage(&.{ "a.lua", "-o", "plain" }, "-o plain needs a .png, .ppm or .svg extension");
     try expectUsage(&.{ "a.lua", "-o", "a.png", "-d", "out" }, "-o names one file and -d a directory for made-up names. Use one of them");
@@ -724,20 +852,21 @@ test "main: -f must agree with the -o extension" {
 }
 
 test "main: --sheet and --tile need each other and a range" {
-    try expectUsage(&.{ "a.lua", "--sheet" }, "--sheet needs a --vary range such as 1..16");
-    try expectUsage(&.{ "a.lua", "--vary", "3", "--sheet" }, "--sheet needs a --vary range such as 1..16");
-    try expectUsage(&.{ "a.lua", "--vary", "1..3", "--tile", "200" }, "--tile sets the contact sheet tile width, so it needs --sheet");
-    try expectUsage(&.{ "a.lua", "--vary", "1..3", "--sheet", "-f", "svg" }, "a contact sheet cannot be an SVG");
-    try expectUsage(&.{ "a.lua", "--vary", "1..3", "--sheet", "-o", "s.svg" }, "a contact sheet cannot be an SVG");
-    try expectUsage(&.{ "a.lua", "--vary", "1..3", "--sheet", "--tile", "0" }, "--tile must be at least 1");
+    try expectUsage(&.{ "a.lua", "--sheet" }, "--sheet needs a --seed or --noise-seed range such as 1..16");
+    try expectUsage(&.{ "a.lua", "--seed", "3", "--sheet" }, "--sheet needs a --seed or --noise-seed range such as 1..16");
+    try expectUsage(&.{ "a.lua", "--seed", "3", "--noise-seed", "4", "--sheet" }, "--sheet needs a --seed or --noise-seed range such as 1..16");
+    try expectUsage(&.{ "a.lua", "--seed", "1..3", "--tile", "200" }, "--tile sets the contact sheet tile width, so it needs --sheet");
+    try expectUsage(&.{ "a.lua", "--seed", "1..3", "--sheet", "-f", "svg" }, "a contact sheet cannot be an SVG");
+    try expectUsage(&.{ "a.lua", "--seed", "1..3", "--sheet", "-o", "s.svg" }, "a contact sheet cannot be an SVG");
+    try expectUsage(&.{ "a.lua", "--seed", "1..3", "--sheet", "--tile", "0" }, "--tile must be at least 1");
 }
 
 test "main: duplicate outputs are caught without regard to case" {
     try expectUsage(&.{ "a.lua", "sub/a.lua", "-d", "out" }, "a.lua and sub/a.lua would both write out/a.png");
     try expectUsage(&.{ "x/a.lua", "y/a.lua" }, "x/a.lua and y/a.lua would both write a.png");
     try expectUsage(&.{ "A.lua", "a.lua" }, "A.lua and a.lua would both write a.png");
-    try expectUsage(&.{ "x/A.lua", "a.lua", "--vary", "1..2" }, "x/A.lua and a.lua would both write a-1.png");
-    try expectUsage(&.{ "a.lua", "x/A.lua", "--vary", "1..2", "--sheet" }, "a.lua and x/A.lua would both write A-sheet.png");
+    try expectUsage(&.{ "x/A.lua", "a.lua", "--seed", "1..2" }, "x/A.lua and a.lua would both write a-1.png");
+    try expectUsage(&.{ "a.lua", "x/A.lua", "--seed", "1..2", "--sheet" }, "a.lua and x/A.lua would both write A-sheet.png");
 }
 
 test "main: other usage errors are caught before rendering" {
@@ -746,15 +875,14 @@ test "main: other usage errors are caught before rendering" {
     try expectUsage(&.{ "a.lua", "-d", "" }, "-d needs a directory");
     try expectUsage(&.{ "a.lua", "--bogus" }, "unknown option: --bogus");
     try expectUsage(&.{ "a.lua", "--format", "svg" }, "unknown option: --format");
-    try expectUsage(&.{ "a.lua", "--vary", "4..2" }, "--vary range is backwards");
 }
 
 test "main: --vector-only needs an SVG output" {
     try expectOutputs(&.{ "a.lua", "-o", "a.svg", "--vector-only" }, &.{"a.svg"});
-    try expectOutputs(&.{ "a.lua", "-f", "svg", "--vary", "1..2", "--vector-only" }, &.{ "a-1.svg", "a-2.svg" });
+    try expectOutputs(&.{ "a.lua", "-f", "svg", "--seed", "1..2", "--vector-only" }, &.{ "a-1.svg", "a-2.svg" });
     try expectUsage(&.{ "a.lua", "-o", "a.png", "--vector-only" }, "--vector-only needs an SVG output (-o file.svg or -f svg)");
     try expectUsage(&.{ "a.lua", "--vector-only" }, "--vector-only needs an SVG output (-o file.svg or -f svg)");
-    try expectUsage(&.{ "a.lua", "--vector-only", "--vary", "0..3", "--sheet" }, "--vector-only cannot make a contact sheet");
+    try expectUsage(&.{ "a.lua", "--vector-only", "--noise-seed", "0..3", "--sheet" }, "--vector-only cannot make a contact sheet");
 }
 
 test "main: -o refuses an existing directory and suggests -d" {
@@ -829,7 +957,7 @@ fn testRender(arena: Allocator, scripts: []const [:0]const u8, jobs: u32, option
     return bytes;
 }
 
-test "main: a batch renders each script and variation byte for byte as it renders alone" {
+test "main: a batch renders each script and seed byte for byte as it renders alone" {
     const io = std.testing.io;
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
@@ -857,15 +985,26 @@ test "main: a batch renders each script and variation byte for byte as it render
         \\gen.draw(gen.circle({12, 24}, gen.randRange(4, 10)), {fill = {0.6, 0.1, 0.1}})
         \\gen.post.invert()
         ,
+        \\gen.canvas(30, 30)
+        \\gen.noiseSeed(4)
+        \\gen.background({1, 1, 1})
+        \\for i = 0, 29 do
+        \\    gen.draw(gen.circle({i, 15 + 10 * gen.simplex(i * 0.1, 0)}, 2), {fill = {0, 0, 0}})
+        \\end
+        ,
     };
-    const names = [_][]const u8{ "dots.lua", "lines.lua", "disc.lua" };
+    const names = [_][]const u8{ "dots.lua", "lines.lua", "disc.lua", "fog.lua" };
     var scripts: [names.len][:0]const u8 = undefined;
     for (&scripts, names, sources) |*s, name, source| {
         try tmp.dir.writeFile(io, .{ .sub_path = name, .data = source });
         s.* = try std.fmt.allocPrintSentinel(arena, "{s}/{s}", .{ root, name }, 0);
     }
 
-    const sweeps = [_][]const []const u8{ &.{}, &.{ "--vary", "2..4", "--sheet" } };
+    const sweeps = [_][]const []const u8{
+        &.{},
+        &.{ "--seed", "2..4", "--sheet" },
+        &.{ "--noise-seed", "2..4", "--sheet", "--seed", "1" },
+    };
     for (sweeps, 0..) |sweep, k| {
         var alone: [names.len][]const u8 = undefined;
         for (&alone, scripts, 0..) |*a, s, i| {
@@ -881,19 +1020,27 @@ test "main: a batch renders each script and variation byte for byte as it render
         }
     }
 
-    const variations = [_][]const u8{ "2", "3", "4" };
-    var alone: [names.len * variations.len][]const u8 = undefined;
-    for (scripts, 0..) |s, i| for (variations, 0..) |v, j| {
-        const file = try std.fmt.allocPrint(arena, "{s}/alone-{d}-{s}.png", .{ root, i, v });
-        alone[i * variations.len + j] = (try testRender(arena, &.{s}, 1, &.{ "--vary", v, "-o", file }))[0];
+    const values = [_][]const u8{ "2", "3", "4" };
+    const file_sweeps = [_]struct { flag: []const u8, varied_script: usize }{
+        .{ .flag = "--seed", .varied_script = 0 },
+        .{ .flag = "--noise-seed", .varied_script = 3 },
     };
-    for ([_]u32{ 1, 4 }) |jobs| {
-        const dir = try std.fmt.allocPrint(arena, "{s}/files-j{d}", .{ root, jobs });
-        const together = try testRender(arena, &scripts, jobs, &.{ "--vary", "2..4", "-d", dir });
-        try std.testing.expectEqual(alone.len, together.len);
-        for (alone, together) |a, t| try std.testing.expectEqualSlices(u8, a, t);
+    for (file_sweeps) |sweep| {
+        const flag = sweep.flag;
+        var alone: [names.len * values.len][]const u8 = undefined;
+        for (scripts, 0..) |s, i| for (values, 0..) |v, j| {
+            const file = try std.fmt.allocPrint(arena, "{s}/alone{s}-{d}-{s}.png", .{ root, flag, i, v });
+            alone[i * values.len + j] = (try testRender(arena, &.{s}, 1, &.{ flag, v, "-o", file }))[0];
+        };
+        for ([_]u32{ 1, 4 }) |jobs| {
+            const dir = try std.fmt.allocPrint(arena, "{s}/files{s}-j{d}", .{ root, flag, jobs });
+            const together = try testRender(arena, &scripts, jobs, &.{ flag, "2..4", "-d", dir });
+            try std.testing.expectEqual(alone.len, together.len);
+            for (alone, together) |a, t| try std.testing.expectEqualSlices(u8, a, t);
+        }
+        const first = sweep.varied_script * values.len;
+        try std.testing.expect(!std.mem.eql(u8, alone[first], alone[first + 1]));
     }
-    try std.testing.expect(!std.mem.eql(u8, alone[0], alone[1]));
 }
 
 test {

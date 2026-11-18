@@ -36,8 +36,6 @@ pub fn open(lua: *Lua) i32 {
         util.setFuncs(lua, &g[1].functions);
         lua.setField(-2, g[0]);
     }
-    lua.pushInteger(@intCast(util.getHost(lua).vary));
-    lua.setField(-2, "vary");
     return 1;
 }
 

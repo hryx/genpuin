@@ -22,7 +22,14 @@ pub const field_meta = "genpuin.Field";
 pub const Host = struct {
     gpa: Allocator,
     io: std.Io,
-    vary: i64 = 0,
+    seeds: Seeds = .{},
+};
+
+/// --seed and --noise-seed. Each one set replaces the argument of every
+/// gen.seed or gen.noiseSeed call and is the stream's starting seed.
+pub const Seeds = struct {
+    seed: ?u32 = null,
+    noise_seed: ?u32 = null,
 };
 
 const host_key = "genpuin.host";
@@ -155,7 +162,8 @@ pub fn optEnum(lua: *Lua, comptime E: type, index: i32, key: [:0]const u8, defau
 }
 
 /// Seed for a Zig-side algorithm. Lua wrappers fill `seed` from
-/// gen.randInt so the result follows gen.seed and --vary.
+/// gen.randInt so the result follows gen.seed and --seed. An explicit
+/// seed is used as written.
 pub fn optSeed(lua: *Lua, index: i32) u64 {
     const s = optNumber(lua, index, "seed", 1);
     return @bitCast(@as(i64, @intFromFloat(@floor(s))));

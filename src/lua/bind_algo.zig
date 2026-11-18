@@ -104,18 +104,14 @@ fn getState(lua: *Lua) *State {
     return s;
 }
 
-/// An unseeded state matches the original library. With --vary the
-/// defaults act as seed(0) and noiseSeed(0), so scripts that never seed
-/// still vary.
+/// An unseeded state matches the original library. --seed n and
+/// --noise-seed n start it as seed(n) and noiseSeed(n) would.
 fn initialState(lua: *Lua) State {
-    const v = util.getHost(lua).vary;
-    if (v == 0) return .{ .rng = .unseeded, .perlin = .init(0) };
-    return .{ .rng = .init(mixVary(lua, 0)), .perlin = .init(mixVary(lua, 0)) };
-}
-
-fn mixVary(lua: *Lua, n: f64) f64 {
-    const v: f64 = @floatFromInt(util.getHost(lua).vary);
-    return n + v * 1000003;
+    const seeds = util.getHost(lua).seeds;
+    return .{
+        .rng = if (seeds.seed) |n| .init(@floatFromInt(n)) else .unseeded,
+        .perlin = .init(if (seeds.noise_seed) |n| @floatFromInt(n) else 0),
+    };
 }
 
 fn checkVec2(lua: *Lua, arg: i32) Vec2 {
@@ -144,8 +140,11 @@ fn readNumbers(lua: *Lua, arena: Allocator, arg: i32, n: usize) ![]f64 {
     return out;
 }
 
+/// seed(n). --seed replaces n.
 fn seed(lua: *Lua) i32 {
-    getState(lua).rng = .init(mixVary(lua, lua.checkNumber(1)));
+    const n = lua.checkNumber(1);
+    const forced = util.getHost(lua).seeds.seed;
+    getState(lua).rng = .init(if (forced) |f| @floatFromInt(f) else n);
     return 0;
 }
 
@@ -258,9 +257,15 @@ fn poissonDisk(lua: *Lua) !i32 {
     return 1;
 }
 
+/// noiseSeed(n) -> the seed used, which is n unless --noise-seed
+/// replaces it. prelude/noise.lua keeps it for the other noise kinds.
 fn noiseSeed(lua: *Lua) i32 {
-    getState(lua).perlin = .init(mixVary(lua, lua.checkNumber(1)));
-    return 0;
+    const n = lua.checkNumber(1);
+    const forced = util.getHost(lua).seeds.noise_seed;
+    const used = if (forced) |f| @as(f64, @floatFromInt(f)) else n;
+    getState(lua).perlin = .init(used);
+    lua.pushNumber(used);
+    return 1;
 }
 
 fn perlin(lua: *Lua) i32 {

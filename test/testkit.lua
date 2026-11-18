@@ -130,7 +130,8 @@ function M.fmtSlice(slice)
 end
 
 -- Render a script to an image as the CLI would, in a fresh Lua state.
--- opts are scale, ss and depth. Raises the script's error on failure.
+-- opts are scale, ss and depth, and seed and noiseSeed for --seed and
+-- --noise-seed. Raises the script's error on failure.
 function M.render(script, output, opts)
     testing.render(script, output, opts)
 end

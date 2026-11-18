@@ -1,4 +1,4 @@
--- A random fractal flame, different for every --vary. Shows
+-- A random fractal flame, different for every --seed. Shows
 -- gen.randomFlame, gen.flame and gen.image.
 
 local W, H = 800, 800

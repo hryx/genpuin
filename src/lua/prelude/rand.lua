@@ -7,8 +7,8 @@ local M = {}
 -- xorshift32 stream, one per Lua state, kept in Zig.
 
 -- Seed the random number generator.
--- With --vary N on the command line, N is mixed into every seed, and a
--- script that never seeds behaves as if it called seed(0).
+-- With --seed N on the command line, every call acts as seed(N), and a
+-- script that never seeds starts as if it called seed(N).
 M.seed = algo.seed
 
 -- Return a random number in [0, 1).

@@ -73,9 +73,8 @@ end
 
 -- A random flame opts table ({transforms, symmetry}) for gen.flame. Add n,
 -- w, h before rendering. seed defaults to gen.rand, nTransforms to 3.
--- An explicit seed has --vary mixed in, so sweeps change it either way.
 function M.randomFlame(s, nTransforms)
-    if s == nil then s = randomSeed() else s = s + core.vary * 1000003 end
+    if s == nil then s = randomSeed() end
     return T.randomFlame(s, nTransforms or 3)
 end
 

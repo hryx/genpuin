@@ -4,8 +4,9 @@
 //!
 //! bits(x) and num(hex) convert between a number and its IEEE bit pattern
 //! as 16 hex digits. call(name, x, y) runs one src/math.zig function from
-//! Zig. render(script, path, {scale, ss, depth}) runs a script in a fresh
-//! state as the CLI would and writes the canvas it draws to path.
+//! Zig. render(script, path, {scale, ss, depth, seed, noiseSeed}) runs a
+//! script in a fresh state as the CLI would, seed and noiseSeed standing
+//! for --seed and --noise-seed, and writes the canvas it draws to path.
 
 const std = @import("std");
 
@@ -127,11 +128,15 @@ fn render(lua: *Lua) i32 {
     const script = lua.checkString(1);
     const path = lua.checkString(2);
     const opts = core.readRenderOptions(lua, 3);
+    const seeds: util.Seeds = .{
+        .seed = optSeedFlag(lua, 3, "seed"),
+        .noise_seed = optSeedFlag(lua, 3, "noiseSeed"),
+    };
     _ = lua.getField(zlua.registry_index, config_key);
     const config: *const Config = @ptrCast(@alignCast(lua.toPointer(-1) orelse
         lua.raiseErrorStr("testing config missing", .{})));
     lua.pop(1);
-    renderScript(lua, config, script, path, opts) catch |err| switch (err) {
+    renderScript(lua, config, script, path, opts, seeds) catch |err| switch (err) {
         error.ScriptFailed, error.CanvasFailed, error.SvgNeedsPixels, error.SvgUnsupported => lua.raiseError(),
         error.NoCanvas => lua.raiseErrorStr("%s made no canvas. Call gen.canvas(w, h)", .{script.ptr}),
         else => lua.raiseErrorStr("rendering %s failed: %s", .{ script.ptr, @errorName(err).ptr }),
@@ -139,11 +144,26 @@ fn render(lua: *Lua) i32 {
     return 0;
 }
 
+/// A --seed style option: absent, or an integer 0 to 2^32 - 1.
+fn optSeedFlag(lua: *Lua, index: i32, key: [:0]const u8) ?u32 {
+    if (!lua.isTable(index)) return null;
+    defer lua.pop(1);
+    switch (lua.getField(index, key)) {
+        .nil, .none => return null,
+        .number => {
+            const n = lua.toNumber(-1) catch unreachable; // type checked by the switch
+            if (n >= 0 and n < 0x1p32 and @floor(n) == n) return @intFromFloat(n);
+        },
+        else => {},
+    }
+    lua.raiseErrorStr("option '%s' must be an integer 0 to 4294967295", .{key.ptr});
+}
+
 /// On error.ScriptFailed and error.CanvasFailed the error message is on
 /// top of `lua`'s stack.
-fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []const u8, opts: core.RenderOptions) !void {
+fn renderScript(lua: *Lua, config: *const Config, script: [:0]const u8, path: []const u8, opts: core.RenderOptions, seeds: util.Seeds) !void {
     const outer = util.getHost(lua);
-    var host: util.Host = .{ .gpa = outer.gpa, .io = outer.io };
+    var host: util.Host = .{ .gpa = outer.gpa, .io = outer.io, .seeds = seeds };
     const inner = try host_mod.create(&host, .{
         .script_dir = std.fs.path.dirname(script) orelse ".",
         .lua_dir = config.lua_dir,
