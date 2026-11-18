@@ -30,7 +30,7 @@ pub fn elementary(gpa: Allocator, rule: f64, first: []const u1, steps: usize) ![
 }
 
 /// A single live cell at the center, as Lua's math.ceil(width / 2).
-pub fn centreSeed(cells: []u1) void {
+pub fn centerSeed(cells: []u1) void {
     @memset(cells, 0);
     if (cells.len > 0) cells[(cells.len + 1) / 2 - 1] = 1;
 }
@@ -39,7 +39,7 @@ const testing = std.testing;
 
 test "automata: rule 90 draws a Sierpinski triangle" {
     var first: [7]u1 = undefined;
-    centreSeed(&first);
+    centerSeed(&first);
     const rows = try elementary(testing.allocator, 90, &first, 2);
     defer testing.allocator.free(rows);
     try testing.expectEqualSlices(u1, &.{ 0, 0, 0, 1, 0, 0, 0 }, rows[0..7]);
@@ -56,6 +56,6 @@ test "automata: the ring wraps" {
 
 test "automata: even width seeds left of center" {
     var first: [4]u1 = undefined;
-    centreSeed(&first);
+    centerSeed(&first);
     try testing.expectEqualSlices(u1, &.{ 0, 1, 0, 0 }, &first);
 }

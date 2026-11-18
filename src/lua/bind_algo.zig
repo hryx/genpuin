@@ -551,7 +551,7 @@ fn elementary(lua: *Lua) !i32 {
     const first = try gpa.alloc(u1, width);
     defer gpa.free(first);
     if (lua.isNoneOrNil(4)) {
-        algo.automata.centreSeed(first);
+        algo.automata.centerSeed(first);
     } else {
         lua.checkType(4, .table);
         for (first, 1..) |*c, i| {
