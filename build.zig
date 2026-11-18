@@ -74,21 +74,19 @@ pub fn build(b: *std.Build) void {
     const examples_step = b.step("examples", "Render every examples/*.lua to out/");
     const ext = b.option([]const u8, "ext", "Output format for the examples step (png, ppm, svg)") orelse "png";
     b.dependOnDirectoryContents(b.path("examples"));
+    const render = b.addRunArtifact(exe);
+    render.setCwd(b.path("."));
+    render.has_side_effects = true;
     var dir = b.root.openDir(b.graph.io, "examples", .{ .iterate = true }) catch
         @panic("examples/ missing");
     defer dir.close(b.graph.io);
     var it = dir.iterate();
     while (it.next(b.graph.io) catch @panic("examples/ unreadable")) |entry| {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".lua")) continue;
-        const stem = entry.name[0 .. entry.name.len - ".lua".len];
-        const render = b.addRunArtifact(exe);
-        render.setCwd(b.path("."));
         render.addArg(b.fmt("examples/{s}", .{entry.name}));
-        render.addArg("-o");
-        render.addArg(b.fmt("out/{s}/{s}.{s}", .{ ext, stem, ext }));
-        render.has_side_effects = true;
-        examples_step.dependOn(&render.step);
     }
+    render.addArgs(&.{ "--format", ext, "-o", b.fmt("out/{s}/", .{ext}) });
+    examples_step.dependOn(&render.step);
 }
 
 /// A module embedding every src/lua/prelude/*.lua, so the binary needs no
