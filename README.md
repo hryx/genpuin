@@ -4,8 +4,9 @@ A generative art tool. Render a PNG, PPM, or SVG from a Lua script.
 Also works as a plain Zig library.
 
 <p>
-  <img src="images/penrose.png" width="390" alt="Penrose tiling">
-  <img src="images/mycelium.png" width="390" alt="Mycelium network">
+  <img src="images/flow-field.png" width="260" alt="Flow field">
+  <img src="images/wfc-pipes.png" width="260" alt="Wave function collapse pipes">
+  <img src="images/post-sort.png" width="260" alt="Pixel sort">
 </p>
 
 The name is an acronym of "penguin" and an easy typo if you use the Colemak keyboard layout.
