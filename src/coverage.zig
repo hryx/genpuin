@@ -132,14 +132,69 @@ fn slab(k: f64, c: f64, r: f64) ?[2]f64 {
 /// polylines can use round joins at interior vertices.
 pub fn strokeSegment(gpa: Allocator, m: *Mask, a: Vec2, b: Vec2, hw: f64, cap_a: Cap, cap_b: Cap) !void {
     if (hw <= 0) return;
+    if (dist(a, b) < degenerate_len) {
+        const cap: Cap = if (cap_a == .round or cap_b == .round) .round else if (cap_a == .square or cap_b == .square) .square else .butt;
+        return strokeDot(gpa, m, a, .{ 1, 0 }, hw, cap);
+    }
+    return segment(gpa, m, a, b, hw, cap_a, cap_b, .{});
+}
+
+/// Below this length in pixels a segment has no direction.
+const degenerate_len = 1e-9;
+
+/// The plane across a butt end of an open stroke. A round join at a
+/// vertex near the end is a full disc here, and the part of the disc
+/// behind this plane is cut away so the join never reaches past the end.
+const Cut = struct {
+    p: Vec2,
+    /// Unit direction from the end into the stroke.
+    u: Vec2,
+
+    /// Whether any pixel the segment a-b covers at half-width `hw` can
+    /// lie where `keep` cuts.
+    fn reaches(cut: Cut, a: Vec2, b: Vec2, hw: f64) bool {
+        // Pixel centers sit within hw + 1 + sqrt(1/2) of the segment.
+        const margin = hw + 2;
+        const ta = (a[0] - cut.p[0]) * cut.u[0] + (a[1] - cut.p[1]) * cut.u[1];
+        const tb = (b[0] - cut.p[0]) * cut.u[0] + (b[1] - cut.p[1]) * cut.u[1];
+        if (@min(ta, tb) > margin + 0.5) return false;
+        return distToSegment(cut.p, a, b) <= margin + hw + 1;
+    }
+
+    /// The share of a pixel at (x, y) in front of the plane. Pixels more
+    /// than `near` from the end are left alone, since only joins within
+    /// half a stroke width of the end can poke past it.
+    fn keep(cut: Cut, x: f64, y: f64, near: f64) f32 {
+        const vx = x - cut.p[0];
+        const vy = y - cut.p[1];
+        const t = vx * cut.u[0] + vy * cut.u[1];
+        if (t >= 0.5 or vx * vx + vy * vy > near * near) return 1;
+        return overlap(t, 0, std.math.inf(f64));
+    }
+};
+
+const Cuts = struct {
+    start: ?Cut = null,
+    end: ?Cut = null,
+
+    fn keep(cuts: Cuts, x: f64, y: f64, near: f64) f32 {
+        var k: f32 = 1;
+        if (cuts.start) |c| k *= c.keep(x, y, near);
+        if (cuts.end) |c| k *= c.keep(x, y, near);
+        return k;
+    }
+};
+
+fn segment(gpa: Allocator, m: *Mask, a: Vec2, b: Vec2, hw: f64, cap_a: Cap, cap_b: Cap, cuts: Cuts) !void {
+    if (cuts.start == null and cuts.end == null) return segmentCut(gpa, m, a, b, hw, cap_a, cap_b, cuts, false);
+    return segmentCut(gpa, m, a, b, hw, cap_a, cap_b, cuts, true);
+}
+
+fn segmentCut(gpa: Allocator, m: *Mask, a: Vec2, b: Vec2, hw: f64, cap_a: Cap, cap_b: Cap, cuts: Cuts, comptime cut: bool) !void {
     const dx = b[0] - a[0];
     const dy = b[1] - a[1];
     const len = @sqrt(dx * dx + dy * dy);
-    if (len < 1e-9) {
-        if (cap_a == .round or cap_b == .round) return fillCircle(gpa, m, a[0], a[1], hw);
-        if (cap_a == .square or cap_b == .square) return fillRect(gpa, m, a[0] - hw, a[1] - hw, a[0] + hw, a[1] + hw);
-        return;
-    }
+    assert(len >= degenerate_len);
     const ux = dx / len;
     const uy = dy / len;
     const reach = hw + 1;
@@ -154,8 +209,11 @@ pub fn strokeSegment(gpa: Allocator, m: *Mask, a: Vec2, b: Vec2, hw: f64, cap_a:
         .round => std.math.inf(f64),
     };
 
-    const ymin = @max(0, @floor(@min(a[1], b[1]) - reach));
-    const ymax = @min(@as(f64, @floatFromInt(m.h)), @ceil(@max(a[1], b[1]) + reach));
+    // A square cap's far corners lie up to hw * sqrt(2) from the end
+    // point along the y axis.
+    const reach_y = if (cap_a == .square or cap_b == .square) hw * std.math.sqrt2 + 1 else reach;
+    const ymin = @max(0, @floor(@min(a[1], b[1]) - reach_y));
+    const ymax = @min(@as(f64, @floatFromInt(m.h)), @ceil(@max(a[1], b[1]) + reach_y));
     var py = ymin;
     while (py < ymax) : (py += 1) {
         const yc = py + 0.5;
@@ -186,61 +244,244 @@ pub fn strokeSegment(gpa: Allocator, m: *Mask, a: Vec2, b: Vec2, hw: f64, cap_a:
             } else {
                 c = overlap(n, -hw, hw) * overlap(t, lo_t, hi_t);
             }
+            const near_a = cut and cap_a == .round and t < 0.5;
+            const near_b = cut and cap_b == .round and t > len - 0.5;
+            if (near_a or near_b) {
+                const keep = cuts.keep(xc, yc, reach);
+                // Where a cut takes the disc away, the segment's own body
+                // still covers what its edge reaches.
+                if (keep < 1) {
+                    var disc = c;
+                    if (t >= 0 and t <= len) {
+                        const e = if (near_a and (!near_b or t < len / 2)) a else b;
+                        const ex = xc - e[0];
+                        const ey = yc - e[1];
+                        disc = overlap(@sqrt(ex * ex + ey * ey), -hw, hw);
+                    }
+                    const body = overlap(n, -hw, hw) * overlap(t, if (cap_a == .round) 0 else lo_t, if (cap_b == .round) len else hi_t);
+                    c = @max(disc * keep, body);
+                }
+            }
             try m.cover(gpa, @intFromFloat(px), @intFromFloat(py), c);
         }
     }
 }
 
+/// The stroke of a zero-length subpath, as SVG 2 defines it. Nothing for
+/// butt caps, a disc for round, and for square a square turned to `u`.
+fn strokeDot(gpa: Allocator, m: *Mask, p: Vec2, u: Vec2, hw: f64, cap: Cap) !void {
+    switch (cap) {
+        .butt => {},
+        .round => try fillCircle(gpa, m, p[0], p[1], hw),
+        .square => {
+            const a: Vec2 = .{ p[0] - u[0] * hw, p[1] - u[1] * hw };
+            const b: Vec2 = .{ p[0] + u[0] * hw, p[1] + u[1] * hw };
+            try segment(gpa, m, a, b, hw, .butt, .butt, .{});
+        },
+    }
+}
+
+/// A stroked polyline with round joins. Zero-length segments are
+/// skipped, and a polyline with no other kind is a dot.
 pub fn strokePolyline(gpa: Allocator, m: *Mask, pts: []const Vec2, hw: f64, closed: bool, cap: Cap) !void {
-    if (pts.len < 2) {
-        if (pts.len == 1 and cap == .round) try fillCircle(gpa, m, pts[0][0], pts[0][1], hw);
+    return polyline(gpa, m, pts, hw, closed, cap, .{ 1, 0 });
+}
+
+/// `dot_u` turns the square a zero-length polyline strokes to.
+fn polyline(gpa: Allocator, m: *Mask, pts: []const Vec2, hw: f64, closed: bool, cap: Cap, dot_u: Vec2) !void {
+    if (hw <= 0 or pts.len == 0) return;
+    const segs = if (closed) pts.len else pts.len - 1;
+    var first: ?usize = null;
+    var last: usize = 0;
+    var total: f64 = 0;
+    for (0..segs) |i| {
+        const l = dist(pts[i], pts[(i + 1) % pts.len]);
+        if (l < degenerate_len) continue;
+        if (first == null) first = i;
+        last = i;
+        total += l;
+    }
+    if (first == null) return strokeDot(gpa, m, pts[0], dot_u, hw, cap);
+
+    if (closed) {
+        for (0..segs) |i| {
+            const a = pts[i];
+            const b = pts[(i + 1) % pts.len];
+            if (dist(a, b) < degenerate_len) continue;
+            try segment(gpa, m, a, b, hw, .round, .round, .{});
+        }
         return;
     }
-    const segs = if (closed) pts.len else pts.len - 1;
-    for (0..segs) |i| {
+
+    // Square caps cover every join's reach past an end, and round caps
+    // are discs that do too. Butt ends cut the joins near them. Past
+    // half a turn of arc, which takes at least pi * hw of length when
+    // the curve is no tighter than the stroke, the path may come back
+    // over its own end legitimately, so joins that far along stay whole.
+    var cut_start: ?Cut = null;
+    var cut_end: ?Cut = null;
+    if (cap == .butt) {
+        cut_start = .{ .p = pts[first.?], .u = direction(pts[first.?], pts[first.? + 1]) };
+        cut_end = .{ .p = pts[last + 1], .u = direction(pts[last + 1], pts[last]) };
+    }
+    const cut_len = std.math.pi * hw;
+
+    var s: f64 = 0;
+    for (first.?..last + 1) |i| {
         const a = pts[i];
-        const b = pts[(i + 1) % pts.len];
-        const first = i == 0 and !closed;
-        const last = i == segs - 1 and !closed;
-        try strokeSegment(gpa, m, a, b, hw, if (first) cap else .round, if (last) cap else .round);
+        const b = pts[i + 1];
+        const l = dist(a, b);
+        if (l < degenerate_len) continue;
+        defer s += l;
+        const cuts: Cuts = .{
+            .start = if (s <= cut_len) cutFor(cut_start, a, b, hw) else null,
+            .end = if (total - s - l <= cut_len) cutFor(cut_end, a, b, hw) else null,
+        };
+        try segment(gpa, m, a, b, hw, if (i == first.?) cap else .round, if (i == last) cap else .round, cuts);
     }
 }
 
 /// Dashed stroke. `dash` is {on, off}, `offset` shifts the pattern start.
-pub fn strokeDashed(gpa: Allocator, m: *Mask, pts: []const Vec2, hw: f64, cap: Cap, dash: [2]f64, offset: f64) !void {
-    if (pts.len < 2) return;
+/// A closed path repeats its first point at the end, and its dashes run
+/// on across that point. Dashes follow cairo where SVG leaves room: one
+/// that starts on a vertex keeps the join there, and one that ends on a
+/// vertex does not. A dash on a path of zero length is a dot.
+pub fn strokeDashed(gpa: Allocator, m: *Mask, pts: []const Vec2, hw: f64, cap: Cap, dash: [2]f64, offset: f64, closed: bool) !void {
+    if (pts.len == 0) return;
     const on = @max(dash[0], 1e-3);
     const cycle = on + @max(dash[1], 0);
     var d = -@mod(offset, cycle);
-    var seg_i: usize = 0;
-    var seg_start: f64 = 0;
     var total: f64 = 0;
     for (1..pts.len) |i| total += dist(pts[i - 1], pts[i]);
+    if (total < degenerate_len) {
+        if (d + on > 0) try strokeDot(gpa, m, pts[0], .{ 1, 0 }, hw, cap);
+        return;
+    }
+    if (closed and d + on >= total) return polyline(gpa, m, pts[0 .. pts.len - 1], hw, true, cap, .{ 1, 0 });
 
-    var buf: std.ArrayList(Vec2) = .empty;
-    defer buf.deinit(gpa);
+    var walk: DashWalk = .{ .pts = pts, .closed = closed };
+    var piece: std.ArrayList(Vec2) = .empty;
+    defer piece.deinit(gpa);
+    // The first dash of a closed path waits, since the last one may run
+    // on into it.
+    var head: std.ArrayList(Vec2) = .empty;
+    defer head.deinit(gpa);
+    var head_lead = false;
+    var head_u: Vec2 = .{ 1, 0 };
     while (d < total) : (d += cycle) {
         const d0 = @max(d, 0);
         const d1 = @min(d + on, total);
         if (d1 <= d0) continue;
-        buf.clearRetainingCapacity();
-        // Walk forward to the segment holding d0.
-        while (seg_i + 1 < pts.len - 1 and seg_start + dist(pts[seg_i], pts[seg_i + 1]) < d0) {
-            seg_start += dist(pts[seg_i], pts[seg_i + 1]);
-            seg_i += 1;
+        piece.clearRetainingCapacity();
+        if (closed and d0 == 0) {
+            head_lead = try walk.collect(gpa, &head, d0, d1);
+            head_u = walk.here();
+            continue;
         }
-        try buf.append(gpa, pointAt(pts, seg_i, seg_start, d0));
-        var j = seg_i;
-        var acc = seg_start;
+        _ = try walk.collect(gpa, &piece, d0, d1);
+        if (closed and d1 == total and head.items.len > 0) {
+            const skip: usize = if (head_lead) 2 else 1;
+            try piece.appendSlice(gpa, head.items[skip..]);
+            head.clearRetainingCapacity();
+        }
+        try polyline(gpa, m, piece.items, hw, false, cap, walk.here());
+    }
+    if (head.items.len > 0) try polyline(gpa, m, head.items, hw, false, cap, head_u);
+}
+
+/// Cuts dash pieces out of a polyline front to back.
+const DashWalk = struct {
+    pts: []const Vec2,
+    closed: bool,
+    seg: usize = 0,
+    seg_start: f64 = 0,
+
+    /// Dash positions this close to a vertex count as on it.
+    const snap = 1e-6;
+    /// Length of the stub that carries the incoming direction into a
+    /// dash starting on a vertex, so the join there is drawn.
+    const lead_len = 1e-6;
+
+    /// Append the path between arc lengths d0 and d1 to `out`. Returns
+    /// whether it starts with a lead stub. Calls come in increasing d0.
+    fn collect(w: *DashWalk, gpa: Allocator, out: *std.ArrayList(Vec2), d0: f64, d1: f64) !bool {
+        const pts = w.pts;
+        while (w.seg + 1 < pts.len - 1 and w.seg_start + dist(pts[w.seg], pts[w.seg + 1]) <= d0 + snap) {
+            w.seg_start += dist(pts[w.seg], pts[w.seg + 1]);
+            w.seg += 1;
+        }
+        const p0 = pointAt(pts, w.seg, w.seg_start, d0);
+        var lead = false;
+        if (@abs(d0 - w.seg_start) <= snap) {
+            if (w.incoming()) |u| {
+                try out.append(gpa, .{ p0[0] - u[0] * lead_len, p0[1] - u[1] * lead_len });
+                lead = true;
+            }
+        }
+        try out.append(gpa, p0);
+        var j = w.seg;
+        var acc = w.seg_start;
         while (j + 1 < pts.len) : (j += 1) {
             const l = dist(pts[j], pts[j + 1]);
             if (acc + l >= d1) break;
             acc += l;
-            try buf.append(gpa, pts[j + 1]);
+            try out.append(gpa, pts[j + 1]);
         }
-        try buf.append(gpa, pointAt(pts, @min(j, pts.len - 2), acc, d1));
-        try strokePolyline(gpa, m, buf.items, hw, false, cap);
+        try out.append(gpa, pointAt(pts, @min(j, pts.len - 2), acc, d1));
+        return lead;
     }
+
+    /// Direction of the last segment with a length before the vertex the
+    /// walk stands on, wrapping around on a closed path.
+    fn incoming(w: *const DashWalk) ?Vec2 {
+        const pts = w.pts;
+        var i = w.seg;
+        while (i > 0) {
+            i -= 1;
+            if (dist(pts[i], pts[i + 1]) >= degenerate_len) return direction(pts[i], pts[i + 1]);
+        }
+        if (!w.closed) return null;
+        i = pts.len - 1;
+        while (i > w.seg + 1) {
+            i -= 1;
+            if (dist(pts[i], pts[i + 1]) >= degenerate_len) return direction(pts[i], pts[i + 1]);
+        }
+        return null;
+    }
+
+    /// Direction of the path where the walk stands.
+    fn here(w: *const DashWalk) Vec2 {
+        return pathDirection(w.pts, w.seg);
+    }
+};
+
+fn cutFor(cut: ?Cut, a: Vec2, b: Vec2, hw: f64) ?Cut {
+    const c = cut orelse return null;
+    return if (c.reaches(a, b, hw)) c else null;
+}
+
+fn distToSegment(p: Vec2, a: Vec2, b: Vec2) f64 {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    const t = if (len2 > 0) std.math.clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2, 0, 1) else 0;
+    return std.math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
+}
+
+/// Unit direction from `a` to `b`, which must not coincide.
+fn direction(a: Vec2, b: Vec2) Vec2 {
+    const l = dist(a, b);
+    assert(l >= degenerate_len);
+    return .{ (b[0] - a[0]) / l, (b[1] - a[1]) / l };
+}
+
+/// Direction of the path at segment `seg`, or of the next segment with a
+/// length when that one has none.
+fn pathDirection(pts: []const Vec2, seg: usize) Vec2 {
+    for (seg..pts.len - 1) |i| {
+        if (dist(pts[i], pts[i + 1]) >= degenerate_len) return direction(pts[i], pts[i + 1]);
+    }
+    return .{ 1, 0 };
 }
 
 fn dist(a: Vec2, b: Vec2) f64 {
@@ -448,4 +689,96 @@ test "coverage: thin line coverage matches width" {
     try strokeSegment(gpa, &m, .{ 2, 10.5 }, .{ 18, 10.5 }, 0.15, .butt, .butt);
     try std.testing.expectApproxEqAbs(@as(f32, 0.3), m.cov[10 * 20 + 10], 1e-5);
     try std.testing.expectEqual(@as(f32, 0), m.cov[9 * 20 + 10]);
+}
+
+fn covAt(m: *const Mask, x: u32, y: u32) f32 {
+    return m.cov[y * m.w + x];
+}
+
+test "coverage: joins of a flattened arc stay inside its butt ends" {
+    const gpa = std.testing.allocator;
+    var m: Mask = try .init(gpa, 64, 64);
+    defer m.deinit(gpa);
+    // A quarter circle of radius 30 around (32, 2) in 2 px steps, from
+    // (62, 2) to (32, 32), stroked 16 wide.
+    var pts: [25]Vec2 = undefined;
+    for (&pts, 0..) |*p, i| {
+        const a = std.math.pi / 2.0 * @as(f64, @floatFromInt(i)) / 24.0;
+        p.* = .{ 32 + 30 * @cos(a), 2 + 30 * @sin(a) };
+    }
+    try strokePolyline(gpa, &m, &pts, 8, false, .butt);
+    // The start runs straight down, so its butt end is the line y = 2.
+    try std.testing.expectEqual(@as(f32, 0), covAt(&m, 58, 0));
+    try std.testing.expectEqual(@as(f32, 1), covAt(&m, 58, 4));
+    // The end runs left, so its butt end is the line x = 32.
+    try std.testing.expectEqual(@as(f32, 0), covAt(&m, 29, 34));
+    try std.testing.expectEqual(@as(f32, 1), covAt(&m, 34, 34));
+}
+
+test "coverage: a repeated end point is not a round end" {
+    const gpa = std.testing.allocator;
+    var m: Mask = try .init(gpa, 20, 10);
+    defer m.deinit(gpa);
+    const pts = [_]Vec2{ .{ 5, 5 }, .{ 5, 5 }, .{ 15, 5 }, .{ 15, 5 } };
+    try strokePolyline(gpa, &m, &pts, 3, false, .butt);
+    try std.testing.expectEqual(@as(f32, 0), covAt(&m, 3, 5));
+    try std.testing.expectEqual(@as(f32, 0), covAt(&m, 16, 5));
+    try std.testing.expectEqual(@as(f32, 1), covAt(&m, 5, 5));
+}
+
+test "coverage: a zero-length line strokes by its cap" {
+    const gpa = std.testing.allocator;
+    const pts = [_]Vec2{ .{ 10, 10 }, .{ 10, 10 } };
+    const cases = [_]struct { cap: Cap, center: f32, corner: f32 }{
+        .{ .cap = .butt, .center = 0, .corner = 0 },
+        .{ .cap = .round, .center = 1, .corner = 0 },
+        .{ .cap = .square, .center = 1, .corner = 1 },
+    };
+    for (cases) |c| {
+        var m: Mask = try .init(gpa, 20, 20);
+        defer m.deinit(gpa);
+        try strokePolyline(gpa, &m, &pts, 4, false, c.cap);
+        try std.testing.expectEqual(c.center, covAt(&m, 10, 10));
+        // Pixel (6, 6) spans [6, 7] on both axes, inside the square
+        // [6, 14] and outside the disc of radius 4.
+        try std.testing.expectEqual(c.corner, covAt(&m, 6, 6));
+    }
+}
+
+test "coverage: a dash starting on a vertex keeps only the join there" {
+    const gpa = std.testing.allocator;
+    var m: Mask = try .init(gpa, 40, 40);
+    defer m.deinit(gpa);
+    // Dashes [0, 10] and [20, 30], the second starting on the corner.
+    const pts = [_]Vec2{ .{ 10, 10 }, .{ 30, 10 }, .{ 30, 40 } };
+    try strokeDashed(gpa, &m, &pts, 3, .butt, .{ 10, 10 }, 0, false);
+    // Nothing behind the corner on the incoming side.
+    try std.testing.expectEqual(@as(f32, 0), covAt(&m, 28, 8));
+    // The round join on the outside of the corner.
+    try std.testing.expectEqual(@as(f32, 1), covAt(&m, 30, 8));
+    try std.testing.expectEqual(@as(f32, 1), covAt(&m, 29, 12));
+}
+
+test "coverage: a dash on a zero-length path is a dot only where the pattern is on" {
+    const gpa = std.testing.allocator;
+    const pts = [_]Vec2{ .{ 10, 10 }, .{ 10, 10 } };
+    const offsets = [_]struct { offset: f64, want: f32 }{
+        .{ .offset = 0, .want = 1 },
+        .{ .offset = 6, .want = 0 },
+    };
+    for (offsets) |o| {
+        var m: Mask = try .init(gpa, 20, 20);
+        defer m.deinit(gpa);
+        try strokeDashed(gpa, &m, &pts, 3, .round, .{ 5, 5 }, o.offset, false);
+        try std.testing.expectEqual(o.want, covAt(&m, 10, 10));
+    }
+}
+
+test "coverage: a square cap on a diagonal reaches its far corner" {
+    const gpa = std.testing.allocator;
+    var m: Mask = try .init(gpa, 40, 45);
+    defer m.deinit(gpa);
+    try strokeSegment(gpa, &m, .{ 10, 10 }, .{ 20, 30 }, 7, .square, .square);
+    // Pixel (17, 38) lies inside the cap, more than hw + 1 below the end.
+    try std.testing.expectEqual(@as(f32, 1), covAt(&m, 17, 38));
 }

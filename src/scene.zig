@@ -104,8 +104,9 @@ pub const Blend = enum { normal, multiply, screen, overlay, darken, lighten, dif
 
 pub const ColorMap = struct {
     m: [3][4]f32,
-    /// Elements sharing a matrix share one visited set, so a pixel is
-    /// remapped at most once per matrix (the SVG filter applies per group).
+    /// Elements sharing a matrix share one record of how far each pixel
+    /// is remapped, so a pixel is remapped in full at most once per
+    /// matrix (the SVG filter applies per group).
     key: u32,
 };
 

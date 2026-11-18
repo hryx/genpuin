@@ -627,14 +627,16 @@ const Path = struct {
                     if (c.r + hw > 0) return .{ .disc = .{ .c = c.c, .r = c.r + hw } };
                 } else if (c.r < 0) {
                     try p.ellipse(arena, c.c, c.r, c.r);
+                } else {
+                    return dotOf(c.c, st);
                 }
                 return null;
             },
-            .line => |l| return p.openStroke(arena, &l, 2, st),
-            .polyline => |pts| return p.openStroke(arena, pts, pts.len, st),
-            .polygon => |pts| return p.closedStroke(arena, pts, pts.len, st),
+            .line => |l| return p.openStroke(arena, &l, st),
+            .polyline => |pts| return p.openStroke(arena, pts, st),
+            .polygon => |pts| return p.closedStroke(arena, pts, st),
             .rect => |r| {
-                if (r.w == 0 and r.h == 0) return closedDot(.{ r.x, r.y }, 4, st);
+                if (r.w == 0 and r.h == 0) return dotOf(.{ r.x, r.y }, st);
                 if (r.rx > 0 or r.ry > 0) {
                     try p.roundedRect(arena, r.x, r.y, r.w, r.h, r.rx, r.ry);
                 } else {
@@ -643,19 +645,19 @@ const Path = struct {
                 return null;
             },
             .ellipse => |e| {
-                if (e.rx == 0 and e.ry == 0) return closedDot(e.c, 64, st);
+                if (e.rx == 0 and e.ry == 0) return dotOf(e.c, st);
                 try p.ellipse(arena, e.c, e.rx, e.ry);
                 return null;
             },
             .arc => |a| {
                 const start = ellipsePoint(a.c, a.r, a.r, a.start);
-                if (a.r == 0 or a.start == a.end) return openDot(start, 9, st);
+                if (a.r == 0 or a.start == a.end) return dotOf(start, st);
                 try p.cmd(arena, 'M', start);
                 try p.arcTo(arena, a.c, a.r, a.r, a.start, a.end);
                 return null;
             },
             .bezier => |b| {
-                if (allSame(&b)) return openDot(b[0], 5, st);
+                if (allSame(&b)) return dotOf(b[0], st);
                 try p.cmd(arena, 'M', b[0]);
                 try p.bytes.print(arena, "C{f} {f} {f} {f} {f} {f}", .{
                     num(b[1][0]), num(b[1][1]), num(b[2][0]), num(b[2][1]), num(b[3][0]), num(b[3][1]),
@@ -664,7 +666,7 @@ const Path = struct {
             },
             .spline => |pts| {
                 if (pts.len < 2) return null;
-                if (allSame(pts)) return openDot(pts[0], 5, st);
+                if (allSame(pts)) return dotOf(pts[0], st);
                 try p.cmd(arena, 'M', pts[0]);
                 for (0..pts.len - 1) |i| {
                     const p0 = pts[if (i == 0) 0 else i - 1];
@@ -686,11 +688,12 @@ const Path = struct {
                         try p.poly(arena, c, true);
                         continue;
                     }
-                    if (closedDot(c[0], c.len, st) == null) continue;
-                    // A tiny circle stroked at this width is the dot, kept in
-                    // this path so the contours composite once together.
-                    const e = 1e-3;
-                    try p.ellipse(arena, c[0], e, e);
+                    if (dotOf(c[0], st) == null) continue;
+                    // A tiny open segment strokes to the dot under this
+                    // path's caps, kept in the path so the contours
+                    // composite once together.
+                    try p.cmd(arena, 'M', c[0]);
+                    try p.cmd(arena, 'L', .{ c[0][0] + 1e-3, c[0][1] });
                 }
                 return null;
             },
@@ -698,39 +701,38 @@ const Path = struct {
         }
     }
 
-    fn openStroke(p: *Path, arena: Allocator, pts: []const Vec2, len: usize, st: *const Style) !?Extra {
-        if (len == 0) return null;
-        if (allSame(pts)) return openDot(pts[0], len, st);
+    fn openStroke(p: *Path, arena: Allocator, pts: []const Vec2, st: *const Style) !?Extra {
+        if (pts.len == 0) return null;
+        if (allSame(pts)) return dotOf(pts[0], st);
         try p.poly(arena, pts, false);
         return null;
     }
 
-    fn closedStroke(p: *Path, arena: Allocator, pts: []const Vec2, len: usize, st: *const Style) !?Extra {
-        if (len == 0) return null;
-        if (allSame(pts)) return closedDot(pts[0], len, st);
+    fn closedStroke(p: *Path, arena: Allocator, pts: []const Vec2, st: *const Style) !?Extra {
+        if (pts.len == 0) return null;
+        if (allSame(pts)) return dotOf(pts[0], st);
         try p.poly(arena, pts, true);
         return null;
     }
 };
 
-/// An open stroke of `count` coincident points. strokePolyline gives one
-/// point a dot only with round caps. A single segment uses the style's
-/// caps at both ends, and longer runs have a round join on every segment.
-/// A dash pattern over zero length draws nothing.
-fn openDot(c: Vec2, count: usize, st: *const Style) ?Extra {
+/// The stroke of a path whose points all coincide, which render.zig
+/// strokes as a zero-length subpath does in SVG 2: nothing for butt caps,
+/// a disc for round, a square on the axes for square. Viewers disagree
+/// on these, so they are written as shapes. Under a dash pattern the
+/// dot is there only when the pattern starts on a dash.
+fn dotOf(c: Vec2, st: *const Style) ?Extra {
+    if (st.dash) |dash| {
+        const on = @max(dash[0], 1e-3);
+        const cycle = on + @max(dash[1], 0);
+        if (on - @mod(st.dash_offset, cycle) <= 0) return null;
+    }
     const hw = st.stroke_width / 2;
-    if (st.dash != null) return null;
-    if (count >= 3 or st.cap == .round) return .{ .disc = .{ .c = c, .r = hw } };
-    if (count == 2 and st.cap == .square) return .{ .square = .{ .c = c, .hw = hw } };
-    return null;
-}
-
-/// A closed stroke of `count` coincident points. Every closed segment
-/// has round joins at both ends.
-fn closedDot(c: Vec2, count: usize, st: *const Style) ?Extra {
-    if (st.dash != null) return null;
-    if (count >= 2 or st.cap == .round) return .{ .disc = .{ .c = c, .r = st.stroke_width / 2 } };
-    return null;
+    return switch (st.cap) {
+        .butt => null,
+        .round => .{ .disc = .{ .c = c, .r = hw } },
+        .square => .{ .square = .{ .c = c, .hw = hw } },
+    };
 }
 
 fn allSame(pts: []const Vec2) bool {
@@ -947,6 +949,28 @@ test "svg: dots the rasterizer draws for coincident points" {
     try expectContains(doc, "<path d=\"M2 2L4 2L4 4L2 4Z\" fill=\"rgb(255,0,0)\"/>");
     try expectContains(doc, "<path d=\"M9 8A1 1 0 0 1 8 9A1 1 0 0 1 7 8A1 1 0 0 1 8 7A1 1 0 0 1 9 8Z\" fill=\"rgb(255,0,0)\"/>");
     // A butt-capped zero-length line draws nothing.
+    try std.testing.expectEqual(2, std.mem.count(u8, doc, "<path"));
+}
+
+test "svg: coincident points stroke by the cap alone, as zero-length subpaths" {
+    const gpa = std.testing.allocator;
+    const same = [_]Vec2{ .{ 5, 5 }, .{ 5, 5 }, .{ 5, 5 } };
+    const contour = [_]Vec2{ .{ 2, 2 }, .{ 2, 2 } };
+    const items = [_]scene.Item{
+        // Butt caps draw nothing, however many points, open or closed.
+        .{ .draw = .{ .shape = .{ .polyline = &same }, .style = .{ .stroke = red, .stroke_width = 2 } } },
+        .{ .draw = .{ .shape = .{ .polygon = &same }, .style = .{ .stroke = red, .stroke_width = 2 } } },
+        // A dash pattern that starts in a gap leaves the dot out.
+        .{ .draw = .{ .shape = .{ .polyline = &same }, .style = .{ .stroke = red, .stroke_width = 2, .cap = .round, .dash = .{ 1, 1 }, .dash_offset = 1.5 } } },
+        // One that starts on a dash keeps it.
+        .{ .draw = .{ .shape = .{ .polygon = &same }, .style = .{ .stroke = red, .stroke_width = 2, .cap = .square, .dash = .{ 1, 1 } } } },
+        .{ .draw = .{ .shape = .{ .compound = &.{&contour} }, .style = .{ .stroke = red, .stroke_width = 2, .cap = .square } } },
+    };
+    const s: scene.Scene = .{ .w = 10, .h = 10, .bg = .{ 0, 0, 0 }, .items = &items };
+    const doc = try testDoc(gpa, &s);
+    defer gpa.free(doc);
+    try expectContains(doc, "<path d=\"M4 4L6 4L6 6L4 6Z\" fill=\"rgb(255,0,0)\"/>");
+    try expectContains(doc, "<path d=\"M2 2L2.001 2\" fill=\"none\" stroke=\"rgb(255,0,0)\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"square\"/>");
     try std.testing.expectEqual(2, std.mem.count(u8, doc, "<path"));
 }
 

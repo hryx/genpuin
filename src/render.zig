@@ -53,7 +53,9 @@ const Context = struct {
     mask: Mask,
     scratch: coverage.FillScratch = .{},
     pts: std.ArrayList(Vec2) = .empty,
-    visited: std.AutoHashMapUnmanaged(u32, std.DynamicBitSetUnmanaged) = .empty,
+    /// Per colorMap matrix, how much of each pixel it has remapped so far,
+    /// in 1/65535 steps.
+    remapped: std.AutoHashMapUnmanaged(u32, []u16) = .empty,
     k: f64,
     ss: u32,
 
@@ -61,9 +63,9 @@ const Context = struct {
         self.mask.deinit(self.gpa);
         self.scratch.deinit(self.gpa);
         self.pts.deinit(self.gpa);
-        var it = self.visited.valueIterator();
-        while (it.next()) |v| v.deinit(self.gpa);
-        self.visited.deinit(self.gpa);
+        var it = self.remapped.valueIterator();
+        while (it.next()) |v| self.gpa.free(v.*);
+        self.remapped.deinit(self.gpa);
     }
 
     fn tx(self: *const Context, p: Vec2) Vec2 {
@@ -222,7 +224,7 @@ const Context = struct {
         if (st.dash) |dash| {
             if (closed and self.pts.items.len > 0) try self.pts.append(g, self.pts.items[0]);
             const scaled: [2]f64 = .{ dash[0] * self.k, dash[1] * self.k };
-            return coverage.strokeDashed(g, &self.mask, self.pts.items, hw, st.cap, scaled, st.dash_offset * self.k);
+            return coverage.strokeDashed(g, &self.mask, self.pts.items, hw, st.cap, scaled, st.dash_offset * self.k, closed);
         }
         return coverage.strokePolyline(g, &self.mask, self.pts.items, hw, closed, st.cap);
     }
@@ -296,21 +298,7 @@ const Context = struct {
         const m = &self.mask;
         const r = self.raster;
 
-        if (st.color_map) |cm| {
-            const gop = try self.visited.getOrPut(self.gpa, cm.key);
-            if (!gop.found_existing) gop.value_ptr.* = try .initEmpty(self.gpa, @as(usize, r.w) * r.h);
-            for (m.touched.items) |i| {
-                m.cov[i] = 0;
-                if (gop.value_ptr.isSet(i)) continue;
-                gop.value_ptr.set(i);
-                const d = r.pix[i * 3 ..][0..3];
-                const src = d.*;
-                for (0..3) |c| {
-                    d[c] = std.math.clamp(cm.m[c][0] * src[0] + cm.m[c][1] * src[1] + cm.m[c][2] * src[2] + cm.m[c][3], 0, 1);
-                }
-            }
-            return;
-        }
+        if (st.color_map) |cm| return self.remap(&cm);
 
         var field_range: [2]f32 = .{ 0, 1 };
         if (shape.* == .field) {
@@ -330,6 +318,37 @@ const Context = struct {
             for (0..3) |c| {
                 const s = blend(st.blend, color[c], d[c]);
                 d[c] = s * a + d[c] * (1 - a);
+            }
+        }
+    }
+
+    /// Mix each covered pixel toward its remapped color by its coverage,
+    /// out of what this matrix has not yet remapped there. A pixel two
+    /// shapes cover reaches a full remap once, as in SVG, where the run's
+    /// mask is the union of its shapes less what earlier runs masked.
+    fn remap(self: *Context, cm: *const scene.ColorMap) !void {
+        const m = &self.mask;
+        const r = self.raster;
+        const gop = try self.remapped.getOrPut(self.gpa, cm.key);
+        if (!gop.found_existing) {
+            errdefer _ = self.remapped.remove(cm.key);
+            gop.value_ptr.* = try self.gpa.alloc(u16, @as(usize, r.w) * r.h);
+            @memset(gop.value_ptr.*, 0);
+        }
+        const done = gop.value_ptr.*;
+        const full: f32 = std.math.maxInt(u16);
+        for (m.touched.items) |i| {
+            const cov = m.cov[i];
+            m.cov[i] = 0;
+            const before = @as(f32, @floatFromInt(done[i])) / full;
+            const a = cov * (1 - before);
+            if (a <= 0) continue;
+            done[i] = @intFromFloat(@round(@min(before + a, 1) * full));
+            const d = r.pix[@as(usize, i) * 3 ..][0..3];
+            const src = d.*;
+            for (0..3) |c| {
+                const to = std.math.clamp(cm.m[c][0] * src[0] + cm.m[c][1] * src[1] + cm.m[c][2] * src[2] + cm.m[c][3], 0, 1);
+                d[c] = src[c] + (to - src[c]) * a;
             }
         }
     }
@@ -452,4 +471,24 @@ test "render: rects sharing an edge leave no seam" {
     defer r.deinit(gpa);
     try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(2, 1));
     try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(3, 1));
+}
+
+test "render: a colorMap remaps an edge pixel by its coverage, once per matrix" {
+    const gpa = std.testing.allocator;
+    const invert: scene.ColorMap = .{ .m = .{ .{ -1, 0, 0, 1 }, .{ 0, -1, 0, 1 }, .{ 0, 0, -1, 1 } }, .key = 7 };
+    const style: scene.Style = .{ .fill = .{ .solid = .{ 0, 0, 0, 1 } }, .color_map = invert };
+    // Covers pixel 0 fully and pixel 1 half, twice over.
+    const shape: scene.Shape = .{ .rect = .{ .x = 0, .y = 0, .w = 1.5, .h = 1 } };
+    const items = [_]scene.Item{
+        .{ .draw = .{ .shape = shape, .style = style } },
+        .{ .draw = .{ .shape = shape, .style = style } },
+    };
+    const s: scene.Scene = .{ .w = 3, .h = 1, .bg = .{ 1, 1, 1 }, .items = &items };
+    var r = try render(gpa, &s, .{});
+    defer r.deinit(gpa);
+    try std.testing.expectEqual(Raster.Rgb{ 0, 0, 0 }, r.get(0, 0));
+    // Half remapped by the first draw. The second adds a quarter of a
+    // remap of what is there, and the inverse of mid gray is mid gray.
+    try std.testing.expectEqual(Raster.Rgb{ 0.5, 0.5, 0.5 }, r.get(1, 0));
+    try std.testing.expectEqual(Raster.Rgb{ 1, 1, 1 }, r.get(2, 0));
 }
