@@ -20,6 +20,12 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "differentialGrowth", .func = zlua.wrap(differentialGrowth) },
 };
 
+fn threads(lua: *Lua) ?sim.common.Threads {
+    const host = util.getHost(lua);
+    if (host.sim_workers <= 1) return null;
+    return .{ .io = host.io, .workers_max = host.sim_workers };
+}
+
 fn optField(lua: *Lua, index: i32, key: [:0]const u8) ?*Field {
     defer lua.pop(1);
     return switch (lua.getField(index, key)) {
@@ -98,6 +104,7 @@ fn reactionDiffusion(lua: *Lua) !i32 {
         .wrap = util.optBool(lua, 1, "wrap", true),
         .feed_map = optField(lua, 1, "feedMap"),
         .kill_map = optField(lua, 1, "killMap"),
+        .threads = threads(lua),
     };
     const steps = optCount(lua, 1, "steps", 2000);
     const seed = util.optSeed(lua, 1);
@@ -349,6 +356,7 @@ fn differentialGrowth(lua: *Lua) !i32 {
         .max_nodes = optCount(lua, 1, "maxNodes", 20_000),
         .bounds = if (mask == null) bounds else null,
         .mask = mask,
+        .threads = threads(lua),
     };
     const steps = optCount(lua, 1, "steps", 200);
     const seed = util.optSeed(lua, 1);

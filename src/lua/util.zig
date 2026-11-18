@@ -23,6 +23,9 @@ pub const Host = struct {
     gpa: Allocator,
     io: std.Io,
     seeds: Seeds = .{},
+    /// Threads a simulation may use, the calling one included. The CLI
+    /// shares its -j cap between the renders running at once.
+    sim_workers: u32 = 1,
 };
 
 /// --seed and --noise-seed. Each one set replaces the argument of every

@@ -1,7 +1,8 @@
 //! genpuin CLI: run art scripts and export the canvas each one draws.
 //! Every render, one per script or one per seed of a range, is a job
 //! with its own Lua state. A fixed set of workers pulls jobs from a shared
-//! counter, so `-j` caps the total however the work is split.
+//! counter, so `-j` caps the total however the work is split. Threads
+//! left over when there are fewer renders than `-j` go to simulations.
 
 const std = @import("std");
 const assert = std.debug.assert;
@@ -38,8 +39,9 @@ const usage =
     \\  --sheet          With a range: one contact sheet per script,
     \\                   each tile labeled with its seed
     \\  --tile <px>      Contact sheet tile width (default 320)
-    \\  -j <n>           Renders at once, across all scripts and
-    \\                   seeds (default: CPU count)
+    \\  -j <n>           Threads in all, across all scripts and seeds.
+    \\                   Spare ones speed up simulations
+    \\                   (default: CPU count)
     \\  -h, --help       Show this help
     \\
     \\Seeds are integers from 0 to 4294967295. A seed given in a script
@@ -397,6 +399,8 @@ const Batch = struct {
     /// Written only by the worker that ran the job.
     failed: []bool,
     next: std.atomic.Value(usize) = .init(0),
+    /// Each render's share of the -j cap for its simulations.
+    sim_workers: u32 = 1,
     /// Tests turn off the report on stderr.
     quiet: bool = false,
 
@@ -443,10 +447,14 @@ const Batch = struct {
 
     /// Run every job on up to `jobs_max` workers, the calling thread
     /// being one of them. Where the Io cannot run a worker concurrently,
-    /// it runs inline, so the batch degrades to sequential.
+    /// it runs inline, so the batch degrades to sequential. Each render
+    /// gets an equal share of the cap for its simulations, so the two
+    /// levels together stay within `jobs_max` threads.
     fn run(b: *Batch, jobs_max: u32) Io.Cancelable!void {
         assert(jobs_max >= 1);
+        assert(b.failed.len >= 1);
         const workers = @min(jobs_max, b.failed.len);
+        b.sim_workers = jobs_max / workers;
         var group: Io.Group = .init;
         defer group.cancel(b.io);
         for (1..workers) |_| {
@@ -498,7 +506,12 @@ const Batch = struct {
 
     fn runOne(b: *Batch, script: usize, index: usize, target: Target, w: *Io.Writer) !void {
         const path = b.args.scripts[script];
-        var host: util.Host = .{ .gpa = b.gpa, .io = b.io, .seeds = b.args.seedsAt(index) };
+        var host: util.Host = .{
+            .gpa = b.gpa,
+            .io = b.io,
+            .seeds = b.args.seedsAt(index),
+            .sim_workers = b.sim_workers,
+        };
         const lua = try host_mod.create(&host, .{
             .script_dir = std.fs.path.dirname(path) orelse ".",
             .lua_dir = b.lua_dir,

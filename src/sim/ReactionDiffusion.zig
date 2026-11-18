@@ -27,6 +27,7 @@ da: f32,
 db: f32,
 dt: f32,
 wrap: bool,
+threads: ?common.Threads,
 
 pub const Options = struct {
     w: u32,
@@ -40,6 +41,8 @@ pub const Options = struct {
     /// Absolute feed rate per cell, stretched over the grid.
     feed_map: ?*const Field = null,
     kill_map: ?*const Field = null,
+    /// Steps on large grids are split into row bands across these.
+    threads: ?common.Threads = null,
 };
 
 pub const Preset = enum { coral, mitosis, worms, spots, maze, fingerprint, holes, waves, chaos };
@@ -101,6 +104,7 @@ pub fn init(gpa: Allocator, opts: Options) !ReactionDiffusion {
         .db = opts.db,
         .dt = opts.dt,
         .wrap = opts.wrap,
+        .threads = opts.threads,
     };
 }
 
@@ -147,10 +151,21 @@ pub fn loadA(self: *ReactionDiffusion, source: *const Field) void {
     common.resample(self.a, self.w, self.h, source);
 }
 
+/// Rows that take about as long to step as handing a band to a worker.
+fn handoffRows(w: u32) u32 {
+    const cells = 8 * 1024;
+    return (cells + w - 1) / w;
+}
+
 pub fn step(self: *ReactionDiffusion, n: u32) void {
     const mapped = self.feed_map.len > 0;
+    const shared: *const ReactionDiffusion = self;
     for (0..n) |_| {
-        if (mapped) self.stepOnce(true) else self.stepOnce(false);
+        if (mapped) {
+            common.forBands(self.threads, self.h, handoffRows(self.w), shared, stepRowsMapped);
+        } else {
+            common.forBands(self.threads, self.h, handoffRows(self.w), shared, stepRowsPlain);
+        }
         std.mem.swap([]f32, &self.a, &self.a_next);
         std.mem.swap([]f32, &self.b, &self.b_next);
     }
@@ -172,10 +187,20 @@ const Rows = struct {
     kill: []const f32,
 };
 
-fn stepOnce(self: *ReactionDiffusion, comptime mapped: bool) void {
+fn stepRowsMapped(self: *const ReactionDiffusion, start: usize, end: usize) void {
+    self.stepRows(true, start, end);
+}
+
+fn stepRowsPlain(self: *const ReactionDiffusion, start: usize, end: usize) void {
+    self.stepRows(false, start, end);
+}
+
+/// Read rows of a and b around [start, end) and write those rows of
+/// a_next and b_next.
+fn stepRows(self: *const ReactionDiffusion, comptime mapped: bool, start: usize, end: usize) void {
     const w: usize = self.w;
     const h: usize = self.h;
-    for (0..h) |y| {
+    for (start..end) |y| {
         const yu = if (y > 0) y - 1 else if (self.wrap) h - 1 else 0;
         const yd = if (y + 1 < h) y + 1 else if (self.wrap) 0 else h - 1;
         const r: Rows = .{
@@ -299,4 +324,36 @@ test "ReactionDiffusion: a feed map equal to the constant changes nothing" {
     plain.step(30);
     mapped.step(30);
     try std.testing.expectEqualSlices(f32, plain.b, mapped.b);
+}
+
+test "ReactionDiffusion: any worker count gives the same grids" {
+    const gpa = std.testing.allocator;
+    // 601 rows do not split evenly into bands, and are enough for 7 workers.
+    const w = 700;
+    const h = 601;
+    try std.testing.expectEqual(@as(u32, 7), common.workerCount(7, h, handoffRows(w)));
+    var kill: Field = try .init(gpa, 5, 3, 0.06);
+    defer kill.deinit(gpa);
+    kill.set(2, 1, 0.065);
+    const cpu: u32 = @intCast(std.Thread.getCpuCount() catch 4);
+    for ([_]bool{ true, false }) |wrap| {
+        var reference: ReactionDiffusion = try .init(gpa, .{ .w = w, .h = h, .wrap = wrap, .kill_map = if (wrap) null else &kill });
+        defer reference.deinit(gpa);
+        reference.seedRandom(5, 40, 6);
+        reference.step(12);
+        for ([_]u32{ 1, 2, 3, 7, cpu }) |workers| {
+            var rd: ReactionDiffusion = try .init(gpa, .{
+                .w = w,
+                .h = h,
+                .wrap = wrap,
+                .kill_map = if (wrap) null else &kill,
+                .threads = .{ .io = std.testing.io, .workers_max = workers },
+            });
+            defer rd.deinit(gpa);
+            rd.seedRandom(5, 40, 6);
+            rd.step(12);
+            try std.testing.expectEqualSlices(u32, @ptrCast(reference.a), @ptrCast(rd.a));
+            try std.testing.expectEqualSlices(u32, @ptrCast(reference.b), @ptrCast(rd.b));
+        }
+    }
 }

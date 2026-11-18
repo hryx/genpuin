@@ -22,6 +22,62 @@ pub const Rect = struct {
     }
 };
 
+/// Where a simulation may spread a step's independent parts.
+/// `workers_max` counts the calling thread, so 1 is sequential.
+pub const Threads = struct {
+    io: std.Io,
+    workers_max: u32,
+};
+
+/// Run `func(ctx, start, end)` over [0, len) cut into contiguous bands.
+/// Each call must write only inside its own band and read nothing another
+/// band writes, so the result is the same for any band count. Workers,
+/// the calling thread among them, take bands from a shared counter, a few
+/// per worker so a slow core does not hold up the rest. `handoff_len` is
+/// how many items take as long as starting one worker. With null
+/// `threads` there is one band.
+pub fn forBands(threads: ?Threads, len: usize, handoff_len: usize, ctx: anytype, comptime func: fn (@TypeOf(ctx), usize, usize) void) void {
+    assert(handoff_len > 0);
+    const t = threads orelse return func(ctx, 0, len);
+    const workers = workerCount(t.workers_max, len, handoff_len);
+    if (workers <= 1) return func(ctx, 0, len);
+
+    const Bands = struct {
+        ctx: @TypeOf(ctx),
+        len: usize,
+        count: usize,
+        next: std.atomic.Value(usize) = .init(0),
+
+        fn work(b: *@This()) void {
+            while (true) {
+                const i = b.next.fetchAdd(1, .monotonic);
+                if (i >= b.count) return;
+                func(b.ctx, b.len * i / b.count, b.len * (i + 1) / b.count);
+            }
+        }
+    };
+    var bands: Bands = .{ .ctx = ctx, .len = len, .count = @min(len, workers * bands_per_worker) };
+    var group: std.Io.Group = .init;
+    for (1..workers) |_| {
+        group.concurrent(t.io, Bands.work, .{&bands}) catch group.async(t.io, Bands.work, .{&bands});
+    }
+    bands.work();
+    // The bands have no cancelation points, so every one has finished
+    // here either way. Leave the request for the caller's next one.
+    group.await(t.io) catch |err| switch (err) {
+        error.Canceled => t.io.recancel(),
+    };
+}
+
+const bands_per_worker = 4;
+
+/// How many workers forBands uses. They start one after another, so k
+/// of them finish len items in about len / k + k * handoff_len, which is
+/// least at k = sqrt(len / handoff_len).
+pub fn workerCount(workers_max: u32, len: usize, handoff_len: usize) u32 {
+    return @min(workers_max, std.math.sqrt(len / handoff_len));
+}
+
 /// A Field read over a rect in point units. A point is inside when the
 /// bilinear sample there is above one half.
 pub const Mask = struct {
@@ -80,4 +136,27 @@ test "common: resample stretches a two cell field" {
     try std.testing.expectEqual(@as(f32, 0.25), out[1]);
     try std.testing.expectEqual(@as(f32, 0.75), out[2]);
     try std.testing.expectEqual(@as(f32, 1), out[3]);
+}
+
+test "common: forBands visits every index once for any worker count" {
+    const Hits = struct {
+        fn mark(hits: []std.atomic.Value(u32), start: usize, end: usize) void {
+            for (hits[start..end]) |*h| _ = h.fetchAdd(1, .monotonic);
+        }
+    };
+    var hits: [1001]std.atomic.Value(u32) = undefined;
+    for ([_]u32{ 1, 2, 3, 7, 31 }) |workers| {
+        for (&hits) |*h| h.* = .init(0);
+        const threads: Threads = .{ .io = std.testing.io, .workers_max = workers };
+        forBands(threads, hits.len, 1, @as([]std.atomic.Value(u32), &hits), Hits.mark);
+        for (&hits) |*h| try std.testing.expectEqual(@as(u32, 1), h.load(.monotonic));
+    }
+}
+
+test "common: workerCount grows with the square root of the work" {
+    try std.testing.expectEqual(@as(u32, 0), workerCount(8, 99, 100));
+    try std.testing.expectEqual(@as(u32, 1), workerCount(8, 3, 1));
+    try std.testing.expectEqual(@as(u32, 2), workerCount(8, 4, 1));
+    try std.testing.expectEqual(@as(u32, 3), workerCount(8, 900, 100));
+    try std.testing.expectEqual(@as(u32, 8), workerCount(8, 1 << 20, 1));
 }

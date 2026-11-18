@@ -44,6 +44,10 @@ pub const Options = struct {
     max_nodes: u32 = 20_000,
     bounds: ?Rect = null,
     mask: ?Mask = null,
+    /// Forces on long lines are split into node bands across these. The
+    /// noise is drawn afterward in node order, so it matches a run
+    /// without threads.
+    threads: ?common.Threads = null,
 };
 
 pub fn init(gpa: Allocator, path: []const Vec2, opts: Options, seed: u64) !DifferentialGrowth {
@@ -156,15 +160,32 @@ fn neighbors(self: *const DifferentialGrowth, i: usize) [2]?usize {
     return .{ prev, next };
 }
 
+/// Nodes that take about as long as handing a band to a worker.
+const handoff_nodes = 128;
+
 fn computeForces(self: *DifferentialGrowth, gpa: Allocator) !void {
+    try self.force.resize(gpa, self.nodes.items.len);
+    const shared: *const DifferentialGrowth = self;
+    common.forBands(self.opts.threads, self.nodes.items.len, handoff_nodes, shared, forceRange);
+    if (self.opts.noise > 0) {
+        const rng = self.prng.random();
+        for (self.force.items) |*f| {
+            const u = common.randomUnit(rng);
+            f[0] += u[0] * self.opts.noise;
+            f[1] += u[1] * self.opts.noise;
+        }
+    }
+}
+
+/// Spring, smoothing and repulsion on nodes [start, end), written to
+/// their slots in `force`.
+fn forceRange(self: *const DifferentialGrowth, start: usize, end: usize) void {
     const o = &self.opts;
-    const rng = self.prng.random();
     const nodes = self.nodes.items;
-    try self.force.resize(gpa, nodes.len);
     const rest = o.rest_length orelse o.max_edge / 2;
     const g = self.grid;
     const radius2 = o.repel_radius * o.repel_radius;
-    for (nodes, self.force.items, 0..) |p, *f, i| {
+    for (nodes[start..end], self.force.items[start..end], start..) |p, *f, i| {
         f.* = .{ 0, 0 };
         const nb = self.neighbors(i);
         for (nb) |maybe| if (maybe) |j| {
@@ -205,11 +226,6 @@ fn computeForces(self: *DifferentialGrowth, gpa: Allocator) !void {
                 f[0] += dx * k;
                 f[1] += dy * k;
             }
-        }
-        if (o.noise > 0) {
-            const u = common.randomUnit(rng);
-            f[0] += u[0] * o.noise;
-            f[1] += u[1] * o.noise;
         }
     }
 }
@@ -321,4 +337,31 @@ test "DifferentialGrowth: same seed gives the same line" {
     try one.step(gpa, 30);
     try two.step(gpa, 30);
     try std.testing.expectEqualSlices(Vec2, one.points(), two.points());
+}
+
+test "DifferentialGrowth: any worker count gives the same nodes" {
+    const gpa = std.testing.allocator;
+    // 7001 nodes do not split evenly into bands, and are enough for 7 workers.
+    const n = 7001;
+    try std.testing.expectEqual(@as(u32, 7), common.workerCount(7, n, handoff_nodes));
+    const loop = try gpa.alloc(Vec2, n);
+    defer gpa.free(loop);
+    for (loop, 0..) |*p, i| {
+        const a = @as(f64, @floatFromInt(i)) / n * std.math.tau;
+        p.* = .{ 1100 * math.cos(a), 1100 * math.sin(a) };
+    }
+    const opts: Options = .{ .growth = 0.02, .noise = 0.3, .max_nodes = 9000 };
+    var reference: DifferentialGrowth = try .init(gpa, loop, opts, 8);
+    defer reference.deinit(gpa);
+    try reference.step(gpa, 6);
+    try std.testing.expect(reference.points().len > n); // splitting is covered too
+    const cpu: u32 = @intCast(std.Thread.getCpuCount() catch 4);
+    for ([_]u32{ 1, 2, 3, 7, cpu }) |workers| {
+        var threaded = opts;
+        threaded.threads = .{ .io = std.testing.io, .workers_max = workers };
+        var g: DifferentialGrowth = try .init(gpa, loop, threaded, 8);
+        defer g.deinit(gpa);
+        try g.step(gpa, 6);
+        try std.testing.expectEqualSlices(u64, @ptrCast(reference.points()), @ptrCast(g.points()));
+    }
 }
