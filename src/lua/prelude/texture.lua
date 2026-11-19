@@ -5,6 +5,7 @@
 local import = ...
 local core = import("core")
 local rand = import("rand")
+local strict = import("strict")
 
 local T = core.texture
 
@@ -39,6 +40,23 @@ function M.fieldGradient(f)
     return T.gradient(f)
 end
 
+local snapKeys = {
+    cell = true, mode = true, amount = true, jitter = true, chance = true,
+    angle = true, center = true, spokes = true, feedback = true,
+}
+local splatSnapKeys = {
+    cell = true, mode = true, amount = true, jitter = true, chance = true,
+    angle = true, center = true, spokes = true,
+}
+
+-- Raise a bad opts.snap at the line that called the gen function. The
+-- caller has checked the keys with strict.options, which raises at that
+-- line only when called from the gen function itself.
+local function checkSnap(what, opts, use)
+    local ok, err = T.checkSnap(opts, use)
+    if not ok then error(what .. ": " .. err, 3) end
+end
+
 -- Render a strange attractor into a density Field. Draw it with
 -- gen.image(f, x, y, w, h, {palette = ..., tone = "log"}).
 -- opts.kind: "clifford" (default), "dejong", "svensson", "bedhead",
@@ -50,7 +68,30 @@ end
 -- opts.splat: "bilinear" (default) or "nearest".
 -- opts.bounds = {x, y, w, h} in map space, fitted from a pilot run if absent.
 -- opts.seed (default from gen.rand).
+-- opts.snap quantizes the plotted points for a gritty look. A number is
+--   the cell size, or a table:
+--   cell: lattice spacing in output cells (required, above 0).
+--   mode: "grid" (default), "rows" (y only, scan lines), "columns" (x
+--     only), "hex", or "polar" (angle in steps of 360 / spokes degrees
+--     around center, radius in steps of cell).
+--   amount: 0..1, how far a point moves toward its lattice point
+--     (default 1). Below 1 the true image shows through.
+--   jitter: random offset after snapping, uniform in a disc whose radius
+--     is this fraction of cell (default 0).
+--   chance: 0..1, the share of points snapped at all (default 1).
+--   angle: lattice rotation in degrees (default 0). Turns polar spokes.
+--   center = {x, y}: polar center in output cells (default the middle).
+--   spokes: polar angle steps (default 24).
+--   feedback: true iterates the map on the snapped point, not only plots
+--     it there (default false). Attractors then fall into short cycles
+--     and show a handful of dots unless jitter keeps them moving.
+--   Jitter and chance draw from their own stream of opts.seed, so the
+--   orbit is the same as without snap.
 function M.attractor(opts)
+    if type(opts) == "table" and opts.snap ~= nil then
+        if type(opts.snap) == "table" then strict.options("gen.attractor snap", opts.snap, snapKeys) end
+        checkSnap("gen.attractor", opts, "orbit")
+    end
     return T.attractor(opts or {}, randomSeed())
 end
 
@@ -67,7 +108,14 @@ end
 -- opts.final: a transform applied before plotting only.
 -- opts.symmetry: n-fold rotation, negative also mirrors (default 1).
 -- opts.n, w, h, supersample, splat, bounds, seed as for attractor.
+-- opts.snap quantizes the plotted points, with the keys listed for
+--   gen.attractor. With feedback the chaos game runs on the lattice and
+--   opts.final, if any, bends the lattice before plotting.
 function M.flame(opts)
+    if type(opts) == "table" and opts.snap ~= nil then
+        if type(opts.snap) == "table" then strict.options("gen.flame snap", opts.snap, snapKeys) end
+        checkSnap("gen.flame", opts, "orbit")
+    end
     return T.flame(opts, randomSeed())
 end
 
@@ -82,7 +130,15 @@ end
 -- {x, y} or {x, y, weight}. opts.x, y, w, h is the scene rect the field
 -- covers (default its cells), opts.weight scales every point (default 1),
 -- opts.splat is "bilinear" (default) or "nearest".
+-- opts.snap quantizes the points as for gen.attractor, in cells of the
+-- field and without feedback. opts.seed seeds its jitter and chance
+-- (default from gen.rand).
 function M.splat(field, points, opts)
+    if type(opts) == "table" and opts.snap ~= nil then
+        if type(opts.snap) == "table" then strict.options("gen.splat snap", opts.snap, splatSnapKeys) end
+        checkSnap("gen.splat", opts, "splat")
+        return T.splat(field, points, opts, randomSeed())
+    end
     return T.splat(field, points, opts)
 end
 

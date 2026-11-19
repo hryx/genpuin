@@ -30,6 +30,7 @@ pub const functions = [_]zlua.FnReg{
     .{ .name = "flame", .func = zlua.wrap(flameFn) },
     .{ .name = "randomFlame", .func = zlua.wrap(randomFlame) },
     .{ .name = "splat", .func = zlua.wrap(splat) },
+    .{ .name = "checkSnap", .func = zlua.wrap(checkSnap) },
 };
 
 /// Fold any Lua number into a 32-bit noise seed.
@@ -311,6 +312,110 @@ fn gradient(lua: *Lua) !i32 {
     return 2;
 }
 
+const SnapUse = enum { orbit, splat };
+
+/// opts.snap from the table at `index`: a number is the cell size, a
+/// table spells out every key. Unknown keys are caught in the prelude,
+/// which knows the script line.
+fn optSnap(lua: *Lua, index: i32, use: SnapUse) ?density.Snap {
+    if (!lua.isTable(index)) return null;
+    defer lua.pop(1);
+    switch (lua.getField(index, "snap")) {
+        .nil, .none => return null,
+        .number => return .{ .cell = snapCell(lua, lua.toNumber(-1) catch unreachable) }, // type checked by the switch
+        .table => {},
+        else => lua.raiseErrorStr("option 'snap' must be a cell size or a table", .{}),
+    }
+    const t = lua.absIndex(-1);
+    if (lua.getField(t, "cell") != .number) lua.raiseErrorStr("option 'snap.cell' must be a number", .{});
+    const cell = snapCell(lua, lua.toNumber(-1) catch unreachable); // type checked on the line above
+    lua.pop(1);
+    const feedback = switch (lua.getField(t, "feedback")) {
+        .nil, .none => false,
+        .boolean => lua.toBoolean(-1),
+        else => lua.raiseErrorStr("option 'snap.feedback' must be true or false", .{}),
+    };
+    lua.pop(1);
+    if (feedback and use == .splat) lua.raiseErrorStr("option 'snap.feedback' needs an orbit, gen.splat has none", .{});
+    const spokes = snapNumber(lua, t, "spokes", 24, 1, 65536);
+    if (spokes != @floor(spokes)) lua.raiseErrorStr("option 'snap.spokes' must be a whole number", .{});
+    return .{
+        .cell = cell,
+        .mode = snapMode(lua, t),
+        .amount = snapNumber(lua, t, "amount", 1, 0, 1),
+        .jitter = snapNumber(lua, t, "jitter", 0, 0, 100),
+        .chance = snapNumber(lua, t, "chance", 1, 0, 1),
+        .angle = snapNumber(lua, t, "angle", 0, -1e6, 1e6),
+        .center = snapCenter(lua, t),
+        .spokes = @intFromFloat(spokes),
+        .feedback = feedback,
+    };
+}
+
+/// checkSnap(opts, use) -> true, or false and the message reading
+/// opts.snap would raise. `use` is "orbit" or "splat". The prelude raises
+/// the message at the caller's line.
+fn checkSnap(lua: *Lua) i32 {
+    lua.pushFunction(zlua.wrap(checkSnapProtected));
+    lua.pushValue(1);
+    lua.pushValue(2);
+    lua.protectedCall(.{ .args = 2, .results = 0 }) catch {
+        lua.pushBoolean(false);
+        lua.insert(-2);
+        return 2;
+    };
+    lua.pushBoolean(true);
+    return 1;
+}
+
+fn checkSnapProtected(lua: *Lua) i32 {
+    const name = lua.toString(2) catch lua.raiseErrorStr("checkSnap needs a use", .{});
+    const use = std.meta.stringToEnum(SnapUse, name) orelse lua.raiseErrorStr("unknown snap use '%s'", .{name.ptr});
+    _ = optSnap(lua, 1, use);
+    return 0;
+}
+
+fn snapCell(lua: *Lua, cell: f64) f64 {
+    if (!(cell > 0 and cell <= 1e6)) lua.raiseErrorStr("option 'snap.cell' must be above 0 and at most 1e6", .{});
+    return cell;
+}
+
+fn snapNumber(lua: *Lua, t: i32, key: [:0]const u8, default: f64, lo: f64, hi: f64) f64 {
+    defer lua.pop(1);
+    const v = switch (lua.getField(t, key)) {
+        .nil, .none => return default,
+        .number => lua.toNumber(-1) catch unreachable, // type checked by the switch
+        else => lua.raiseErrorStr("option 'snap.%s' must be a number", .{key.ptr}),
+    };
+    if (!(v >= lo and v <= hi)) lua.raiseErrorStr("option 'snap.%s' is out of range", .{key.ptr});
+    return v;
+}
+
+fn snapMode(lua: *Lua, t: i32) density.Snap.Mode {
+    defer lua.pop(1);
+    switch (lua.getField(t, "mode")) {
+        .nil, .none => return .grid,
+        .string => {
+            const s = lua.toString(-1) catch unreachable; // type checked by the switch
+            return std.meta.stringToEnum(density.Snap.Mode, s) orelse lua.raiseErrorStr(
+                "option 'snap.mode': unknown value '%s' (grid, rows, columns, hex or polar)",
+                .{s.ptr},
+            );
+        },
+        else => lua.raiseErrorStr("option 'snap.mode' must be a string", .{}),
+    }
+}
+
+fn snapCenter(lua: *Lua, t: i32) ?[2]f64 {
+    defer lua.pop(1);
+    if (lua.getField(t, "center") == .nil) return null;
+    const c = util.readVec2(lua, -1) orelse lua.raiseErrorStr("option 'snap.center' must be {x, y}", .{});
+    if (!(std.math.isFinite(c[0]) and std.math.isFinite(c[1]))) {
+        lua.raiseErrorStr("option 'snap.center' must be finite", .{});
+    }
+    return c;
+}
+
 fn readParams(lua: *Lua, kind: attractor.Kind) attractor.Params {
     const d = attractor.defaults(kind);
     return .{
@@ -336,6 +441,7 @@ fn attractorFn(lua: *Lua) !i32 {
         .supersample = @intFromFloat(optRange(lua, 1, "supersample", 1, 1, 8)),
         .splat = util.optEnum(lua, density.Splat, 1, "splat", .bilinear),
         .bounds = if (optRect(lua, 1, "bounds")) |r| toRect(r) else null,
+        .snap = optSnap(lua, 1, .orbit),
     };
     util.pushField(lua, try attractor.render(lua.allocator(), o));
     return 1;
@@ -414,6 +520,7 @@ fn flameFn(lua: *Lua) !i32 {
         .supersample = @intFromFloat(optRange(lua, 1, "supersample", 1, 1, 8)),
         .splat = util.optEnum(lua, density.Splat, 1, "splat", .bilinear),
         .bounds = if (optRect(lua, 1, "bounds")) |r| toRect(r) else null,
+        .snap = optSnap(lua, 1, .orbit),
     };
     const res = flame.render(gpa, o) catch |err| switch (err) {
         error.NoWeight => lua.raiseErrorStr("flame transforms need a positive total weight", .{}),
@@ -465,7 +572,8 @@ fn randomFlame(lua: *Lua) !i32 {
     return 1;
 }
 
-/// splat(field, points, opts?) adds {x, y, weight?} points in place.
+/// splat(field, points, opts?, default_seed?) adds {x, y, weight?}
+/// points in place.
 fn splat(lua: *Lua) !i32 {
     const f = util.checkField(lua, 1);
     lua.checkType(2, .table);
@@ -486,7 +594,11 @@ fn splat(lua: *Lua) !i32 {
         w.* = base * @as(f32, @floatCast(util.numberAt(lua, -1, 3) orelse 1));
         lua.pop(1);
     }
-    density.splatPoints(f, toRect(rect), mode, pts, ws);
+    var snapper: ?density.Snapper = if (optSnap(lua, 3, .splat)) |s|
+        .init(s, f.w, f.h, 1, seed64(util.optNumber(lua, 3, "seed", lua.optNumber(4) orelse 1)))
+    else
+        null;
+    density.splatPoints(f, toRect(rect), mode, pts, ws, if (snapper) |*s| s else null);
     lua.pushValue(1);
     return 1;
 }

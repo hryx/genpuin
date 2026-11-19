@@ -84,6 +84,11 @@ pub const Options = struct {
     splat: density.Splat = .bilinear,
     /// Flame-space rect. Null fits it from a pilot run.
     bounds: ?density.Rect = null,
+    /// Quantize plotted points. The pilot run is never snapped, so the
+    /// fitted bounds are the same with or without it. With feedback the
+    /// snapped point is the one iterated, and the final transform, if
+    /// any, applies to it before plotting.
+    snap: ?density.Snap = null,
 };
 
 pub const Result = struct {
@@ -286,6 +291,11 @@ const Game = struct {
 
     /// Advance one step and return the point to plot.
     fn next(self: *Game) Point {
+        self.advance();
+        return self.plotted();
+    }
+
+    fn advance(self: *Game) void {
         const r = self.prng.random();
         const t = &self.transforms[self.table[r.int(u32) & (table_len - 1)]];
         var p = apply(t, self.p, r);
@@ -294,8 +304,11 @@ const Game = struct {
             p = .{ .x = rr.float(f64) * 2 - 1, .y = rr.float(f64) * 2 - 1, .c = self.p.c };
         }
         self.p = p;
-        if (self.final) |*f| return apply(f, p, r);
-        return p;
+    }
+
+    fn plotted(self: *Game) Point {
+        if (self.final) |*f| return apply(f, self.p, self.prng.random());
+        return self.p;
     }
 };
 
@@ -345,16 +358,62 @@ pub fn render(gpa: Allocator, o: Options) Error!Result {
     errdefer hist.deinit(gpa);
     var color: density.Histogram = try .init(gpa, o.w, o.h, o.supersample, bounds, o.splat);
     errdefer color.deinit(gpa);
-    for (0..o.iterations) |_| {
-        const p = game.next();
-        hist.plot(p.x, p.y, 1);
-        color.plot(p.x, p.y, @floatCast(p.c));
+    if (o.snap) |s| {
+        var snapper: density.Snapper = .init(s, o.w, o.h, o.supersample, o.seed);
+        if (s.feedback) {
+            runFed(&game, &hist, &color, &snapper, o.iterations);
+        } else {
+            runSnapped(&game, &hist, &color, &snapper, o.iterations);
+        }
+    } else {
+        for (0..o.iterations) |_| {
+            const p = game.next();
+            hist.plot(p.x, p.y, 1);
+            color.plot(p.x, p.y, @floatCast(p.c));
+        }
     }
     var d = try hist.finish(gpa);
     errdefer d.deinit(gpa);
     const c = try color.finish(gpa);
     for (c.data, d.data) |*cv, dv| cv.* = if (dv > 0) cv.* / dv else 0;
     return .{ .density = d, .color = c };
+}
+
+fn runSnapped(
+    game: *Game,
+    hist: *density.Histogram,
+    color: *density.Histogram,
+    snapper: *density.Snapper,
+    iterations: u64,
+) void {
+    for (0..iterations) |_| {
+        const p = game.next();
+        const c = hist.mapper.map(p.x, p.y);
+        const d = snapper.offset(c[0], c[1]);
+        hist.plotCell(c[0] + d[0], c[1] + d[1], 1);
+        color.plotCell(c[0] + d[0], c[1] + d[1], @floatCast(p.c));
+    }
+}
+
+/// The chaos game runs on the lattice. Its random transform choice keeps
+/// the orbit moving, so unlike an attractor it does not lock into a
+/// cycle, but it can collapse onto a few lattice points.
+fn runFed(
+    game: *Game,
+    hist: *density.Histogram,
+    color: *density.Histogram,
+    snapper: *density.Snapper,
+    iterations: u64,
+) void {
+    for (0..iterations) |_| {
+        game.advance();
+        const q = snapper.feed(hist.mapper, game.p.x, game.p.y);
+        game.p.x = q[0];
+        game.p.y = q[1];
+        const p = game.plotted();
+        hist.plot(p.x, p.y, 1);
+        color.plot(p.x, p.y, @floatCast(p.c));
+    }
 }
 
 /// Variations that make a decent picture when mixed at random. The
@@ -511,4 +570,74 @@ test "flame: random flames are deterministic per seed" {
     try std.testing.expectEqual(a.symmetry, b.symmetry);
     try std.testing.expectEqual(a.transforms[2].affine, b.transforms[2].affine);
     try std.testing.expectEqual(@as(usize, 3), a.transforms.len);
+}
+
+const test_transforms = [_]Transform{
+    .{ .affine = .{ 0.5, 0, 0, 0, 0.5, 0 }, .terms = &.{.{ .variation = .swirl, .weight = 1 }}, .color = 0 },
+    .{ .affine = .{ 0.5, 0, 0.5, 0, 0.5, 0 }, .terms = &.{.{ .variation = .julia, .weight = 1 }}, .color = 0.5 },
+    .{ .affine = .{ 0.5, 0, 0, 0, 0.5, 0.5 }, .color = 1 },
+};
+
+test "flame: snap with amount 0 renders the unsnapped Fields exactly" {
+    const gpa = std.testing.allocator;
+    const o: Options = .{ .transforms = &test_transforms, .iterations = 20_000, .w = 32, .h = 24, .seed = 6, .supersample = 2 };
+    var plain = try render(gpa, o);
+    defer plain.deinit(gpa);
+    var so = o;
+    so.snap = .{ .cell = 5, .mode = .hex, .amount = 0, .chance = 0.5 };
+    inline for (.{ false, true }) |feedback| {
+        so.snap.?.feedback = feedback;
+        var a = try render(gpa, so);
+        defer a.deinit(gpa);
+        try std.testing.expectEqualSlices(f32, plain.density.data, a.density.data);
+        try std.testing.expectEqualSlices(f32, plain.color.data, a.color.data);
+    }
+}
+
+test "flame: snapped renders are deterministic in every mode" {
+    const gpa = std.testing.allocator;
+    inline for (std.meta.tags(density.Snap.Mode)) |mode| {
+        inline for (.{ false, true }) |feedback| {
+            const o: Options = .{
+                .transforms = &test_transforms,
+                .final = .{ .terms = &.{.{ .variation = .spherical, .weight = 1 }} },
+                .iterations = 10_000,
+                .w = 32,
+                .h = 32,
+                .seed = 3,
+                .snap = .{ .cell = 3, .mode = mode, .jitter = 0.2, .chance = 0.8, .feedback = feedback },
+            };
+            var a = try render(gpa, o);
+            defer a.deinit(gpa);
+            var b = try render(gpa, o);
+            defer b.deinit(gpa);
+            try std.testing.expectEqualSlices(f32, a.density.data, b.density.data);
+            for (a.density.data, a.color.data) |d, c| {
+                try std.testing.expect(std.math.isFinite(d));
+                try std.testing.expect(c >= 0 and c <= 1);
+            }
+        }
+    }
+}
+
+test "flame: rows snap leaves only lattice rows lit" {
+    const gpa = std.testing.allocator;
+    var res = try render(gpa, .{
+        .transforms = &test_transforms,
+        .iterations = 20_000,
+        .w = 30,
+        .h = 30,
+        .seed = 1,
+        .splat = .nearest,
+        .snap = .{ .cell = 5, .mode = .rows },
+    });
+    defer res.deinit(gpa);
+    var lit_rows: u32 = 0;
+    for (0..res.density.h) |y| {
+        var row: f32 = 0;
+        for (0..res.density.w) |x| row += res.density.get(@intCast(x), @intCast(y));
+        if (y % 5 != 0) try std.testing.expectEqual(@as(f32, 0), row);
+        if (row > 0) lit_rows += 1;
+    }
+    try std.testing.expect(lit_rows >= 4);
 }

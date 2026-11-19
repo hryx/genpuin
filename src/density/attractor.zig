@@ -129,6 +129,9 @@ pub const Options = struct {
     splat: density.Splat = .bilinear,
     /// Map-space rect. Null fits it from a pilot run.
     bounds: ?density.Rect = null,
+    /// Quantize plotted points. The pilot run is never snapped, so the
+    /// fitted bounds are the same with or without it.
+    snap: ?density.Snap = null,
 };
 
 const warmup = 1000;
@@ -190,11 +193,59 @@ fn renderKind(comptime kind: Kind, gpa: Allocator, o: Options) !Field {
 
     var hist: density.Histogram = try .init(gpa, o.w, o.h, o.supersample, bounds, o.splat);
     errdefer hist.deinit(gpa);
-    for (0..o.iterations) |_| {
-        orbit.advance(kind, p);
-        hist.plot(orbit.x, orbit.y, 1);
+    // The snap loops stay out of line so the plain loop compiles as it
+    // did without them. Inlined, they cost the attractor about 2%.
+    if (o.snap) |s| {
+        var snapper: density.Snapper = .init(s, o.w, o.h, o.supersample, o.seed);
+        if (s.feedback) {
+            runFed(kind, p, &orbit, &hist, &snapper, o.iterations);
+        } else {
+            runSnapped(kind, p, &orbit, &hist, &snapper, o.iterations);
+        }
+    } else {
+        for (0..o.iterations) |_| {
+            orbit.advance(kind, p);
+            hist.plot(orbit.x, orbit.y, 1);
+        }
     }
     return hist.finish(gpa);
+}
+
+noinline fn runSnapped(
+    comptime kind: Kind,
+    p: Params,
+    orbit: *Orbit,
+    hist: *density.Histogram,
+    snapper: *density.Snapper,
+    iterations: u64,
+) void {
+    for (0..iterations) |_| {
+        orbit.advance(kind, p);
+        const c = hist.mapper.map(orbit.x, orbit.y);
+        const d = snapper.offset(c[0], c[1]);
+        hist.plotCell(c[0] + d[0], c[1] + d[1], 1);
+    }
+}
+
+/// The map runs on the lattice. A deterministic map on a finite set of
+/// points falls into a cycle, so without jitter the orbit soon repeats a
+/// handful of points. That is the look, and the loop still runs its
+/// count.
+noinline fn runFed(
+    comptime kind: Kind,
+    p: Params,
+    orbit: *Orbit,
+    hist: *density.Histogram,
+    snapper: *density.Snapper,
+    iterations: u64,
+) void {
+    for (0..iterations) |_| {
+        orbit.advance(kind, p);
+        const q = snapper.feed(hist.mapper, orbit.x, orbit.y);
+        orbit.x = q[0];
+        orbit.y = q[1];
+        hist.plot(orbit.x, orbit.y, 1);
+    }
 }
 
 test "attractor: clifford step matches the formula" {
@@ -231,4 +282,62 @@ test "attractor: supersampling keeps the output size" {
     defer f.deinit(gpa);
     try std.testing.expectEqual(@as(u32, 16), f.w);
     try std.testing.expectEqual(@as(u32, 8), f.h);
+}
+
+test "attractor: snap with amount 0 renders the unsnapped Field exactly" {
+    const gpa = std.testing.allocator;
+    const o: Options = .{ .kind = .clifford, .iterations = 20_000, .w = 32, .h = 32, .seed = 4, .supersample = 2 };
+    var plain = try render(gpa, o);
+    defer plain.deinit(gpa);
+    var so = o;
+    so.snap = .{ .cell = 3, .amount = 0, .chance = 0.4 };
+    var a = try render(gpa, so);
+    defer a.deinit(gpa);
+    try std.testing.expectEqualSlices(f32, plain.data, a.data);
+    so.snap.?.feedback = true;
+    var b = try render(gpa, so);
+    defer b.deinit(gpa);
+    try std.testing.expectEqualSlices(f32, plain.data, b.data);
+}
+
+test "attractor: snapped render is deterministic and lands only on lattice cells" {
+    const gpa = std.testing.allocator;
+    const o: Options = .{
+        .kind = .dejong,
+        .iterations = 20_000,
+        .w = 40,
+        .h = 40,
+        .seed = 2,
+        .splat = .nearest,
+        .snap = .{ .cell = 4 },
+    };
+    var a = try render(gpa, o);
+    defer a.deinit(gpa);
+    var b = try render(gpa, o);
+    defer b.deinit(gpa);
+    try std.testing.expectEqualSlices(f32, a.data, b.data);
+    for (0..a.h) |y| for (0..a.w) |x| {
+        if (x % 4 != 0 or y % 4 != 0) try std.testing.expectEqual(@as(f32, 0), a.get(@intCast(x), @intCast(y)));
+    };
+}
+
+test "attractor: feedback terminates and stays finite" {
+    const gpa = std.testing.allocator;
+    inline for (.{ 0.0, 0.3 }) |jitter| {
+        var f = try render(gpa, .{
+            .kind = .clifford,
+            .iterations = 50_000,
+            .w = 64,
+            .h = 64,
+            .seed = 9,
+            .snap = .{ .cell = 6, .jitter = jitter, .feedback = true },
+        });
+        defer f.deinit(gpa);
+        var total: f64 = 0;
+        for (f.data) |v| {
+            try std.testing.expect(std.math.isFinite(v));
+            total += v;
+        }
+        try std.testing.expect(total > 40_000 and total < 50_000.5);
+    }
 }

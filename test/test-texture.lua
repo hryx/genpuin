@@ -99,6 +99,105 @@ check("sierpinski hole is empty", d:get(12, 12) == 0)
 local rf = gen.randomFlame(4, 2)
 check("randomFlame gives transforms", #rf.transforms == 2 and rf.transforms[1].affine ~= nil)
 
+print("\nSnap")
+
+local function same(f, g)
+    local w, h = f:size()
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            if f:get(x, y) ~= g:get(x, y) then return false end
+        end
+    end
+    return true
+end
+
+local function errorOf(fn)
+    local ok, err = pcall(fn)
+    if ok then return nil end
+    return err
+end
+
+local base = {kind = "dejong", n = 20000, w = 48, h = 48, seed = 2, supersample = 2}
+local function with(snap)
+    local o = {}
+    for k, v in pairs(base) do o[k] = v end
+    o.snap = snap
+    return o
+end
+
+local plain = gen.attractor(with(nil))
+check("snap with amount 0 is the unsnapped Field",
+    same(plain, gen.attractor(with({cell = 4, amount = 0, chance = 0.5}))))
+check("snap = 6 is {cell = 6}", same(gen.attractor(with(6)), gen.attractor(with({cell = 6}))))
+check("snap changes the Field", not same(plain, gen.attractor(with(6))))
+local j = {cell = 5, mode = "hex", jitter = 0.4, chance = 0.7, angle = 15}
+check("snap is deterministic per seed", same(gen.attractor(with(j)), gen.attractor(with(j))))
+local polar = {cell = 3, mode = "polar", spokes = 16, center = {20, 30}, feedback = true}
+check("polar feedback renders", sum(gen.attractor(with(polar))) > 19000)
+
+local sd = gen.flame({
+    transforms = {
+        {1, affine = {0.5, 0, 0, 0, 0.5, 0}},
+        {1, affine = {0.5, 0, 0.5, 0, 0.5, 0}},
+        {1, affine = {0.5, 0, 0, 0, 0.5, 0.5}},
+    },
+    n = 20000, w = 20, h = 20, seed = 1, bounds = {0, 0, 1, 1}, splat = "nearest",
+    snap = {cell = 4, mode = "columns"},
+})
+local offLattice = 0
+for y = 0, 19 do
+    for x = 0, 19 do
+        if x % 4 ~= 0 then offLattice = offLattice + sd:get(x, y) end
+    end
+end
+check("flame columns snap lights only lattice columns", offLattice == 0, "off lattice " .. offLattice)
+
+local sf = gen.field(10, 10, 0)
+gen.splat(sf, {{1.2, 1.3}, {8.9, 4.4}}, {snap = {cell = 3}, splat = "nearest", seed = 1})
+check("splat snaps points onto the lattice", sf:get(0, 0) == 1 and sf:get(9, 3) == 1)
+
+local function snapError(what, snap)
+    local fn = what == "flame" and gen.flame or gen.attractor
+    local opts = what == "flame" and {transforms = {{1}}, n = 10, w = 8, h = 8, snap = snap}
+        or {n = 10, w = 8, h = 8, snap = snap}
+    local line = debug.getinfo(1, "l").currentline; local err = errorOf(function() fn(opts) end)
+    return err, line
+end
+
+local err, line = snapError("attractor", {cell = 4, jiter = 0.2})
+check("an unknown snap key raises with a suggestion",
+    err and err:find("gen.attractor snap: unknown option 'jiter' (did you mean 'jitter'?)", 1, true), err)
+check("the unknown key error names the calling line",
+    err and err:find("test-texture.lua:" .. line .. ":", 1, true), err)
+err = snapError("flame", {cell = 4, feedbak = true})
+check("flame checks snap keys too",
+    err and err:find("unknown option 'feedbak' (did you mean 'feedback'?)", 1, true), err)
+
+local bad = {
+    {0, "snap.cell' must be above 0"},
+    {true, "'snap' must be a cell size or a table"},
+    {{mode = "grid"}, "'snap.cell' must be a number"},
+    {{cell = -2}, "'snap.cell' must be above 0"},
+    {{cell = 4, amount = 1.5}, "'snap.amount' is out of range"},
+    {{cell = 4, chance = -0.1}, "'snap.chance' is out of range"},
+    {{cell = 4, jitter = "lots"}, "'snap.jitter' must be a number"},
+    {{cell = 4, mode = "hexx"}, "unknown value 'hexx' (grid, rows, columns, hex or polar)"},
+    {{cell = 4, spokes = 2.5}, "'snap.spokes' must be a whole number"},
+    {{cell = 4, spokes = 0}, "'snap.spokes' is out of range"},
+    {{cell = 4, center = 3}, "'snap.center' must be {x, y}"},
+    {{cell = 4, feedback = "yes"}, "'snap.feedback' must be true or false"},
+}
+for _, case in ipairs(bad) do
+    for _, what in ipairs({"attractor", "flame"}) do
+        local e, l = snapError(what, case[1])
+        check(what .. " rejects " .. case[2], e and e:find(case[2], 1, true), e)
+        check(what .. " names the line for " .. case[2], e and e:find("test-texture.lua:" .. l .. ":", 1, true), e)
+    end
+end
+err = errorOf(function() gen.splat(gen.field(4, 4, 0), {{1, 1}}, {snap = {cell = 2, feedback = true}}) end)
+check("splat has no snap feedback",
+    err and err:find("gen.splat snap: unknown option 'feedback'", 1, true), err)
+
 print("\nSplat render")
 
 local script = "out/test/texture-splat.lua"
