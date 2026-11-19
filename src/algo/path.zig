@@ -478,7 +478,7 @@ test "path: stipple draws two numbers per dot of the box for any region" {
         var rng: Rng = .init(3);
         const dots = try stipple(testing.allocator, &rng, region, 0.5);
         defer testing.allocator.free(dots);
-        try testing.expectEqual(want.state, rng.state);
+        try testing.expectEqual(want.x.s, rng.x.s);
     }
 }
 

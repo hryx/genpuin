@@ -83,7 +83,7 @@ fn findTests(arena: Allocator, io: Io, dir_path: []const u8) ![]const [:0]const 
 /// Run one file and report why it failed, if it did. A file passes when
 /// it returns or calls os.exit with a zero code.
 fn runFile(gpa: Allocator, io: Io, config: *const bind_testing.Config, path: [:0]const u8, out: *Io.Writer) !bool {
-    var host: util.Host = .{ .gpa = gpa, .io = io };
+    var host: util.Host = .{ .gpa = gpa, .io = io, .reseed = true };
     const lua = host_mod.create(&host, .{
         .script_dir = std.fs.path.dirname(path) orelse ".",
         .lua_dir = config.lua_dir,

@@ -84,6 +84,7 @@ gen.pen = Pen.new
 
 -- rand
 gen.seed = rand.seed
+gen.mixSeed = rand.mixSeed
 gen.rand = rand.rand
 gen.randRange = rand.randRange
 gen.randInt = rand.randInt

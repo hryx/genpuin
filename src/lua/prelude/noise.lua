@@ -1,6 +1,6 @@
 -- Noise. Perlin (improved, Ken Perlin 2002) keeps its permutation table in
--- Zig, one per Lua state. Simplex, value, worley and curl noise and
--- noiseGrid take the same noise seed as an integer.
+-- Zig, one per Lua state, next to the noise seed that simplex, value,
+-- worley and curl noise and noiseGrid read when given no seed.
 
 local import = ...
 local core = import("core")
@@ -14,17 +14,13 @@ local M = {}
 local perlin = native.perlin
 local fbm = native.fbm
 
--- An unseeded Perlin table is noiseSeed(0), so this only picks up
--- --noise-seed.
-local seed = algo.noiseSeed(0)
-
 -- Seed every noise kind: the Perlin table, and simplex, valueNoise, worley,
--- curl, curlFlow and noiseGrid calls without opts.seed.
--- With --noise-seed N on the command line, every call acts as seed(N), and
--- a script that never seeds starts as if it called seed(N).
-function M.seed(n)
-    seed = algo.noiseSeed(n)
-end
+-- curl, curlFlow and noiseGrid calls without opts.seed. Seeds are whole
+-- numbers from 0 to 4294967295. Call it at most once, before any of those
+-- functions. A script that never calls it runs as noiseSeed(0).
+-- With --noise-seed N on the command line, the call acts as noiseSeed(N),
+-- and a script that never seeds runs as noiseSeed(N).
+M.seed = algo.noiseSeed
 
 -- 2D Perlin noise, returns a value in approximately [-1, 1].
 M.perlin = perlin
@@ -37,12 +33,12 @@ end
 
 -- 2D simplex noise at (x, y), or 3D when z is given. Returns about -1..1.
 function M.simplex(x, y, z)
-    return T.simplex(seed, x, y, z)
+    return T.simplex(nil, x, y, z)
 end
 
 -- Value noise at (x, y), or 3D when z is given. Returns -1..1.
 function M.valueNoise(x, y, z)
-    return T.valueNoise(seed, x, y, z)
+    return T.valueNoise(nil, x, y, z)
 end
 
 -- Worley (cellular) noise at (x, y). Returns F1 and F2, the distances to
@@ -50,7 +46,7 @@ end
 -- edges. opts.metric is "euclidean" (default), "manhattan" or "chebyshev".
 -- opts.jitter 0..1 is how far points stray from cell centers (default 1).
 function M.worley(x, y, opts)
-    return T.worley(seed, x, y, opts)
+    return T.worley(nil, x, y, opts)
 end
 
 -- Curl of simplex noise at (x, y): a divergence free vector dx, dy.
@@ -65,7 +61,7 @@ end
 -- only the direction matters. Noise coordinates are 32-bit floats, so
 -- past about 8000 the vector turns noisy.
 function M.curl(x, y, opts)
-    return T.curl(seed, x, y, opts)
+    return T.curl(nil, x, y, opts)
 end
 
 -- A Field of noise, w x h cells.
@@ -82,7 +78,7 @@ end
 --   cell), so a grid of any resolution samples the same scene noise.
 -- opts.seed (default the noise seed).
 function M.noiseGrid(w, h, opts)
-    return T.noiseGrid(w, h, opts or {}, seed)
+    return T.noiseGrid(w, h, opts or {})
 end
 
 -- A flow field of curl noise for gen.trace. Its sample(x, y) returns an
@@ -92,8 +88,7 @@ function M.curlFlow(opts)
     local o = {}
     for k, v in pairs(opts or {}) do o[k] = v end
     if o.scale == nil then o.scale = 0.005 end
-    local s = o.seed or seed
-    return {type = "flow", sample = function(x, y) return T.curlAngle(s, x, y, o) end}
+    return {type = "flow", sample = function(x, y) return T.curlAngle(o.seed, x, y, o) end}
 end
 
 return M

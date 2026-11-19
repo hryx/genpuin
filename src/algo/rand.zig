@@ -1,6 +1,8 @@
-//! The genpuin random stream: xorshift32 (Marsaglia 2003) with the seed
-//! mixing and float derivations of the original Lua library, kept bit
-//! for bit so seeded scripts render the same.
+//! The genpuin random stream: xoshiro256++ (Blackman and Vigna 2018),
+//! seeded through SplitMix64 by std.Random.Xoshiro256. Only its raw u64
+//! words are taken from std. Floats and ranges are derived here, so the
+//! stream depends on std only through the generator itself, which the
+//! tests pin.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -10,29 +12,24 @@ const math = @import("../math.zig");
 pub const Vec2 = [2]f64;
 
 pub const Rng = struct {
-    state: u32,
+    x: std.Random.Xoshiro256,
 
-    /// The state of a stream that was never seeded.
-    pub const unseeded: Rng = .{ .state = 1 };
-
-    /// Seed from any number. Only floor(|n|) mod 2^32 matters.
-    pub fn init(n: f64) Rng {
-        const low = math.mod(@floor(@abs(n)), 4294967296.0);
-        const bits: u32 = if (low >= 0 and low < 4294967296.0) @intFromFloat(low) else 0;
-        var r: Rng = .{ .state = bits ^ 0x12345678 };
-        if (r.state == 0) r.state = 1;
-        for (0..8) |_| _ = r.next();
-        return r;
+    pub fn init(seed: u64) Rng {
+        return .{ .x = .init(seed) };
     }
 
-    /// Uniform in [0, 1).
+    /// The seed of stream `k` under base seed `base`: the first output
+    /// of SplitMix64 started at base * 2^32 + k. Each (base, k) pair is
+    /// its own 64-bit start, and the SplitMix64 finalizer spreads
+    /// neighboring ones across the whole range.
+    pub fn mix(base: u32, k: u32) u64 {
+        var sm: std.Random.SplitMix64 = .init(@as(u64, base) << 32 | k);
+        return sm.next();
+    }
+
+    /// Uniform in [0, 1), the top 53 bits of a word.
     pub fn next(r: *Rng) f64 {
-        var s = r.state;
-        s ^= s << 13;
-        s ^= s >> 17;
-        s ^= s << 5;
-        r.state = s;
-        return @as(f64, @floatFromInt(s)) / 4294967296.0;
+        return @as(f64, @floatFromInt(r.x.next() >> 11)) * 0x1p-53;
     }
 
     /// Uniform in [lo, hi).
@@ -45,11 +42,12 @@ pub const Rng = struct {
         return lo + @floor(r.next() * (1 + hi - lo));
     }
 
-    /// Box-Muller, one sample per two draws.
+    /// Box-Muller, one sample per two draws. The log takes 1 - u, which
+    /// is never 0.
     pub fn gaussian(r: *Rng, mean: f64, stddev: f64) f64 {
         const uniform1 = r.next();
         const uniform2 = r.next();
-        const z = @sqrt(-2 * math.log(uniform1)) * math.cos(2 * std.math.pi * uniform2);
+        const z = @sqrt(-2 * math.log(1 - uniform1)) * math.cos(2 * std.math.pi * uniform2);
         return mean + z * stddev;
     }
 
@@ -200,35 +198,49 @@ fn tooClose(g: Grid, points: []const Vec2, p: Vec2, min_dist_sq: f64) bool {
 
 const testing = std.testing;
 
-// Expected values were printed by the Lua implementation this replaces.
+// Expected words come from a Python port of the reference C code for
+// SplitMix64 and xoshiro256++, so a change to std's seeding fails here.
 
-test "rand: seed 42 matches the Lua stream" {
+test "rand: std seeds xoshiro256++ through SplitMix64" {
+    const cases = .{
+        .{ 0, [_]u64{ 0x53175d61490b23df, 0x61da6f3dc380d507, 0x5c0fdf91ec9a7bfc, 0x02eebf8c3bbe5e1a } },
+        .{ 42, [_]u64{ 0xd0764d4f4476689f, 0x519e4174576f3791, 0xfbe07cfb0c24ed8c, 0xb37d9f600cd835b8 } },
+    };
+    inline for (cases) |c| {
+        var r: Rng = .init(c[0]);
+        for (c[1]) |e| try testing.expectEqual(e, r.x.next());
+    }
+}
+
+test "rand: floats are the top 53 bits" {
     var r: Rng = .init(42);
-    const expected = [_]f64{ 0.41605908889323473, 0.020210096146911383, 0.85778737859800458, 0.52892230707220733, 0.29240129981189966 };
-    for (expected) |e| try testing.expectEqual(e, r.next());
+    try testing.expectEqual(@as(f64, 0.8143051451229099), r.next());
+    try testing.expectEqual(@as(f64, 0.3188210400616611), r.next());
+    try testing.expectEqual(@as(f64, 0.9838941681774888), r.next());
 }
 
-test "rand: unseeded stream starts from state 1" {
-    var r: Rng = .unseeded;
-    try testing.expectEqual(@as(f64, 6.2950188294053078e-05), r.next());
-    try testing.expectEqual(@as(f64, 0.015747428173199296), r.next());
-}
-
-test "rand: seed uses floor of the magnitude" {
-    var neg: Rng = .init(-7.5);
-    try testing.expectEqual(@as(f64, 0.55236792750656605), neg.next());
-    var big: Rng = .init(1e12);
-    try testing.expectEqual(@as(f64, 0.50981275131925941), big.next());
+test "rand: mix is SplitMix64 of base and k" {
+    try testing.expectEqual(@as(u64, 0xe220a8397b1dcdaf), Rng.mix(0, 0));
+    try testing.expectEqual(@as(u64, 0x910a2dec89025cc1), Rng.mix(0, 1));
+    try testing.expectEqual(@as(u64, 0xb631e75c64bc496a), Rng.mix(5, 0));
+    try testing.expectEqual(@as(u64, 0x710738f7e219399e), Rng.mix(5, 1));
+    try testing.expectEqual(@as(u64, 0xe7464efc70add902), Rng.mix(6, 1));
+    try testing.expectEqual(@as(u64, 0xe4d971771b652c20), Rng.mix(0xffffffff, 0xffffffff));
 }
 
 test "rand: int, range and gaussian derive from the stream" {
+    var want: Rng = .init(42);
     var r: Rng = .init(42);
-    try testing.expectEqual(@as(f64, 42), r.int(1, 100));
-    try testing.expectEqual(@as(f64, 3), r.int(1, 100));
-    try testing.expectEqual(@as(f64, 4), r.int(-5, 5));
-    try testing.expectEqual(@as(f64, 2.2892230707220733), r.range(-3, 7));
-    try testing.expectEqual(@as(f64, -1.5335276938166165), r.gaussian(0, 1));
-    try testing.expectEqual(@as(f64, 9.8863839167465315), r.gaussian(10, 2));
+    try testing.expectEqual(1 + @floor(want.next() * 100), r.int(1, 100));
+    try testing.expectEqual(-3 + want.next() * 10, r.range(-3, 7));
+    const u1_ = want.next();
+    const u2_ = want.next();
+    const z = @sqrt(-2 * math.log(1 - u1_)) * math.cos(2 * std.math.pi * u2_);
+    try testing.expectEqual(10 + z * 2, r.gaussian(10, 2));
+    for (0..1000) |_| {
+        const v = r.int(-5, 5);
+        try testing.expect(v >= -5 and v <= 5 and @floor(v) == v);
+    }
 }
 
 test "rand: weightedIndex never picks a zero weight" {
@@ -249,17 +261,18 @@ test "rand: shuffle permutes" {
     try testing.expectEqual(@as(u32, 21), sum);
 }
 
-test "rand: poissonDisk matches the Lua sampler" {
+test "rand: poissonDisk keeps points apart and in bounds" {
+    var want: Rng = .init(3);
     var r: Rng = .init(3);
     const pts = try poissonDisk(testing.allocator, &r, .{ .x = 0, .y = 0, .w = 50, .h = 50 }, 10, 30);
     defer testing.allocator.free(pts);
-    try testing.expectEqual(@as(usize, 17), pts.len);
-    try testing.expectEqual(@as(f64, 46.186162997037172), pts[0][0]);
-    try testing.expectEqual(@as(f64, 19.213472129636944), pts[16][0]);
-    try testing.expectEqual(@as(f64, 0.069723706873824121), pts[16][1]);
-    for (pts, 0..) |a, i| for (pts[i + 1 ..]) |b| {
-        try testing.expect(std.math.hypot(a[0] - b[0], a[1] - b[1]) >= 10);
-    };
+    try testing.expect(pts.len >= 10);
+    try testing.expectEqual(want.next() * 50, pts[0][0]);
+    try testing.expectEqual(want.next() * 50, pts[0][1]);
+    for (pts, 0..) |a, i| {
+        try testing.expect(a[0] >= 0 and a[0] < 50 and a[1] >= 0 and a[1] < 50);
+        for (pts[i + 1 ..]) |b| try testing.expect(std.math.hypot(a[0] - b[0], a[1] - b[1]) >= 10);
+    }
 }
 
 test "rand: poissonDisk survives NaN bounds" {

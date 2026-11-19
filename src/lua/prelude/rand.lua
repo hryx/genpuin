@@ -4,12 +4,21 @@ local native = import("compat").native
 
 local M = {}
 
--- xorshift32 stream, one per Lua state, kept in Zig.
+-- xoshiro256++ stream, one per Lua state, kept in Zig. Seeds are whole
+-- numbers from 0 to 4294967295. Anything else is an error.
 
--- Seed the random number generator.
--- With --seed N on the command line, every call acts as seed(N), and a
--- script that never seeds starts as if it called seed(N).
+-- Set the base seed and start the stream from it. Call it at most once,
+-- before any random draw, gen.mixSeed, or function that takes its seed
+-- from the stream. A script that never calls it runs as seed(0).
+-- With --seed N on the command line, the call acts as seed(N), and a
+-- script that never seeds runs as seed(N).
 M.seed = algo.seed
+
+-- Restart the stream from a fixed mix of the base seed and k, so one seed
+-- gives many unrelated streams, such as one per plate of a sheet. The
+-- same base and k always give the same stream. The base seed stays as
+-- it was, and --seed changes the base, never k.
+M.mixSeed = algo.mixSeed
 
 -- Return a random number in [0, 1).
 M.rand = native.rand

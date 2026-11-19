@@ -23,13 +23,18 @@ pub const Host = struct {
     gpa: Allocator,
     io: std.Io,
     seeds: Seeds = .{},
+    /// Lets gen.seed and gen.noiseSeed run again and after their streams
+    /// were used. Only the Lua test runner sets it, so its test files
+    /// can reseed between checks.
+    reseed: bool = false,
     /// Threads a simulation may use, the calling one included. The CLI
     /// shares its -j cap between the renders running at once.
     sim_workers: u32 = 1,
 };
 
-/// --seed and --noise-seed. Each one set replaces the argument of every
-/// gen.seed or gen.noiseSeed call and is the stream's starting seed.
+/// --seed and --noise-seed. Each one set replaces the argument of
+/// gen.seed or gen.noiseSeed and is the starting seed of a script that
+/// never calls it.
 pub const Seeds = struct {
     seed: ?u32 = null,
     noise_seed: ?u32 = null,

@@ -1,8 +1,7 @@
 //! The algorithm toolbox behind the gen.* Lua API: random streams,
 //! noise, Voronoi, spatial queries, path operations, automata, L-system
 //! rewriting, color maps, shape transforms and pen paths. Ported from the
-//! original Lua library with its arithmetic kept as is, so seeded scripts
-//! render the same.
+//! original Lua library.
 
 pub const rand = @import("algo/rand.zig");
 pub const perlin = @import("algo/perlin.zig");

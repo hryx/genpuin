@@ -5,6 +5,7 @@ local W, H = 800, 800
 gen.canvas(W, H)
 gen.background(gen.hex("#0a0e14"))
 gen.seed(77)
+gen.mixSeed(1)
 
 -- F = draw forward, + = turn left, - = turn right, [ = push, ] = pop
 local axiom = "F"
@@ -56,7 +57,7 @@ for ch in str:gmatch(".") do
 end
 p:stroke()
 
-gen.seed(77)
+gen.mixSeed(1)
 local tipStr = gen.rewrite(axiom, rules, 4)
 p:moveTo({startX, startY})
 p:heading(-math.pi / 2)

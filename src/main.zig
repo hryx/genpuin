@@ -34,8 +34,9 @@ const usage =
     \\  --depth <8|16>   PNG bits per channel (default 8)
     \\  --vector-only    With SVG output: leave post passes out and write
     \\                   just the shapes
-    \\  --seed <n>       Every gen.seed(x) acts as gen.seed(n), and a
-    \\                   script that never seeds starts as gen.seed(n)
+    \\  --seed <n>       gen.seed(x) acts as gen.seed(n), and a script
+    \\                   that never seeds runs as gen.seed(n).
+    \\                   gen.mixSeed(k) mixes k with n
     \\  --noise-seed <n> The same for gen.noiseSeed
     \\  --seed <a>..<b>  One full-size file per seed, a to b. Either
     \\                   flag can be a range, but not both
@@ -47,8 +48,9 @@ const usage =
     \\                   (default: CPU count)
     \\  -h, --help       Show this help
     \\
-    \\Seeds are integers from 0 to 4294967295. A seed given in a script
-    \\call, such as gen.post.grain{seed = 5}, is used as written.
+    \\Seeds are whole numbers from 0 to 4294967295. A script that never
+    \\seeds runs as gen.seed(0). A seed given in a script call, such as
+    \\gen.post.grain{seed = 5}, is used as written.
     \\
     \\Made-up names are <script>.<fmt>, <script>-<n>.<fmt> for each n
     \\of a range (n zero-padded to the widest in the run), and
@@ -241,21 +243,22 @@ fn parseOption(a: *Args, name: []const u8, v: []const u8, diag: *Io.Writer) Usag
     }
 }
 
-/// `n` or `a..b`, each an integer that gen.seed reads exactly. Rng.init
-/// keeps only floor(|n|) mod 2^32, so negatives and values from 2^32 up
-/// are refused rather than aliasing another seed.
+/// `n` or `a..b`, each a seed gen.seed accepts.
 fn parseSeedFlag(name: []const u8, v: []const u8, diag: *Io.Writer) UsageError!Args.SeedFlag {
-    const dots = std.mem.indexOf(u8, v, "..") orelse {
-        const n = std.fmt.parseInt(u32, v, 10) catch
-            return usageError(diag, "{s} needs an integer from 0 to 4294967295 or a range a..b", .{name});
-        return .{ .first = n };
-    };
-    const first = std.fmt.parseInt(u32, v[0..dots], 10) catch
-        return usageError(diag, "{s} range needs integers from 0 to 4294967295", .{name});
-    const last = std.fmt.parseInt(u32, v[dots + 2 ..], 10) catch
-        return usageError(diag, "{s} range needs integers from 0 to 4294967295", .{name});
-    if (last < first) return usageError(diag, "{s} range is backwards", .{name});
+    const dots = std.mem.indexOf(u8, v, "..") orelse
+        return .{ .first = try parseSeed(name, v, v, diag) };
+    const first = try parseSeed(name, v, v[0..dots], diag);
+    const last = try parseSeed(name, v, v[dots + 2 ..], diag);
+    if (last < first) return usageError(diag, "{s} {s}: the range is backwards", .{ name, v });
     return .{ .first = first, .last = last };
+}
+
+fn parseSeed(name: []const u8, v: []const u8, part: []const u8, diag: *Io.Writer) UsageError!u32 {
+    const all_digits = part.len > 0 and for (part) |ch| {
+        if (!std.ascii.isDigit(ch)) break false;
+    } else true;
+    if (all_digits) if (std.fmt.parseInt(u32, part, 10)) |n| return n else |_| {};
+    return usageError(diag, "{s} {s}: a seed must be a whole number from 0 to 4294967295, or a range a..b of them", .{ name, v });
 }
 
 /// Where every render goes, decided before anything renders.
@@ -826,16 +829,20 @@ test "main: each job gets the single value and its value of the range" {
     try std.testing.expectEqual(util.Seeds{ .seed = 6 }, later.seedsAt(0));
 }
 
-test "main: seeds are integers gen.seed reads exactly" {
-    try expectUsage(&.{ "a.lua", "--seed", "-1" }, "--seed needs an integer from 0 to 4294967295 or a range a..b");
-    try expectUsage(&.{ "a.lua", "--seed", "4294967296" }, "--seed needs an integer from 0 to 4294967295 or a range a..b");
-    try expectUsage(&.{ "a.lua", "--seed", "1.5" }, "--seed needs an integer from 0 to 4294967295 or a range a..b");
-    try expectUsage(&.{ "a.lua", "--noise-seed", "x" }, "--noise-seed needs an integer from 0 to 4294967295 or a range a..b");
-    try expectUsage(&.{ "a.lua", "--seed", "-2..1" }, "--seed range needs integers from 0 to 4294967295");
-    try expectUsage(&.{ "a.lua", "--noise-seed", "1..4294967296" }, "--noise-seed range needs integers from 0 to 4294967295");
-    try expectUsage(&.{ "a.lua", "--seed", "1.." }, "--seed range needs integers from 0 to 4294967295");
-    try expectUsage(&.{ "a.lua", "--seed", "4..2" }, "--seed range is backwards");
-    try expectUsage(&.{ "a.lua", "--noise-seed", "4..2" }, "--noise-seed range is backwards");
+test "main: seeds are whole numbers gen.seed accepts" {
+    try expectUsage(&.{ "a.lua", "--seed", "-1" }, "--seed -1: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "4294967296" }, "--seed 4294967296: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "1.5" }, "--seed 1.5: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "+5" }, "--seed +5: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "1_0" }, "--seed 1_0: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "nan" }, "--seed nan: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--noise-seed", "x" }, "--noise-seed x: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "-2..1" }, "--seed -2..1: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--noise-seed", "1..4294967296" }, "--noise-seed 1..4294967296: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "1.." }, "--seed 1..: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "..3" }, "--seed ..3: a seed must be a whole number from 0 to 4294967295, or a range a..b of them");
+    try expectUsage(&.{ "a.lua", "--seed", "4..2" }, "--seed 4..2: the range is backwards");
+    try expectUsage(&.{ "a.lua", "--noise-seed", "4..2" }, "--noise-seed 4..2: the range is backwards");
     try expectUsage(&.{ "a.lua", "--seed" }, "--seed needs a value");
 }
 

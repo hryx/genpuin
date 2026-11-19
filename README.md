@@ -65,7 +65,7 @@ The doc comments in `src/lua/prelude/` are the reference.
 - **Gradients:** `linearGradient` `radialGradient`
 - **Pen:** `pen`
 - **Transforms:** `translate` `rotate` `rotateAround` `scale` `scaleAround` `reflectX` `reflectY` `reflect`
-- **Randomness:** `seed` `rand` `randRange` `randInt` `gaussian` `pick` `shuffle` `weightedPick` `randInCircle` `randOnCircle` `randInRect` `poissonDisk`
+- **Randomness:** `seed` `mixSeed` `rand` `randRange` `randInt` `gaussian` `pick` `shuffle` `weightedPick` `randInCircle` `randOnCircle` `randInRect` `poissonDisk`
 - **Noise:** `noiseSeed` `perlin` `fbm` `simplex` `valueNoise` `worley` `curl` `noiseGrid`
 - **Flow:** `flowField` `noiseField` `trace` `curlFlow` `traceFlow`
 - **Patterns:** `grid` `radial` `scatter` `spiral` `alongPath` `subdivideRect` `kaleidoscope` `GOLDEN_ANGLE`

@@ -71,7 +71,7 @@ test "lsystem: deterministic algae" {
     var rules: Rules = @splat(null);
     rules['A'] = .{ .text = "AB" };
     rules['B'] = .{ .text = "A" };
-    var rng: Rng = .unseeded;
+    var rng: Rng = .init(0);
     const s = try rewrite(testing.allocator, &rng, "A", &rules, 4);
     defer testing.allocator.free(s);
     try testing.expectEqualStrings("ABAABABA", s);
@@ -90,7 +90,7 @@ test "lsystem: a zero-weight choice is never taken" {
 test "lsystem: an invalid rule fails only when used" {
     var rules: Rules = @splat(null);
     rules['Q'] = .invalid;
-    var rng: Rng = .unseeded;
+    var rng: Rng = .init(0);
     const s = try rewrite(testing.allocator, &rng, "AB", &rules, 2);
     testing.allocator.free(s);
     try testing.expectError(error.InvalidRule, rewrite(testing.allocator, &rng, "AQ", &rules, 1));

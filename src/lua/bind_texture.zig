@@ -9,6 +9,7 @@ const zlua = @import("zlua");
 const genpuin = @import("genpuin");
 
 const util = @import("util.zig");
+const bind_algo = @import("bind_algo.zig");
 const Lua = util.Lua;
 const Field = util.Field;
 const noise = genpuin.noise;
@@ -37,6 +38,13 @@ pub const functions = [_]zlua.FnReg{
 fn seed32(v: f64) u32 {
     const u = seed64(v);
     return @truncate(u ^ (u >> 32));
+}
+
+/// Argument 1 folded into a noise seed, or the script's noise seed when
+/// it is nil.
+fn noiseSeedArg(lua: *Lua) u32 {
+    if (lua.isNoneOrNil(1)) return bind_algo.noiseSeedInUse(lua);
+    return seed32(lua.checkNumber(1));
 }
 
 fn seed64(v: f64) u64 {
@@ -165,9 +173,9 @@ fn toRect(r: [4]f64) density.Rect {
     return .{ .x = r[0], .y = r[1], .w = r[2], .h = r[3] };
 }
 
-/// simplex(seed, x, y, z?)
+/// simplex(seed?, x, y, z?)
 fn simplex(lua: *Lua) i32 {
-    const seed = seed32(lua.checkNumber(1));
+    const seed = noiseSeedArg(lua);
     const x: f32 = @floatCast(lua.checkNumber(2));
     const y: f32 = @floatCast(lua.checkNumber(3));
     const v = if (lua.optNumber(4)) |z| noise.simplex3(seed, x, y, @floatCast(z)) else noise.simplex2(seed, x, y);
@@ -175,9 +183,9 @@ fn simplex(lua: *Lua) i32 {
     return 1;
 }
 
-/// valueNoise(seed, x, y, z?)
+/// valueNoise(seed?, x, y, z?)
 fn valueNoise(lua: *Lua) i32 {
-    const seed = seed32(lua.checkNumber(1));
+    const seed = noiseSeedArg(lua);
     const x: f32 = @floatCast(lua.checkNumber(2));
     const y: f32 = @floatCast(lua.checkNumber(3));
     const v = if (lua.optNumber(4)) |z| noise.value3(seed, x, y, @floatCast(z)) else noise.value2(seed, x, y);
@@ -185,9 +193,9 @@ fn valueNoise(lua: *Lua) i32 {
     return 1;
 }
 
-/// worley(seed, x, y, {metric, jitter}?) -> f1, f2
+/// worley(seed?, x, y, {metric, jitter}?) -> f1, f2
 fn worley(lua: *Lua) i32 {
-    const seed = seed32(lua.checkNumber(1));
+    const seed = noiseSeedArg(lua);
     const x: f32 = @floatCast(lua.checkNumber(2));
     const y: f32 = @floatCast(lua.checkNumber(3));
     const metric = optCamelEnum(lua, noise.Metric, 4, "metric", .euclidean);
@@ -199,7 +207,7 @@ fn worley(lua: *Lua) i32 {
 }
 
 fn curlAt(lua: *Lua) [2]f32 {
-    const seed = seed32(lua.checkNumber(1));
+    const seed = noiseSeedArg(lua);
     const x = lua.checkNumber(2);
     const y = lua.checkNumber(3);
     const o = readNoise(lua, 4, seed);
@@ -208,7 +216,7 @@ fn curlAt(lua: *Lua) [2]f32 {
     return noise.curl(&o, @floatCast(x * scale + off[0]), @floatCast(y * scale + off[1]), optZ(lua, 4));
 }
 
-/// curl(seed, x, y, opts?) -> dx, dy
+/// curl(seed?, x, y, opts?) -> dx, dy
 fn curl(lua: *Lua) i32 {
     const v = curlAt(lua);
     lua.pushNumber(v[0]);
@@ -216,18 +224,20 @@ fn curl(lua: *Lua) i32 {
     return 2;
 }
 
-/// curlAngle(seed, x, y, opts?) -> radians
+/// curlAngle(seed?, x, y, opts?) -> radians
 fn curlAngle(lua: *Lua) i32 {
     const v = curlAt(lua);
     lua.pushNumber(genpuin.math.atan2(v[1], v[0]));
     return 1;
 }
 
-/// noiseGrid(w, h, opts, default_seed) -> Field
+/// noiseGrid(w, h, opts) -> Field. opts.seed, else the noise seed.
 fn noiseGrid(lua: *Lua) !i32 {
     const w = util.checkU32(lua, 1);
     const h = util.checkU32(lua, 2);
-    const seed = seed32(util.optNumber(lua, 3, "seed", lua.optNumber(4) orelse 0));
+    const nan = std.math.nan(f64);
+    const given = util.optNumber(lua, 3, "seed", nan);
+    const seed = if (std.math.isNan(given)) bind_algo.noiseSeedInUse(lua) else seed32(given);
     const o = readNoise(lua, 3, seed);
     const m: noise.Mapping = .{
         .rect = inlineRect(lua, 3),

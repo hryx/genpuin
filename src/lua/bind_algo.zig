@@ -1,7 +1,7 @@
 //! core.algo: the gen.* algorithm toolbox. Each Lua state gets one
-//! random stream and one Perlin table, kept in a userdata in the
-//! registry. The modules in src/lua/prelude/ wrap these functions with
-//! option defaults and shape constructors.
+//! random stream and one noise seed with its Perlin table, kept in a
+//! userdata in the registry. The modules in src/lua/prelude/ wrap these
+//! functions with option defaults and shape constructors.
 //!
 //! On LuaJIT the hottest entry points are also exported as C function
 //! pointers (see `ffi`), so prelude/compat.lua can call them through the
@@ -22,6 +22,7 @@ const Perlin = algo.Perlin;
 
 pub const functions = [_]zlua.FnReg{
     .{ .name = "seed", .func = zlua.wrap(seed) },
+    .{ .name = "mixSeed", .func = zlua.wrap(mixSeed) },
     .{ .name = "rand", .func = zlua.wrap(rand) },
     .{ .name = "randRange", .func = zlua.wrap(randRange) },
     .{ .name = "randInt", .func = zlua.wrap(randInt) },
@@ -78,6 +79,15 @@ pub const functions = [_]zlua.FnReg{
 const State = struct {
     rng: Rng,
     perlin: Perlin,
+    /// What gen.mixSeed mixes with: --seed, else gen.seed's value, else 0.
+    base: u32,
+    noise_seed: u32,
+    seeded: bool = false,
+    /// Set by anything that reads `rng`, gen.mixSeed included.
+    drawn: bool = false,
+    noise_seeded: bool = false,
+    /// Set by anything that reads `perlin` or `noise_seed`.
+    noise_used: bool = false,
 };
 
 // Only the address matters. It keys the State userdata in the registry.
@@ -86,8 +96,25 @@ const State = struct {
 var state_key: u8 = 0;
 
 /// The random stream behind gen.rand, for bindings in other files.
+/// Taking it counts as a draw, so gen.seed is refused afterwards.
 pub fn randomStream(lua: *Lua) *Rng {
-    return &getState(lua).rng;
+    const s = getState(lua);
+    s.drawn = true;
+    return &s.rng;
+}
+
+/// The seed behind gen.simplex and the other seeded noise kinds, for
+/// bindings in other files. Taking it counts as using noise.
+pub fn noiseSeedInUse(lua: *Lua) u32 {
+    const s = getState(lua);
+    s.noise_used = true;
+    return s.noise_seed;
+}
+
+fn perlinTable(lua: *Lua) *const Perlin {
+    const s = getState(lua);
+    s.noise_used = true;
+    return &s.perlin;
 }
 
 fn getState(lua: *Lua) *State {
@@ -108,14 +135,31 @@ fn getState(lua: *Lua) *State {
     return s;
 }
 
-/// An unseeded state matches the original library. --seed n and
-/// --noise-seed n start it as seed(n) and noiseSeed(n) would.
+/// A script that never seeds runs as if it called gen.seed(0) and
+/// gen.noiseSeed(0), or the values of --seed and --noise-seed.
 fn initialState(lua: *Lua) State {
     const seeds = util.getHost(lua).seeds;
+    const base = seeds.seed orelse 0;
+    const noise_seed = seeds.noise_seed orelse 0;
     return .{
-        .rng = if (seeds.seed) |n| .init(@floatFromInt(n)) else .unseeded,
-        .perlin = .init(if (seeds.noise_seed) |n| @floatFromInt(n) else 0),
+        .rng = .init(base),
+        .perlin = .init(@floatFromInt(noise_seed)),
+        .base = base,
+        .noise_seed = noise_seed,
     };
+}
+
+/// Argument 1 as a seed, or an error naming `what` and the bad value.
+fn checkSeed(lua: *Lua, comptime what: [:0]const u8) u32 {
+    const range = "a whole number from 0 to 4294967295";
+    if (lua.typeOf(1) != .number) {
+        lua.raiseErrorStr(what ++ " needs " ++ range ++ ", got %s", .{lua.typeName(lua.typeOf(1)).ptr});
+    }
+    const n = lua.toNumber(1) catch unreachable; // type checked above
+    if (n >= 0 and n <= 0xffffffff and @floor(n) == n) return @intFromFloat(n);
+    var buf: [64]u8 = undefined;
+    const shown = std.fmt.bufPrintSentinel(&buf, "{d}", .{n}, 0) catch "?";
+    lua.raiseErrorStr(what ++ "(%s): a seed must be " ++ range, .{shown.ptr});
 }
 
 fn checkVec2(lua: *Lua, arg: i32) Vec2 {
@@ -144,23 +188,42 @@ fn readNumbers(lua: *Lua, arena: Allocator, arg: i32, n: usize) ![]f64 {
     return out;
 }
 
-/// seed(n). --seed replaces n.
+/// seed(n) sets the base seed and restarts the stream from it. --seed
+/// replaces n. Once per script, before the stream is used, unless the
+/// host allows reseeding.
 fn seed(lua: *Lua) i32 {
-    const n = lua.checkNumber(1);
-    const forced = util.getHost(lua).seeds.seed;
-    getState(lua).rng = .init(if (forced) |f| @floatFromInt(f) else n);
+    const n = checkSeed(lua, "gen.seed");
+    const host = util.getHost(lua);
+    const s = getState(lua);
+    if (!host.reseed) {
+        const advice = "It may only be called once, before any random draws. Use gen.mixSeed(k) for more streams";
+        if (s.seeded) lua.raiseErrorStr("gen.seed called twice. " ++ advice, .{});
+        if (s.drawn) lua.raiseErrorStr("gen.seed called after the random stream was used. " ++ advice, .{});
+    }
+    s.base = host.seeds.seed orelse n;
+    s.rng = .init(s.base);
+    s.seeded = true;
+    return 0;
+}
+
+/// mixSeed(k) restarts the stream at Rng.mix(base, k). The base stays.
+fn mixSeed(lua: *Lua) i32 {
+    const k = checkSeed(lua, "gen.mixSeed");
+    const s = getState(lua);
+    s.rng = .init(Rng.mix(s.base, k));
+    s.drawn = true;
     return 0;
 }
 
 fn rand(lua: *Lua) i32 {
-    lua.pushNumber(getState(lua).rng.next());
+    lua.pushNumber(randomStream(lua).next());
     return 1;
 }
 
 fn randRange(lua: *Lua) i32 {
     const lo = lua.checkNumber(1);
     const hi = lua.checkNumber(2);
-    lua.pushNumber(getState(lua).rng.range(lo, hi));
+    lua.pushNumber(randomStream(lua).range(lo, hi));
     return 1;
 }
 
@@ -169,7 +232,7 @@ fn randRange(lua: *Lua) i32 {
 fn randInt(lua: *Lua) i32 {
     const lo = lua.checkNumber(1);
     const hi = lua.checkNumber(2);
-    const v = getState(lua).rng.int(lo, hi);
+    const v = randomStream(lua).int(lo, hi);
     switch (zlua.lang) {
         .lua53, .lua54, .lua55 => if (lua.isInteger(1) and lua.isInteger(2) and @abs(v) < 0x1p63) {
             lua.pushInteger(@intFromFloat(v));
@@ -184,13 +247,13 @@ fn randInt(lua: *Lua) i32 {
 fn gaussian(lua: *Lua) i32 {
     const mean = lua.checkNumber(1);
     const stddev = lua.checkNumber(2);
-    lua.pushNumber(getState(lua).rng.gaussian(mean, stddev));
+    lua.pushNumber(randomStream(lua).gaussian(mean, stddev));
     return 1;
 }
 
 fn pick(lua: *Lua) i32 {
     const n = checkList(lua, 1);
-    const i = getState(lua).rng.int(1, @floatFromInt(n));
+    const i = randomStream(lua).int(1, @floatFromInt(n));
     _ = util.rawGet(lua, 1, @intFromFloat(i));
     return 1;
 }
@@ -201,7 +264,7 @@ fn shuffle(lua: *Lua) !i32 {
     const order = try gpa.alloc(u32, n);
     defer gpa.free(order);
     for (order, 1..) |*o, i| o.* = @intCast(i);
-    getState(lua).rng.shuffle(u32, order);
+    randomStream(lua).shuffle(u32, order);
     lua.createTable(@intCast(n), 0);
     for (order, 1..) |o, i| {
         _ = util.rawGet(lua, 1, o);
@@ -217,7 +280,7 @@ fn weightedPick(lua: *Lua) !i32 {
     var arena_state: std.heap.ArenaAllocator = .init(lua.allocator());
     defer arena_state.deinit();
     const weights = try readNumbers(lua, arena_state.allocator(), 2, weights_len);
-    const i = getState(lua).rng.weightedIndex(weights, n) orelse {
+    const i = randomStream(lua).weightedIndex(weights, n) orelse {
         lua.pushNil();
         return 1;
     };
@@ -228,14 +291,14 @@ fn weightedPick(lua: *Lua) !i32 {
 fn randInCircle(lua: *Lua) i32 {
     const c = checkVec2(lua, 1);
     const r = lua.checkNumber(2);
-    util.pushVec2(lua, getState(lua).rng.inCircle(c, r));
+    util.pushVec2(lua, randomStream(lua).inCircle(c, r));
     return 1;
 }
 
 fn randOnCircle(lua: *Lua) i32 {
     const c = checkVec2(lua, 1);
     const r = lua.checkNumber(2);
-    util.pushVec2(lua, getState(lua).rng.onCircle(c, r));
+    util.pushVec2(lua, randomStream(lua).onCircle(c, r));
     return 1;
 }
 
@@ -244,7 +307,7 @@ fn randInRect(lua: *Lua) i32 {
     const y = lua.checkNumber(2);
     const w = lua.checkNumber(3);
     const h = lua.checkNumber(4);
-    util.pushVec2(lua, getState(lua).rng.inRect(x, y, w, h));
+    util.pushVec2(lua, randomStream(lua).inRect(x, y, w, h));
     return 1;
 }
 
@@ -255,27 +318,34 @@ fn poissonDisk(lua: *Lua) !i32 {
     const attempts = lua.checkNumber(3);
     if (!(min_dist > 0)) lua.argError(2, "minDist must be positive");
     const gpa = lua.allocator();
-    const pts = try algo.rand.poissonDisk(gpa, &getState(lua).rng, b, min_dist, attempts);
+    const pts = try algo.rand.poissonDisk(gpa, randomStream(lua), b, min_dist, attempts);
     defer gpa.free(pts);
     util.pushPoints(lua, pts);
     return 1;
 }
 
-/// noiseSeed(n) -> the seed used, which is n unless --noise-seed
-/// replaces it. prelude/noise.lua keeps it for the other noise kinds.
+/// noiseSeed(n) seeds Perlin and every other noise kind. --noise-seed
+/// replaces n. Once per script, before any noise is used, unless the
+/// host allows reseeding.
 fn noiseSeed(lua: *Lua) i32 {
-    const n = lua.checkNumber(1);
-    const forced = util.getHost(lua).seeds.noise_seed;
-    const used = if (forced) |f| @as(f64, @floatFromInt(f)) else n;
-    getState(lua).perlin = .init(used);
-    lua.pushNumber(used);
-    return 1;
+    const n = checkSeed(lua, "gen.noiseSeed");
+    const host = util.getHost(lua);
+    const s = getState(lua);
+    if (!host.reseed) {
+        const advice = "It may only be called once, before any noise function";
+        if (s.noise_seeded) lua.raiseErrorStr("gen.noiseSeed called twice. " ++ advice, .{});
+        if (s.noise_used) lua.raiseErrorStr("gen.noiseSeed called after noise was used. " ++ advice, .{});
+    }
+    s.noise_seed = host.seeds.noise_seed orelse n;
+    s.perlin = .init(@floatFromInt(s.noise_seed));
+    s.noise_seeded = true;
+    return 0;
 }
 
 fn perlin(lua: *Lua) i32 {
     const x = lua.checkNumber(1);
     const y = lua.checkNumber(2);
-    lua.pushNumber(getState(lua).perlin.noise(x, y));
+    lua.pushNumber(perlinTable(lua).noise(x, y));
     return 1;
 }
 
@@ -286,7 +356,7 @@ fn fbm(lua: *Lua) i32 {
     const octaves = lua.checkNumber(3);
     const lacunarity = lua.checkNumber(4);
     const gain = lua.checkNumber(5);
-    lua.pushNumber(getState(lua).perlin.fbm(x, y, octaves, lacunarity, gain));
+    lua.pushNumber(perlinTable(lua).fbm(x, y, octaves, lacunarity, gain));
     return 1;
 }
 
@@ -304,21 +374,27 @@ const ffi = struct {
         return genpuin.math.mod(a, b);
     }
     fn rand(s: *State) callconv(.c) f64 {
+        s.drawn = true;
         return s.rng.next();
     }
     fn randRange(s: *State, lo: f64, hi: f64) callconv(.c) f64 {
+        s.drawn = true;
         return s.rng.range(lo, hi);
     }
     fn randInt(s: *State, lo: f64, hi: f64) callconv(.c) f64 {
+        s.drawn = true;
         return s.rng.int(lo, hi);
     }
     fn gaussian(s: *State, mean: f64, stddev: f64) callconv(.c) f64 {
+        s.drawn = true;
         return s.rng.gaussian(mean, stddev);
     }
     fn perlin(s: *State, x: f64, y: f64) callconv(.c) f64 {
+        s.noise_used = true;
         return s.perlin.noise(x, y);
     }
     fn fbm(s: *State, x: f64, y: f64, octaves: f64, lacunarity: f64, gain: f64) callconv(.c) f64 {
+        s.noise_used = true;
         return s.perlin.fbm(x, y, octaves, lacunarity, gain);
     }
 };
@@ -506,7 +582,7 @@ fn separate(lua: *Lua) !i32 {
         .strength = lua.checkNumber(4),
         .bounds = optBounds(lua, 5),
     };
-    algo.spatial.separate(&getState(lua).rng, circles, opts);
+    algo.spatial.separate(randomStream(lua), circles, opts);
     for (circles, 1..) |c, i| {
         _ = util.rawGet(lua, 1, i);
         _ = lua.getField(-1, "center");
@@ -534,7 +610,7 @@ fn packCircles(lua: *Lua) !i32 {
         .separation = lua.checkNumber(8),
     };
     const gpa = lua.allocator();
-    const circles = try algo.spatial.packCircles(gpa, &getState(lua).rng, opts);
+    const circles = try algo.spatial.packCircles(gpa, randomStream(lua), opts);
     defer gpa.free(circles);
     lua.createTable(@intCast(circles.len), 0);
     for (circles, 1..) |c, i| {
@@ -761,7 +837,7 @@ fn markovStep(lua: *Lua) !i32 {
     lua.setTop(2);
     var weights: std.ArrayList(f64) = .empty;
     defer weights.deinit(lua.allocator());
-    try markovAdvance(lua, 1, &getState(lua).rng, &weights, lua.allocator());
+    try markovAdvance(lua, 1, randomStream(lua), &weights, lua.allocator());
     return 1;
 }
 
@@ -771,7 +847,7 @@ fn markovGenerate(lua: *Lua) !i32 {
     lua.checkType(1, .table);
     const n = lua.checkNumber(3);
     lua.setTop(3);
-    const rng = &getState(lua).rng;
+    const rng = randomStream(lua);
     var weights: std.ArrayList(f64) = .empty;
     defer weights.deinit(lua.allocator());
     lua.newTable();
@@ -811,7 +887,7 @@ fn rewrite(lua: *Lua) !i32 {
         rules[key[0]] = try readRule(lua, arena, lua.getTop());
     }
 
-    const out = algo.lsystem.rewrite(arena, &getState(lua).rng, axiom, &rules, n) catch |err| switch (err) {
+    const out = algo.lsystem.rewrite(arena, randomStream(lua), axiom, &rules, n) catch |err| switch (err) {
         error.InvalidRule => lua.raiseErrorStr("rewrite: a rule must be a string or a list of {replacement, weight}", .{}),
         error.OutOfMemory => return err,
     };
@@ -884,7 +960,7 @@ fn jitter(lua: *Lua) !i32 {
     const arena = arena_state.allocator();
     const pts = try checkPoints(lua, arena, 1);
     const amount = lua.checkNumber(2);
-    util.pushPoints(lua, try algo.path.jitter(arena, &getState(lua).rng, pts, amount));
+    util.pushPoints(lua, try algo.path.jitter(arena, randomStream(lua), pts, amount));
     return 1;
 }
 
@@ -1028,7 +1104,7 @@ fn traceNoise(lua: *Lua) !i32 {
     const gpa = lua.allocator();
     const pts = try gpa.alloc(Vec2, count + 1);
     defer gpa.free(pts);
-    getState(lua).perlin.trace(pts, start, scale, step_len);
+    perlinTable(lua).trace(pts, start, scale, step_len);
     util.pushPoints(lua, pts);
     return 1;
 }

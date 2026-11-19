@@ -1,5 +1,6 @@
 -- test-algo.lua: the gen.* algorithm API against values printed by the
--- original pure Lua library, plus a colorMap render check.
+-- original pure Lua library or derived from the random stream, plus a
+-- colorMap render check.
 
 local T = require("test.testkit")
 local check = T.check
@@ -10,16 +11,45 @@ end
 
 print("Random stream")
 gen.seed(42)
-near("seed 42, first", gen.rand(), 0.41605908889323473)
-near("seed 42, second", gen.rand(), 0.020210096146911383)
+near("seed 42, first", gen.rand(), 0.8143051451229099)
+near("seed 42, second", gen.rand(), 0.3188210400616611)
 gen.seed(42)
-check("randInt", gen.randInt(1, 100) == 42 and gen.randInt(1, 100) == 3 and gen.randInt(-5, 5) == 4)
-near("randRange", gen.randRange(-3, 7), 2.2892230707220733)
-near("gaussian", gen.gaussian(0, 1), -1.5335276938166165)
+local u = {}
+for i = 1, 6 do u[i] = gen.rand() end
+gen.seed(42)
+check("randInt", gen.randInt(1, 100) == 1 + math.floor(u[1] * 100) and gen.randInt(-5, 5) == -5 + math.floor(u[2] * 11))
+near("randRange", gen.randRange(-3, 7), -3 + u[3] * 10)
+check("gaussian", math.abs(gen.gaussian(0, 1) - math.sqrt(-2 * math.log(1 - u[4])) * math.cos(2 * math.pi * u[5])) < 1e-12)
 gen.seed(3)
 local pd = gen.poissonDisk({0, 0, 50, 50}, 10)
-check("poissonDisk count", #pd == 17, "got " .. #pd)
-near("poissonDisk last x", pd[#pd][1], 19.213472129636944)
+local apart = #pd >= 10
+for i = 1, #pd do
+    for k = i + 1, #pd do
+        apart = apart and math.sqrt((pd[i][1] - pd[k][1]) ^ 2 + (pd[i][2] - pd[k][2]) ^ 2) >= 10
+    end
+end
+check("poissonDisk points are apart", apart, "got " .. #pd)
+
+print("Streams from one seed")
+local function draws(n)
+    local t = {}
+    for i = 1, n do t[i] = gen.rand() end
+    return table.concat(t, " ")
+end
+gen.seed(5)
+local base5 = draws(3)
+gen.mixSeed(1)
+local mix1 = draws(3)
+gen.mixSeed(2)
+local mix2 = draws(3)
+gen.mixSeed(1)
+check("the same k restarts the same stream", draws(3) == mix1)
+check("distinct k give distinct streams", mix1 ~= mix2 and mix1 ~= base5)
+gen.seed(6)
+gen.mixSeed(1)
+check("the same k under another base differs", draws(3) ~= mix1)
+gen.seed(5)
+check("mixSeed leaves the base alone", draws(3) == base5)
 
 local list = {"a", "b", "c", "d", "e"}
 local sh = gen.shuffle(list)
